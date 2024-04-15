@@ -53,7 +53,7 @@ namespace OpenSim.Framework.Communications.Services
         protected Mutex m_loginMutex = new Mutex(false);
 
         /// <summary>
-        /// Used during login to send the skeleton of the OpenSim Library to the client.
+        /// Used during login to send the skeleton of the World Library to the client.
         /// </summary>
         protected LibraryRootFolder m_libraryRootFolder;
 

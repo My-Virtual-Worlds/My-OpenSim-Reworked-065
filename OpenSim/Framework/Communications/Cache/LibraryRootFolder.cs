@@ -57,7 +57,7 @@ namespace OpenSim.Framework.Communications.Cache
         {
             Owner = libOwner;
             ID = new UUID("00000112-000f-0000-0000-000100bba000");
-            Name = "OpenSim Library";
+            Name = "World Library";
             ParentID = UUID.Zero;
             Type = (short) 8;
             Version = (ushort) 1;

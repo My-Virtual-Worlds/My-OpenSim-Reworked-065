@@ -1,11 +1,11 @@
 <Nini>
-  <Section Name="OpenSim Standard Library">
-    <Key Name="foldersFile" Value="OpenSimLibrary/OpenSimLibraryFolders.xml"/>
-    <Key Name="itemsFile" Value="OpenSimLibrary/OpenSimLibrary.xml"/>
+  <Section Name="World Standard Library">
+    <Key Name="foldersFile" Value="WorldLibrary/WorldLibraryFolders.xml"/>
+    <Key Name="itemsFile" Value="WOrldLibrary/WorldLibrary.xml"/>
   </Section>
   
 <!-- Additional libraries can be added as shown below.  These folders and items can appear underneath
-       the hardcoded root library folder ("OpenSim Library") 
+       the hardcoded root library folder ("World Library") 
 
        You can also add folders and items to the folders of libraries defined in this file --> 
 <!--    

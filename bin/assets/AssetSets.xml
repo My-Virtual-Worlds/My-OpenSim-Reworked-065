@@ -1,21 +1,18 @@
 <Nini>
-  <!-- You probably don't want to remove the OpenSim asset set
+  <!-- You probably don't want to remove the World asset set
        since it contains various default assets which are currently hardcoded 
        However, you can remove the corresponding inventory library in bin/inventory if you wish
   -->
 
-  <Section Name="OpenSim Asset Set">
-    <Key Name="file" Value="OpenSimAssetSet/OpenSimAssetSet.xml"/>
+  <Section Name="World Asset Set">
+    <Key Name="file" Value="WorldAssetSet/WorldAssetSet.xml"/>
   </Section>
 
   <!-- New asset sets can be added as shown below -->
 
-
   <Section Name="My Asset Set">
 	  <Key Name="file" Value="MyAssetSet/MyAssetSet.xml"/>
   </Section>
-
-  
 
   <Section Name="Animations AssetSet">
     <Key Name="file" Value="AnimationsAssetSet/index.xml"/>
