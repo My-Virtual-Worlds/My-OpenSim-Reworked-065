@@ -34,6 +34,7 @@ using Nini.Config;
 using OpenSim.Framework;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Console;
+using OpenSim.Framework.Interfaces;
 using OpenSim.Region.Framework;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Region.Framework.Scenes.Hypergrid;

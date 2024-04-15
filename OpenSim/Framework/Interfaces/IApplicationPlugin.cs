@@ -27,7 +27,7 @@
 
 using OpenSim.Framework;
 
-namespace OpenSim
+namespace OpenSim.Framework.Interfaces
 {
     /// <summary>
     /// OpenSimulator Application Plugin framework interface
