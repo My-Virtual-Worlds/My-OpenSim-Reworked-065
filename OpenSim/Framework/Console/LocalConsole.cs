@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -30,18 +30,20 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using log4net;
 
 namespace OpenSim.Framework.Console
 {
-    // A console that uses cursor control and color
-    //
+    /// <summary>
+    /// A console that uses cursor control and color
+    /// </summary>    
     public class LocalConsole : CommandConsole
     {
 //        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        private readonly object m_syncRoot = new object();
+        // private readonly object m_syncRoot = new object();
 
         private int y = -1;
         private int cp = 0;
@@ -49,6 +51,28 @@ namespace OpenSim.Framework.Console
         private StringBuilder cmdline = new StringBuilder();
         private bool echo = true;
         private List<string> history = new List<string>();
+
+        private static readonly ConsoleColor[] Colors = {
+            // the dark colors don't seem to be visible on some black background terminals like putty :(
+            //ConsoleColor.DarkBlue,
+            //ConsoleColor.DarkGreen,
+            //ConsoleColor.DarkCyan,
+            //ConsoleColor.DarkMagenta,
+            //ConsoleColor.DarkYellow,
+            ConsoleColor.Gray,
+            //ConsoleColor.DarkGray,
+            ConsoleColor.Blue,
+            ConsoleColor.Green,
+            ConsoleColor.Cyan,
+            ConsoleColor.Magenta,
+            ConsoleColor.Yellow
+        };
+
+        private static ConsoleColor DeriveColor(string input)
+        {
+            // it is important to do Abs, hash values can be negative
+            return Colors[(Math.Abs(input.ToUpper().GetHashCode()) % Colors.Length)];
+        }
 
         public LocalConsole(string defaultPrompt) : base(defaultPrompt)
         {
@@ -63,153 +87,100 @@ namespace OpenSim.Framework.Console
         }
 
         /// <summary>
-        /// derive an ansi color from a string, ignoring the darker colors.
-        /// This is used to help automatically bin component tags with colors
-        /// in various print functions.
+        /// Set the cursor row.
         /// </summary>
-        /// <param name="input">arbitrary string for input</param>
-        /// <returns>an ansii color</returns>
-        protected override ConsoleColor DeriveColor(string input)
-        {
-            int colIdx = (input.ToUpper().GetHashCode() % 6) + 9;
-            return (ConsoleColor) colIdx;
-        }
-
+        ///
+        /// <param name="top">
+        /// Row to set.  If this is below 0, then the row is set to 0.  If it is equal to the buffer height or greater
+        /// then it is set to one less than the height.
+        /// </param>
+        /// <returns>
+        /// The new cursor row.
+        /// </returns>
         private int SetCursorTop(int top)
         {
-            if (top >= 0 && top < System.Console.BufferHeight)
-            {
-                System.Console.CursorTop = top;
-                return top;
-            }
-            else
-            {
-                return System.Console.CursorTop;
-            }
-        }
+            // From at least mono 2.4.2.3, window resizing can give mono an invalid row and column values.  If we try
+            // to set a cursor row position with a currently invalid column, mono will throw an exception.  
+            // Therefore, we need to make sure that the column position is valid first.              
+            int left = System.Console.CursorLeft;
 
+            if (left < 0)
+            {
+                System.Console.CursorLeft = 0;
+            }
+            else 
+            {
+                int bw = System.Console.BufferWidth;
+                
+                // On Mono 2.4.2.3 (and possibly above), the buffer value is sometimes erroneously zero (Mantis 4657)
+                if (bw > 0 && left >= bw)
+                    System.Console.CursorLeft = bw - 1;
+            }
+            
+            if (top < 0)
+            {
+                top = 0;
+            }
+            else                
+            {
+                int bh = System.Console.BufferHeight;
+                
+                // On Mono 2.4.2.3 (and possibly above), the buffer value is sometimes erroneously zero (Mantis 4657)
+                if (bh > 0 && top >= bh)
+                    top = bh - 1;
+            }
+
+            System.Console.CursorTop = top;
+
+            return top;
+        }        
+
+        /// <summary>
+        /// Set the cursor column.
+        /// </summary>
+        ///
+        /// <param name="left">
+        /// Column to set.  If this is below 0, then the column is set to 0.  If it is equal to the buffer width or greater
+        /// then it is set to one less than the width.
+        /// </param>
+        /// <returns>
+        /// The new cursor column.
+        /// </returns>        
         private int SetCursorLeft(int left)
         {
-            if (left >= 0 && left < System.Console.BufferWidth)
+            // From at least mono 2.4.2.3, window resizing can give mono an invalid row and column values.  If we try
+            // to set a cursor column position with a currently invalid row, mono will throw an exception.  
+            // Therefore, we need to make sure that the row position is valid first.               
+            int top = System.Console.CursorTop;
+
+            if (top < 0)
             {
-                System.Console.CursorLeft = left;
-                return left;
+                System.Console.CursorTop = 0;
+            }
+            else 
+            {
+                int bh = System.Console.BufferHeight;
+                // On Mono 2.4.2.3 (and possibly above), the buffer value is sometimes erroneously zero (Mantis 4657)
+                if (bh > 0 && top >= bh)
+                    System.Console.CursorTop = bh - 1;
+            }
+            
+            if (left < 0)
+            {
+                left = 0;
             }
             else
             {
-                return System.Console.CursorLeft;
+                int bw = System.Console.BufferWidth;
+
+                // On Mono 2.4.2.3 (and possibly above), the buffer value is sometimes erroneously zero (Mantis 4657)
+                if (bw > 0 && left >= bw)
+                    left = bw - 1;
             }
-        }
 
-        protected override void WriteNewLine(ConsoleColor senderColor, string sender, ConsoleColor color, string format, params object[] args)
-        {
-            lock (cmdline)
-            {
-                if (y != -1)
-                {
-                    y=SetCursorTop(y);
-                    System.Console.CursorLeft = 0;
+            System.Console.CursorLeft = left;
 
-                    int count = cmdline.Length;
-
-                    System.Console.Write("  ");
-                    while (count-- > 0)
-                        System.Console.Write(" ");
-
-                    y=SetCursorTop(y);
-                    System.Console.CursorLeft = 0;
-                }
-                WritePrefixLine(senderColor, sender);
-                WriteConsoleLine(color, format, args);
-                if (y != -1)
-                    y = System.Console.CursorTop;
-            }
-        }
-
-        protected override void WriteNewLine(ConsoleColor color, string format, params object[] args)
-        {
-            lock (cmdline)
-            {
-                if (y != -1)
-                {
-                    y=SetCursorTop(y);
-                    System.Console.CursorLeft = 0;
-
-                    int count = cmdline.Length;
-
-                    System.Console.Write("  ");
-                    while (count-- > 0)
-                        System.Console.Write(" ");
-
-                    y=SetCursorTop(y);
-                    System.Console.CursorLeft = 0;
-                }
-                WriteConsoleLine(color, format, args);
-                if (y != -1)
-                    y = System.Console.CursorTop;
-            }
-        }
-
-        protected override void WriteConsoleLine(ConsoleColor color, string format, params object[] args)
-        {
-            try
-            {
-                lock (m_syncRoot)
-                {
-                    try
-                    {
-                        if (color != ConsoleColor.White)
-                            System.Console.ForegroundColor = color;
-
-                        System.Console.WriteLine(format, args);
-                        System.Console.ResetColor();
-                    }
-                    catch (ArgumentNullException)
-                    {
-                        // Some older systems dont support coloured text.
-                        System.Console.WriteLine(format, args);
-                    }
-                    catch (FormatException)
-                    {
-                        System.Console.WriteLine(args);
-                    }
-                }
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-        }
-
-        protected override void WritePrefixLine(ConsoleColor color, string sender)
-        {
-            try
-            {
-                lock (m_syncRoot)
-                {
-                    sender = sender.ToUpper();
-
-                    System.Console.WriteLine("[" + sender + "] ");
-
-                    System.Console.Write("[");
-
-                    try
-                    {
-                        System.Console.ForegroundColor = color;
-                        System.Console.Write(sender);
-                        System.Console.ResetColor();
-                    }
-                    catch (ArgumentNullException)
-                    {
-                        // Some older systems dont support coloured text.
-                        System.Console.WriteLine(sender);
-                    }
-
-                    System.Console.Write("] \t");
-                }
-            }
-            catch (ObjectDisposedException)
-            {
-            }
+            return left;
         }
 
         private void Show()
@@ -229,21 +200,21 @@ namespace OpenSim.Framework.Console
                 {
                     y--;
                     new_y--;
-                    System.Console.CursorLeft = 0;
-                    System.Console.CursorTop = System.Console.BufferHeight-1;
+                    SetCursorLeft(0);
+                    SetCursorTop(System.Console.BufferHeight - 1);
                     System.Console.WriteLine(" ");
                 }
 
-                y=SetCursorTop(y);
-                System.Console.CursorLeft = 0;
+                y = SetCursorTop(y);
+                SetCursorLeft(0);
 
                 if (echo)
                     System.Console.Write("{0}{1}", prompt, cmdline);
                 else
                     System.Console.Write("{0}", prompt);
 
-                SetCursorLeft(new_x);
                 SetCursorTop(new_y);
+                SetCursorLeft(new_x);                
             }
         }
 
@@ -263,8 +234,7 @@ namespace OpenSim.Framework.Console
                         System.Console.Write(" ");
 
                     y = SetCursorTop(y);
-                    System.Console.CursorLeft = 0;
-
+                    SetCursorLeft(0);
                 }
             }
             catch (Exception)
@@ -282,19 +252,78 @@ namespace OpenSim.Framework.Console
             Monitor.Exit(cmdline);
         }
 
+        private void WriteColorText(ConsoleColor color, string sender)
+        {
+            try
+            {
+                lock (this)
+                {
+                    try
+                    {
+                        System.Console.ForegroundColor = color;
+                        System.Console.Write(sender);
+                        System.Console.ResetColor();
+                    }
+                    catch (ArgumentNullException)
+                    {
+                        // Some older systems dont support coloured text.
+                        System.Console.WriteLine(sender);
+                    }
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        private void WriteLocalText(string text, string level)
+        {
+            string regex = @"^(?<Front>.*?)\[(?<Category>[^\]]+)\]:?(?<End>.*)";
+
+            Regex RE = new Regex(regex, RegexOptions.Multiline);
+            MatchCollection matches = RE.Matches(text);
+
+            string outText = text;
+
+            if (matches.Count == 1)
+            {
+                outText = matches[0].Groups["End"].Value;
+                System.Console.Write(matches[0].Groups["Front"].Value);
+
+                System.Console.Write("[");
+                WriteColorText(DeriveColor(matches[0].Groups["Category"].Value),
+                        matches[0].Groups["Category"].Value);
+                System.Console.Write("]:");
+            }
+
+            if (level == "error")
+                WriteColorText(ConsoleColor.Red, outText);
+            else if (level == "warn")
+                WriteColorText(ConsoleColor.Yellow, outText);
+            else
+                System.Console.Write(outText);
+        
+            System.Console.WriteLine();
+        }
+
         public override void Output(string text)
+        {
+            Output(text, "normal");
+        }
+
+        public override void Output(string text, string level)
         {
             lock (cmdline)
             {
                 if (y == -1)
                 {
-                    System.Console.WriteLine(text);
+                    WriteLocalText(text, level);
 
                     return;
                 }
 
                 y = SetCursorTop(y);
-                System.Console.CursorLeft = 0;
+                SetCursorLeft(0);
 
                 int count = cmdline.Length + prompt.Length;
 
@@ -302,9 +331,9 @@ namespace OpenSim.Framework.Console
                     System.Console.Write(" ");
 
                 y = SetCursorTop(y);
-                System.Console.CursorLeft = 0;
+                SetCursorLeft(0);
 
-                System.Console.WriteLine(text);
+                WriteLocalText(text, level);
 
                 y = System.Console.CursorTop;
 
@@ -341,7 +370,7 @@ namespace OpenSim.Framework.Console
             echo = e;
             int historyLine = history.Count;
 
-            System.Console.CursorLeft = 0; // Needed for mono
+            SetCursorLeft(0); // Needed for mono
             System.Console.Write(" "); // Needed for mono
 
             lock (cmdline)
@@ -381,7 +410,7 @@ namespace OpenSim.Framework.Console
                         cmdline.Remove(cp-1, 1);
                         cp--;
 
-                        System.Console.CursorLeft = 0;
+                        SetCursorLeft(0);
                         y = SetCursorTop(y);
 
                         System.Console.Write("{0}{1} ", prompt, cmdline);
@@ -429,7 +458,7 @@ namespace OpenSim.Framework.Console
                             cp++;
                         break;
                     case ConsoleKey.Enter:
-                        System.Console.CursorLeft = 0;
+                        SetCursorLeft(0);
                         y = SetCursorTop(y);
 
                         System.Console.WriteLine("{0}{1}", prompt, cmdline);

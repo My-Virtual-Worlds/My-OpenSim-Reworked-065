@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -53,8 +53,8 @@ namespace OpenSim.ApplicationPlugins.Rest
         private string _prefix; // URL prefix below
         // which all REST URLs
         // are living
-        private StringWriter _sw = null;
-        private RestXmlWriter _xw = null;
+        // private StringWriter _sw = null;
+        // private RestXmlWriter _xw = null;
 
         private string _godkey;
         private int _reqk;
@@ -149,31 +149,31 @@ namespace OpenSim.ApplicationPlugins.Rest
         /// </summary>
         public abstract string ConfigName { get; }
 
-        public XmlTextWriter XmlWriter
-        {
-            get
-            {
-                if (null == _xw)
-                {
-                    _sw = new StringWriter();
-                    _xw = new RestXmlWriter(_sw);
-                    _xw.Formatting = Formatting.Indented;
-                }
-                return _xw;
-            }
-        }
+        // public XmlTextWriter XmlWriter
+        // {
+        //     get
+        //     {
+        //         if (null == _xw)
+        //         {
+        //             _sw = new StringWriter();
+        //             _xw = new RestXmlWriter(_sw);
+        //             _xw.Formatting = Formatting.Indented;
+        //         }
+        //         return _xw;
+        //     }
+        // }
 
-        public string XmlWriterResult
-        {
-            get
-            {
-                _xw.Flush();
-                _xw.Close();
-                _xw = null;
+        // public string XmlWriterResult
+        // {
+        //     get
+        //     {
+        //         _xw.Flush();
+        //         _xw.Close();
+        //         _xw = null;
 
-                return _sw.ToString();
-            }
-        }
+        //         return _sw.ToString();
+        //     }
+        // }
 
         #endregion properties
 
@@ -216,7 +216,7 @@ namespace OpenSim.ApplicationPlugins.Rest
 
                 if (!_config.GetBoolean("enabled", false))
                 {
-                    m_log.WarnFormat("{0} Rest Plugins are disabled", MsgID);
+                    //m_log.WarnFormat("{0} Rest Plugins are disabled", MsgID);
                     return;
                 }
 
@@ -240,8 +240,8 @@ namespace OpenSim.ApplicationPlugins.Rest
                 // the key lookup in Configs failed, which signals to
                 // us that noone is interested in our services...they
                 // don't know what they are missing out on...
-                // NOTE: Under the present OpenSim implementation it is
-                // not possible for the openSim pointer to be null. However
+                // NOTE: Under the present OpenSimulator implementation it is
+                // not possible for the openSimulator pointer to be null. However
                 // were the implementation to be changed, this could
                 // result in a silent initialization failure. Harmless
                 // except for lack of function and lack of any

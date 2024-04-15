@@ -27,6 +27,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Security;
 using OpenMetaverse;
 using OpenMetaverse.Packets;
 using OpenSim.Framework;
@@ -38,15 +39,24 @@ using SculptType=OpenSim.Region.OptionalModules.Scripting.Minimodule.Object.Scul
 
 namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 {
-    class SOPObject : MarshalByRefObject, IObject, IObjectPhysics, IObjectShape
+    class SOPObject : MarshalByRefObject, IObject, IObjectPhysics, IObjectShape, IObjectSound
     {
         private readonly Scene m_rootScene;
         private readonly uint m_localID;
+        private readonly ISecurityCredential m_security;
 
+        [Obsolete("Replace with 'credential' constructor [security]")]
         public SOPObject(Scene rootScene, uint localID)
         {
             m_rootScene = rootScene;
             m_localID = localID;
+        }
+
+        public SOPObject(Scene rootScene, uint localID, ISecurityCredential credential)
+        {
+            m_rootScene = rootScene;
+            m_localID = localID;
+            m_security = credential;
         }
 
         /// <summary>
@@ -59,6 +69,15 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             return m_rootScene.GetSceneObjectPart(m_localID);
         }
 
+        private bool CanEdit()
+        {
+            if (!m_security.CanEditObject(this))
+            {
+                throw new SecurityException("Insufficient Permission to edit object with UUID [" + GetSOP().UUID + "]");
+            }
+            return true;
+        }
+
         #region OnTouch
 
         private event OnTouchDelegate _OnTouch;
@@ -68,14 +87,17 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             add
             {
-                if (!_OnTouchActive)
+                if (CanEdit())
                 {
-                    GetSOP().Flags |= PrimFlags.Touch;
-                    _OnTouchActive = true;
-                    m_rootScene.EventManager.OnObjectGrab += EventManager_OnObjectGrab;
-                }
+                    if (!_OnTouchActive)
+                    {
+                        GetSOP().Flags |= PrimFlags.Touch;
+                        _OnTouchActive = true;
+                        m_rootScene.EventManager.OnObjectGrab += EventManager_OnObjectGrab;
+                    }
 
-                _OnTouch += value;
+                    _OnTouch += value;
+                }
             }
             remove
             {
@@ -95,7 +117,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             if (_OnTouchActive && m_localID == localID)
             {
                 TouchEventArgs e = new TouchEventArgs();
-                e.Avatar = new SPAvatar(m_rootScene, remoteClient.AgentId);
+                e.Avatar = new SPAvatar(m_rootScene, remoteClient.AgentId, m_security);
                 e.TouchBiNormal = surfaceArgs.Binormal;
                 e.TouchMaterialIndex = surfaceArgs.FaceIndex;
                 e.TouchNormal = surfaceArgs.Normal;
@@ -130,13 +152,21 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         public string Name
         {
             get { return GetSOP().Name; }
-            set { GetSOP().Name = value; }
+            set
+            {
+                if (CanEdit())
+                    GetSOP().Name = value;
+            }
         }
 
         public string Description
         {
             get { return GetSOP().Description; }
-            set { GetSOP().Description = value; }
+            set
+            {
+                if (CanEdit()) 
+                    GetSOP().Description = value;
+            }
         }
 
         public IObject[] Children
@@ -151,7 +181,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
                 int i = 0;
                 foreach (KeyValuePair<UUID, SceneObjectPart> pair in my.ParentGroup.Children)
                 {
-                    rets[i++] = new SOPObject(m_rootScene, pair.Value.LocalId);
+                    rets[i++] = new SOPObject(m_rootScene, pair.Value.LocalId, m_security);
                 }
 
                 return rets;
@@ -160,7 +190,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 
         public IObject Root
         {
-            get { return new SOPObject(m_rootScene, GetSOP().ParentGroup.RootPart.LocalId); }
+            get { return new SOPObject(m_rootScene, GetSOP().ParentGroup.RootPart.LocalId, m_security); }
         }
 
         public IObjectMaterial[] Materials
@@ -170,7 +200,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
                 SceneObjectPart sop = GetSOP();
                 IObjectMaterial[] rets = new IObjectMaterial[getNumberOfSides(sop)];
 
-                for (int i = 0; i < rets.Length;i++ )
+                for (int i = 0; i < rets.Length; i++)
                 {
                     rets[i] = new SOPObjectMaterial(i, sop);
                 }
@@ -182,7 +212,11 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         public Vector3 Scale
         {
             get { return GetSOP().Scale; }
-            set { GetSOP().Scale = value; }
+            set
+            {
+                if (CanEdit())
+                    GetSOP().Scale = value;
+            }
         }
 
         public Quaternion WorldRotation
@@ -202,39 +236,72 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             get { return GetSOP().AbsolutePosition; }
             set
             {
-                SceneObjectPart pos = GetSOP();
-                pos.UpdateOffSet(value - pos.AbsolutePosition);
+                if (CanEdit())
+                {
+                    SceneObjectPart pos = GetSOP();
+                    pos.UpdateOffSet(value - pos.AbsolutePosition);
+                }
             }
         }
 
         public Vector3 OffsetPosition
         {
             get { return GetSOP().OffsetPosition; }
-            set { GetSOP().OffsetPosition = value; }
+            set
+            {
+                if (CanEdit())
+                {
+                    GetSOP().OffsetPosition = value;
+                }
+            }
         }
 
         public Vector3 SitTarget
         {
-            get { throw new System.NotImplementedException(); }
-            set { throw new System.NotImplementedException(); }
+            get { return GetSOP().SitTargetPosition; }
+            set 
+            { 
+                if (CanEdit())
+                {
+                    GetSOP().SitTargetPosition = value;
+                }
+            }
         }
 
         public string SitTargetText
         {
-            get { throw new System.NotImplementedException(); }
-            set { throw new System.NotImplementedException(); }
+            get { return GetSOP().SitName; }
+            set 
+            { 
+                if (CanEdit())
+                {
+                    GetSOP().SitName = value;
+                }
+            }
         }
 
         public string TouchText
         {
-            get { throw new System.NotImplementedException(); }
-            set { throw new System.NotImplementedException(); }
+            get { return GetSOP().TouchName; }
+            set 
+            {
+                if (CanEdit())
+                {
+                    GetSOP().TouchName = value;
+                }
+            }
         }
 
         public string Text
         {
-            get { throw new System.NotImplementedException(); }
-            set { throw new System.NotImplementedException(); }
+            get { return GetSOP().Text; }
+            set 
+            {
+                if (CanEdit())
+                {
+                    GetSOP().SetText(value,new Vector3(1.0f,1.0f,1.0f),1.0f);
+                }
+            }
         }
 
         public bool IsRotationLockedX
@@ -301,15 +368,31 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             get { return this; }
         }
 
+        public IObjectInventory Inventory 
+        {
+            get { return new SOPObjectInventory(m_rootScene, GetSOP().TaskInventory); }
+        }
+        
         #region Public Functions
 
         public void Say(string msg)
         {
-            SceneObjectPart sop = GetSOP();
+            if (!CanEdit())
+                return;
 
+            SceneObjectPart sop = GetSOP();
             m_rootScene.SimChat(msg, ChatTypeEnum.Say, sop.AbsolutePosition, sop.Name, sop.UUID, false);
         }
 
+        public void Say(string msg,int channel)
+        {
+            if (!CanEdit())
+                return;
+
+            SceneObjectPart sop = GetSOP();
+            m_rootScene.SimChat(Utils.StringToBytes(msg), ChatTypeEnum.Say,channel, sop.AbsolutePosition, sop.Name, sop.UUID, false);
+        }
+                
         #endregion
 
 
@@ -475,8 +558,8 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             get
             {
-                PhysicsVector tmp = GetSOP().PhysActor.GeometricCenter;
-                return new Vector3(tmp.X, tmp.Y, tmp.Z);
+                Vector3 tmp = GetSOP().PhysActor.GeometricCenter;
+                return tmp;
             }
         }
 
@@ -484,8 +567,8 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             get
             {
-                PhysicsVector tmp = GetSOP().PhysActor.CenterOfMass;
-                return new Vector3(tmp.X, tmp.Y, tmp.Z);
+                Vector3 tmp = GetSOP().PhysActor.CenterOfMass;
+                return tmp;
             }
         }
 
@@ -493,12 +576,15 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             get
             {
-                PhysicsVector tmp = GetSOP().PhysActor.RotationalVelocity;
-                return new Vector3(tmp.X, tmp.Y, tmp.Z);
+                Vector3 tmp = GetSOP().PhysActor.RotationalVelocity;
+                return tmp;
             }
             set
             {
-                GetSOP().PhysActor.RotationalVelocity = new PhysicsVector(value.X, value.Y, value.Z);
+                if (!CanEdit())
+                    return;
+
+                GetSOP().PhysActor.RotationalVelocity = value;
             }
         }
 
@@ -506,12 +592,15 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             get
             {
-                PhysicsVector tmp = GetSOP().PhysActor.Velocity;
-                return new Vector3(tmp.X, tmp.Y, tmp.Z);
+                Vector3 tmp = GetSOP().PhysActor.Velocity;
+                return tmp;
             }
             set
             {
-                GetSOP().PhysActor.Velocity = new PhysicsVector(value.X, value.Y, value.Z);
+                if (!CanEdit())
+                    return;
+
+                GetSOP().PhysActor.Velocity = value;
             }
         }
 
@@ -519,12 +608,15 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             get
             {
-                PhysicsVector tmp = GetSOP().PhysActor.Torque;
-                return new Vector3(tmp.X, tmp.Y, tmp.Z);
+                Vector3 tmp = GetSOP().PhysActor.Torque;
+                return tmp;
             }
             set
             {
-                GetSOP().PhysActor.Torque = new PhysicsVector(value.X, value.Y, value.Z);
+                if (!CanEdit())
+                    return;
+
+                GetSOP().PhysActor.Torque = value;
             }
         }
 
@@ -532,8 +624,8 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             get
             {
-                PhysicsVector tmp = GetSOP().PhysActor.Acceleration;
-                return new Vector3(tmp.X, tmp.Y, tmp.Z);
+                Vector3 tmp = GetSOP().PhysActor.Acceleration;
+                return tmp;
             }
         }
 
@@ -541,33 +633,50 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             get
             {
-                PhysicsVector tmp = GetSOP().PhysActor.Force;
-                return new Vector3(tmp.X, tmp.Y, tmp.Z);
+                Vector3 tmp = GetSOP().PhysActor.Force;
+                return tmp;
             }
             set
             {
-                GetSOP().PhysActor.Force = new PhysicsVector(value.X, value.Y, value.Z);
+                if (!CanEdit())
+                    return;
+
+                GetSOP().PhysActor.Force = value;
             }
         }
 
         public bool FloatOnWater
         {
-            set { GetSOP().PhysActor.FloatOnWater = value; }
+            set
+            {
+                if (!CanEdit())
+                    return;
+                GetSOP().PhysActor.FloatOnWater = value;
+            }
         }
 
         public void AddForce(Vector3 force, bool pushforce)
         {
-            GetSOP().PhysActor.AddForce(new PhysicsVector(force.X, force.Y, force.Z), pushforce);
+            if (!CanEdit())
+                return;
+
+            GetSOP().PhysActor.AddForce(force, pushforce);
         }
 
         public void AddAngularForce(Vector3 force, bool pushforce)
         {
-            GetSOP().PhysActor.AddAngularForce(new PhysicsVector(force.X, force.Y, force.Z), pushforce);
+            if (!CanEdit())
+                return;
+
+            GetSOP().PhysActor.AddAngularForce(force, pushforce);
         }
 
         public void SetMomentum(Vector3 momentum)
         {
-            GetSOP().PhysActor.SetMomentum(new PhysicsVector(momentum.X, momentum.Y, momentum.Z));
+            if (!CanEdit())
+                return;
+
+            GetSOP().PhysActor.SetMomentum(momentum);
         }
 
         #endregion
@@ -581,6 +690,9 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             get { return m_sculptMap; }
             set
             {
+                if (!CanEdit())
+                    return;
+
                 m_sculptMap = value;
                 SetPrimitiveSculpted(SculptMap, (byte) SculptType);
             }
@@ -593,6 +705,9 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             get { return m_sculptType; }
             set
             {
+                if (!CanEdit())
+                    return;
+
                 m_sculptType = value;
                 SetPrimitiveSculpted(SculptMap, (byte) SculptType);
             }
@@ -636,6 +751,24 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             part.UpdateShape(shapeBlock);
         }
 
+
+        #endregion
+
+
+        #region Implementation of IObjectSound
+
+        public IObjectSound Sound
+        {
+            get { return this; }
+        }
+
+        public void Play(UUID asset, double volume)
+        {
+            if (!CanEdit())
+                return;
+
+            GetSOP().SendSound(asset.ToString(), volume, true, 0, 0, false, false);
+        }
 
         #endregion
     }

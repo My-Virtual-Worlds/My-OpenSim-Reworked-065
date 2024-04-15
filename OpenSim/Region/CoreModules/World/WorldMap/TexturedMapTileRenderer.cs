@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -170,7 +170,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
         //   will wait anyway)
         private Bitmap fetchTexture(UUID id)
         {
-            AssetBase asset = m_scene.CommsManager.AssetCache.GetAsset(id, true);
+            AssetBase asset = m_scene.AssetService.Get(id.ToString());
             m_log.DebugFormat("Fetched texture {0}, found: {1}", id, asset != null);
             if (asset == null) return null;
 
@@ -266,7 +266,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
         // the heigthfield might have some jumps in values. Rendered land is smooth, though,
         // as a slope is rendered at that place. So average 4 neighbour values to emulate that.
         private float getHeight(double[,] hm, int x, int y) {
-            if (x < 255 && y < 255)
+            if (x < ((int)Constants.RegionSize - 1) && y < ((int)Constants.RegionSize - 1))
                 return (float)(hm[x, y] * .444 + (hm[x + 1, y] + hm[x, y + 1]) * .222 + hm[x + 1, y +1] * .112);
             else
                 return (float)hm[x, y];
@@ -306,15 +306,15 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
 
             double[,] hm = m_scene.Heightmap.GetDoubles();
 
-            for (int x = 0; x < 256; x++)
+            for (int x = 0; x < (int)Constants.RegionSize; x++)
             {
-                float columnRatio = x / 255f; // 0 - 1, for interpolation
-                for (int y = 0; y < 256; y++)
+                float columnRatio = x / ((float)Constants.RegionSize - 1); // 0 - 1, for interpolation
+                for (int y = 0; y < (int)Constants.RegionSize; y++)
                 {
-                    float rowRatio = y / 255f; // 0 - 1, for interpolation
+                    float rowRatio = y / ((float)Constants.RegionSize - 1); // 0 - 1, for interpolation
 
                     // Y flip the cordinates for the bitmap: hf origin is lower left, bm origin is upper left
-                    int yr = 255 - y;
+                    int yr = ((int)Constants.RegionSize - 1) - y;
 
                     float heightvalue = getHeight(hm, x, y);
                     if (Single.IsInfinity(heightvalue) || Single.IsNaN(heightvalue))
@@ -366,7 +366,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
                         }
 
                         // Shade the terrain for shadows
-                        if (x < 255 && y < 255)
+                        if (x < ((int)Constants.RegionSize - 1) && y < ((int)Constants.RegionSize - 1))
                         {
                             float hfvaluecompare = getHeight(hm, x + 1, y + 1); // light from north-east => look at land height there
                             if (Single.IsInfinity(hfvaluecompare) || Single.IsNaN(hfvaluecompare))

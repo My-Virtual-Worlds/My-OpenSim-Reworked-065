@@ -26,6 +26,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Threading;
@@ -36,108 +37,159 @@ using OpenSim.Framework;
 
 namespace OpenSim
 {
+    /// <summary>
+    /// Loads the Configuration files into nIni
+    /// </summary>
     public class ConfigurationLoader
     {
+        /// <summary>
+        /// Various Config settings the region needs to start
+        /// Physics Engine, Mesh Engine, GridMode, PhysicsPrim allowed, Neighbor, 
+        /// StorageDLL, Storage Connection String, Estate connection String, Client Stack
+        /// Standalone settings.
+        /// </summary>
         protected ConfigSettings m_configSettings;
+
+        /// <summary>
+        /// A source of Configuration data
+        /// </summary>
         protected OpenSimConfigSource m_config;
+
+        /// <summary>
+        /// Grid Service Information.  This refers to classes and addresses of the grid service
+        /// </summary>
         protected NetworkServersInfo m_networkServersInfo;
 
-        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        /// <summary>
+        /// Console logger
+        /// </summary>
+        private static readonly ILog m_log =
+                LogManager.GetLogger(
+                MethodBase.GetCurrentMethod().DeclaringType);
 
         public ConfigurationLoader()
         {
         }
 
-        public OpenSimConfigSource LoadConfigSettings(IConfigSource configSource, out ConfigSettings configSettings,
-                                                      out NetworkServersInfo networkInfo)
+        /// <summary>
+        /// Loads the region configuration
+        /// </summary>
+        /// <param name="argvSource">Parameters passed into the process when started</param>
+        /// <param name="configSettings"></param>
+        /// <param name="networkInfo"></param>
+        /// <returns>A configuration that gets passed to modules</returns>
+        public OpenSimConfigSource LoadConfigSettings(
+                IConfigSource argvSource, out ConfigSettings configSettings,
+                out NetworkServersInfo networkInfo)
         {
             m_configSettings = configSettings = new ConfigSettings();
             m_networkServersInfo = networkInfo = new NetworkServersInfo();
+
             bool iniFileExists = false;
 
-            IConfig startupConfig = configSource.Configs["Startup"];
+            IConfig startupConfig = argvSource.Configs["Startup"];
 
-            string iniFileName = startupConfig.GetString("inifile", "OpenSim.ini");
-            Application.iniFilePath = Path.Combine(Util.configDir(), iniFileName);
+            List<string> sources = new List<string>();
 
-            string masterFileName = startupConfig.GetString("inimaster", "");
-            string masterfilePath = Path.Combine(Util.configDir(), masterFileName);
+            string masterFileName =
+                    startupConfig.GetString("inimaster", String.Empty);
 
-            string iniDirName = startupConfig.GetString("inidirectory", "config");
-            //string iniDirPath = Path.Combine(Util.configDir(), iniDirName);
-
-            m_config = new OpenSimConfigSource();
-            m_config.Source = new IniConfigSource();
-            m_config.Source.Merge(DefaultConfig());
-
-            m_log.Info("[CONFIG] Reading configuration settings");
-
-            Uri configUri;
-            String xmlPath = Path.Combine(Util.configDir(), "OpenSim.xml");
-
-            //check for master .INI file (name passed in command line, no default), or XML over http
-            if (masterFileName.Length > 0) // If a master file name is given ...
+            if (IsUri(masterFileName))
             {
-                m_log.InfoFormat("[CONFIG] Reading config master file {0}", masterfilePath);
+                if (!sources.Contains(masterFileName))
+                    sources.Add(masterFileName);
+            }
+            else
+            {
+                string masterFilePath = Path.GetFullPath(
+                        Path.Combine(Util.configDir(), masterFileName));
 
-                bool isMasterUri = Uri.TryCreate(masterFileName, UriKind.Absolute, out configUri) &&
-                                   configUri.Scheme == Uri.UriSchemeHttp;
+                if (masterFileName != String.Empty &&
+                        File.Exists(masterFilePath) &&
+                        (!sources.Contains(masterFilePath)))
+                    sources.Add(masterFilePath);
+            }
 
-                if (!ReadConfig(masterFileName, masterfilePath, m_config, isMasterUri))
+
+            string iniFileName =
+                    startupConfig.GetString("inifile", "OpenSim.ini");
+
+            if (IsUri(iniFileName))
+            {
+                if (!sources.Contains(iniFileName))
+                    sources.Add(iniFileName);
+                Application.iniFilePath = iniFileName;
+            }
+            else
+            {
+                Application.iniFilePath = Path.GetFullPath(
+                        Path.Combine(Util.configDir(), iniFileName));
+
+                if (!File.Exists(Application.iniFilePath))
                 {
-                    m_log.FatalFormat("[CONFIG] Could not open master config file {0}", masterfilePath);
+                    iniFileName = "OpenSim.xml";
+                    Application.iniFilePath = Path.GetFullPath(
+                            Path.Combine(Util.configDir(), iniFileName));
+                }
+
+                if (File.Exists(Application.iniFilePath))
+                {
+                    if (!sources.Contains(Application.iniFilePath))
+                        sources.Add(Application.iniFilePath);
                 }
             }
 
-            if (Directory.Exists(iniDirName))
+            string iniDirName =
+                    startupConfig.GetString("inidirectory", "config");
+            string iniDirPath =
+                    Path.Combine(Util.configDir(), iniDirName);
+
+            if (Directory.Exists(iniDirPath))
             {
-                m_log.InfoFormat("Searching folder: {0} , for config ini files", iniDirName);
+                m_log.InfoFormat("Searching folder {0} for config ini files",
+                        iniDirPath);
+
                 string[] fileEntries = Directory.GetFiles(iniDirName);
                 foreach (string filePath in fileEntries)
                 {
                     if (Path.GetExtension(filePath).ToLower() == ".ini")
                     {
-                        // m_log.InfoFormat("reading ini file < {0} > from config dir", filePath);
-                        ReadConfig(Path.GetFileName(filePath), filePath, m_config, false);
+                        if (!sources.Contains(Path.GetFullPath(filePath)))
+                            sources.Add(Path.GetFullPath(filePath));
                     }
                 }
             }
 
-            // Check for .INI file (either default or name passed on command
-            // line) or XML config source over http
-            bool isIniUri = Uri.TryCreate(iniFileName, UriKind.Absolute, out configUri) &&
-                            configUri.Scheme == Uri.UriSchemeHttp;
-            iniFileExists = ReadConfig(iniFileName, Application.iniFilePath, m_config, isIniUri);
+            m_config = new OpenSimConfigSource();
+            m_config.Source = new IniConfigSource();
+            m_config.Source.Merge(DefaultConfig());
 
-            if (!iniFileExists)
+            m_log.Info("[CONFIG]: Reading configuration settings");
+
+            if (sources.Count == 0)
             {
-                // check for a xml config file                                
-                if (File.Exists(xmlPath))
-                {
-                    Application.iniFilePath = xmlPath;
-
-                    m_log.InfoFormat("Reading XML configuration from {0}", Path.GetFullPath(xmlPath));
-                    iniFileExists = true;
-
-                    m_config.Source = new XmlConfigSource();
-                    m_config.Source.Merge(new XmlConfigSource(Application.iniFilePath));
-                }
-            }
-
-            m_config.Source.Merge(configSource);
-
-            if (!iniFileExists)
-            {
-                m_log.FatalFormat("[CONFIG] Could not load any configuration");
-                if (!isIniUri)
-                    m_log.FatalFormat("[CONFIG] Tried to load {0}, ", Path.GetFullPath(Application.iniFilePath));
-                else
-                    m_log.FatalFormat("[CONFIG] Tried to load from URI {0}, ", iniFileName);
-                m_log.FatalFormat("[CONFIG] and XML source {0}", Path.GetFullPath(xmlPath));
-
-                m_log.FatalFormat("[CONFIG] Did you copy the OpenSim.ini.example file to OpenSim.ini?");
+                m_log.FatalFormat("[CONFIG]: Could not load any configuration");
+                m_log.FatalFormat("[CONFIG]: Did you copy the OpenSim.ini.example file to OpenSim.ini?");
                 Environment.Exit(1);
             }
+
+            for (int i = 0 ; i < sources.Count ; i++)
+            {
+                if (ReadConfig(sources[i]))
+                    iniFileExists = true;
+                AddIncludes(sources);
+            }
+
+            if (!iniFileExists)
+            {
+                m_log.FatalFormat("[CONFIG]: Could not load any configuration");
+                m_log.FatalFormat("[CONFIG]: Configuration exists, but there was an error loading it!");
+                Environment.Exit(1);
+            }
+
+            // Make sure command line options take precedence
+            //
+            m_config.Source.Merge(argvSource);
 
             ReadConfigSettings();
 
@@ -145,47 +197,89 @@ namespace OpenSim
         }
 
         /// <summary>
+        /// Adds the included files as ini configuration files
+        /// </summary>
+        /// <param name="sources">List of URL strings or filename strings</param>
+        private void AddIncludes(List<string> sources)
+        {
+            //loop over config sources
+            foreach (IConfig config in m_config.Source.Configs)
+            {
+                // Look for Include-* in the key name
+                string[] keys = config.GetKeys();
+                foreach (string k in keys)
+                {
+                    if (k.StartsWith("Include-"))
+                    {
+                        // read the config file to be included.
+                        string file = config.GetString(k);
+                        if (IsUri(file))
+                        {
+                            if (!sources.Contains(file))
+                                sources.Add(file);
+                        }
+                        else
+                        {
+                            string basepath = Path.GetFullPath(Util.configDir());
+                            string path = Path.Combine(basepath, file);
+                            string[] paths = Util.Glob(path);
+                            foreach (string p in paths)
+                            {
+                                if (!sources.Contains(p))
+                                    sources.Add(p);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        /// <summary>
+        /// Check if we can convert the string to a URI
+        /// </summary>
+        /// <param name="file">String uri to the remote resource</param>
+        /// <returns>true if we can convert the string to a Uri object</returns>
+        bool IsUri(string file)
+        {
+            Uri configUri;
+
+            return Uri.TryCreate(file, UriKind.Absolute,
+                    out configUri) && configUri.Scheme == Uri.UriSchemeHttp;
+        }
+
+        /// <summary>
         /// Provide same ini loader functionality for standard ini and master ini - file system or XML over http
         /// </summary>
-        /// <param name="iniName">The name of the ini to load</param>
         /// <param name="iniPath">Full path to the ini</param>
-        /// <param name="m_config">The current configuration source</param>
-        /// <param name="isUri">Boolean representing whether the ini source is a URI path over http or a file on the system</param>
         /// <returns></returns>
-        private bool ReadConfig(string iniName, string iniPath, OpenSimConfigSource m_config, bool isUri)
+        private bool ReadConfig(string iniPath)
         {
             bool success = false;
 
-            if (!isUri && File.Exists(iniPath))
+            if (!IsUri(iniPath))
             {
-                m_log.InfoFormat("[CONFIG] Reading configuration file {0}", Path.GetFullPath(iniPath));
+                m_log.InfoFormat("[CONFIG]: Reading configuration file {0}", Path.GetFullPath(iniPath));
 
-                // From reading Nini's code, it seems that later merged keys replace earlier ones.                
                 m_config.Source.Merge(new IniConfigSource(iniPath));
                 success = true;
             }
             else
             {
-                if (isUri)
+                m_log.InfoFormat("[CONFIG]: {0} is a http:// URI, fetching ...", iniPath);
+
+                // The ini file path is a http URI
+                // Try to read it
+                try
                 {
-                    m_log.InfoFormat("[CONFIG] {0} is a http:// URI, fetching ...", iniName);
+                    XmlReader r = XmlReader.Create(iniPath);
+                    XmlConfigSource cs = new XmlConfigSource(r);
+                    m_config.Source.Merge(cs);
 
-                    // The ini file path is a http URI
-                    // Try to read it
-                    try
-                    {
-                        XmlReader r = XmlReader.Create(iniName);
-                        XmlConfigSource cs = new XmlConfigSource(r);
-                        m_config.Source.Merge(cs);
-
-                        success = true;
-                        m_log.InfoFormat("[CONFIG] Loaded config from {0}", iniName);
-                    }
-                    catch (Exception e)
-                    {
-                        m_log.FatalFormat("[CONFIG] Exception reading config from URI {0}\n" + e.ToString(), iniName);
-                        Environment.Exit(1);
-                    }
+                    success = true;
+                }
+                catch (Exception e)
+                {
+                    m_log.FatalFormat("[CONFIG]: Exception reading config from URI {0}\n" + e.ToString(), iniPath);
+                    Environment.Exit(1);
                 }
             }
             return success;
@@ -194,8 +288,8 @@ namespace OpenSim
         /// <summary>
         /// Setup a default config values in case they aren't present in the ini file
         /// </summary>
-        /// <returns></returns>
-        public static IConfigSource DefaultConfig()
+        /// <returns>A Configuration source containing the default configuration</returns>
+        private static IConfigSource DefaultConfig()
         {
             IConfigSource defaultConfig = new IniConfigSource();
 
@@ -208,8 +302,8 @@ namespace OpenSim
                 config.Set("region_info_source", "filesystem");
 
                 config.Set("gridmode", false);
-                config.Set("physics", "basicphysics");
-                config.Set("meshing", "ZeroMesher");
+                config.Set("physics", "OpenDynamicsEngine");
+                config.Set("meshing", "Meshmerizer");
                 config.Set("physical_prim", true);
                 config.Set("see_into_this_sim_from_neighbor", true);
                 config.Set("serverside_object_permissions", false);
@@ -219,7 +313,6 @@ namespace OpenSim
                 config.Set("startup_console_commands_file", String.Empty);
                 config.Set("shutdown_console_commands_file", String.Empty);
                 config.Set("DefaultScriptEngine", "XEngine");
-                config.Set("asset_database", "default");
                 config.Set("clientstack_plugin", "OpenSim.Region.ClientStack.LindenUDP.dll");
                 // life doesn't really work without this
                 config.Set("EventQueue", true);
@@ -237,11 +330,7 @@ namespace OpenSim
                 config.Set("inventory_source", "");
                 config.Set("userDatabase_plugin", "OpenSim.Data.SQLite.dll");
                 config.Set("user_source", "");
-                config.Set("asset_plugin", "OpenSim.Data.SQLite.dll");
-                config.Set("asset_source", "URI=file:Asset.db,version=3");
                 config.Set("LibrariesXMLFile", string.Format(".{0}inventory{0}Libraries.xml", Path.DirectorySeparatorChar));
-                config.Set("AssetSetsXMLFile", string.Format(".{0}assets{0}AssetSets.xml", Path.DirectorySeparatorChar));
-                config.Set("dump_assets_to_file", false);
             }
 
             {
@@ -268,6 +357,9 @@ namespace OpenSim
             return defaultConfig;
         }
 
+        /// <summary>
+        /// Read initial region settings from the ConfigSource
+        /// </summary>
         protected virtual void ReadConfigSettings()
         {
             IConfig startupConfig = m_config.Source.Configs["Startup"];
@@ -292,10 +384,6 @@ namespace OpenSim
                     = startupConfig.GetString("storage_connection_string");
                 m_configSettings.EstateConnectionString 
                     = startupConfig.GetString("estate_connection_string", m_configSettings.StorageConnectionString);
-                m_configSettings.AssetStorage 
-                    = startupConfig.GetString("asset_database");
-                m_configSettings.AssetCache 
-                    = startupConfig.GetString("AssetCache", "OpenSim.Framework.Communications.Cache.AssetCache");
                 m_configSettings.ClientstackDll 
                     = startupConfig.GetString("clientstack_plugin", "OpenSim.Region.ClientStack.LindenUDP.dll");
             }
@@ -310,13 +398,8 @@ namespace OpenSim
                 m_configSettings.StandaloneInventorySource = standaloneConfig.GetString("inventory_source");
                 m_configSettings.StandaloneUserPlugin = standaloneConfig.GetString("userDatabase_plugin");
                 m_configSettings.StandaloneUserSource = standaloneConfig.GetString("user_source");
-                m_configSettings.StandaloneAssetPlugin = standaloneConfig.GetString("asset_plugin");
-                m_configSettings.StandaloneAssetSource = standaloneConfig.GetString("asset_source");
 
                 m_configSettings.LibrariesXMLFile = standaloneConfig.GetString("LibrariesXMLFile");
-                m_configSettings.AssetSetsXMLFile = standaloneConfig.GetString("AssetSetsXMLFile");
-
-                m_configSettings.DumpAssetsToFile = standaloneConfig.GetBoolean("dump_assets_to_file", false);
             }
 
             m_networkServersInfo.loadFromConfiguration(m_config.Source);

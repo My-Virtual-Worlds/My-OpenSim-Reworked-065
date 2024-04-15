@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -148,6 +148,7 @@ namespace OpenSim.Data.MSSQL
 
                 sql = string.Format("insert into estate_settings ({0}) values ( @{1})", String.Join(",", names.ToArray()), String.Join(", @", names.ToArray()));
 
+                //_Log.Debug("[DB ESTATE]: SQL: " + sql);
                 using (SqlConnection connection = _Database.DatabaseConnection())
                 {
                     using (SqlCommand insertCommand = connection.CreateCommand())
@@ -157,7 +158,6 @@ namespace OpenSim.Data.MSSQL
                         foreach (string name in names)
                         {
                             insertCommand.Parameters.Add(_Database.CreateParameter("@" + name, _FieldMap[name].GetValue(es)));
-
                         }
                         SqlParameter idParameter = new SqlParameter("@ID", SqlDbType.Int);
                         idParameter.Direction = ParameterDirection.Output;
@@ -240,6 +240,7 @@ namespace OpenSim.Data.MSSQL
                 {
                     cmd.Parameters.Add(_Database.CreateParameter("@" + name, _FieldMap[name].GetValue(es)));
                 }
+
                 cmd.Parameters.Add(_Database.CreateParameter("@EstateID", es.EstateID));
                 cmd.ExecuteNonQuery();
             }
@@ -271,14 +272,11 @@ namespace OpenSim.Data.MSSQL
                 idParameter.Value = es.EstateID;
                 cmd.Parameters.Add(idParameter);
 
-                using (IDataReader reader = cmd.ExecuteReader())
+                using (SqlDataReader reader = cmd.ExecuteReader())
                 {
                     while (reader.Read())
                     {
                         EstateBan eb = new EstateBan();
-
-//                        UUID uuid;
-//                        UUID.TryParse(reader["bannedUUID"].ToString(), out uuid);
 
                         eb.BannedUserID = new UUID((Guid)reader["bannedUUID"]); //uuid;
                         eb.BannedHostAddress = "0.0.0.0";
@@ -299,15 +297,10 @@ namespace OpenSim.Data.MSSQL
             {
                 cmd.Parameters.Add(_Database.CreateParameter("@EstateID", estateID));
 
-                using (IDataReader reader = cmd.ExecuteReader())
+                using (SqlDataReader reader = cmd.ExecuteReader())
                 {
                     while (reader.Read())
                     {
-                        // EstateBan eb = new EstateBan();
-
-//                        UUID uuid;
-//                        UUID.TryParse(reader["uuid"].ToString(), out uuid);
-
                         uuids.Add(new UUID((Guid)reader["uuid"])); //uuid);
                     }
                 }
@@ -333,11 +326,8 @@ namespace OpenSim.Data.MSSQL
                 foreach (EstateBan b in es.EstateBans)
                 {
                     cmd.Parameters.Add(_Database.CreateParameter("@EstateID", es.EstateID));
-
                     cmd.Parameters.Add(_Database.CreateParameter("@bannedUUID", b.BannedUserID));
-
                     cmd.ExecuteNonQuery();
-
                     cmd.Parameters.Clear();
                 }
             }

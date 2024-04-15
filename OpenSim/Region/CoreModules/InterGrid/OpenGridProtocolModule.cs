@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -39,10 +39,10 @@ using Nini.Config;
 using OpenMetaverse;
 using OpenMetaverse.StructuredData;
 using OpenSim.Framework;
-using OpenSim.Framework.Communications.Capabilities;
+using OpenSim.Framework.Capabilities;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
-using Caps=OpenSim.Framework.Communications.Capabilities.Caps;
+using Caps=OpenSim.Framework.Capabilities.Caps;
 using OSDArray=OpenMetaverse.StructuredData.OSDArray;
 using OSDMap=OpenMetaverse.StructuredData.OSDMap;
 
@@ -143,8 +143,8 @@ namespace OpenSim.Region.CoreModules.InterGrid
                     {
                         if (m_scene.Count == 0)
                         {
-                            scene.CommsManager.HttpServer.AddLLSDHandler("/agent/", ProcessAgentDomainMessage);
-                            scene.CommsManager.HttpServer.AddLLSDHandler("/", ProcessRegionDomainSeed);
+                            MainServer.Instance.AddLLSDHandler("/agent/", ProcessAgentDomainMessage);
+                            MainServer.Instance.AddLLSDHandler("/", ProcessRegionDomainSeed);
                             try
                             {
                                 ServicePointManager.ServerCertificateValidationCallback += customXertificateValidation;
@@ -169,7 +169,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
                         // a zero length region name would conflict with are base region seed cap
                         if (!SceneListDuplicateCheck(scene.RegionInfo.RegionName) && scene.RegionInfo.RegionName.ToLower() != "agent" && scene.RegionInfo.RegionName.Length > 0)
                         {
-                            scene.CommsManager.HttpServer.AddLLSDHandler(
+                            MainServer.Instance.AddLLSDHandler(
                                 "/" + HttpUtility.UrlPathEncode(scene.RegionInfo.RegionName.ToLower()),
                                 ProcessRegionDomainSeed);
                         }
@@ -353,11 +353,11 @@ namespace OpenSim.Region.CoreModules.InterGrid
             return responseMap;
         }
 
-        // Using OpenSim.Framework.Communications.Capabilities.Caps here one time..   
+        // Using OpenSim.Framework.Capabilities.Caps here one time..
         // so the long name is probably better then a using statement
         public void OnRegisterCaps(UUID agentID, Caps caps)
         {
-            /* If we ever want to register our own caps here....    
+            /* If we ever want to register our own caps here....
              * 
             string capsBase = "/CAPS/" + caps.CapsObjectPath;
             caps.RegisterHandler("CAPNAME",
@@ -450,7 +450,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
 
             responseMap["sim_host"] = OSD.FromString(reg.ExternalHostName);
             
-            // DEPRECIATED
+            // DEPRECATED
             responseMap["sim_ip"] = OSD.FromString(Util.GetHostFromDNS(reg.ExternalHostName).ToString());
             
             responseMap["connect"] = OSD.FromBoolean(true);
@@ -527,7 +527,6 @@ namespace OpenSim.Region.CoreModules.InterGrid
             userProfile.Partner = UUID.Zero;
             userProfile.PasswordHash = "$1$";
             userProfile.PasswordSalt = "";
-            userProfile.RootInventoryFolderID = UUID.Zero;
             userProfile.SurName = agentData.lastname;
             userProfile.UserAssetURI = homeScene.CommsManager.NetworkServersInfo.AssetURL;
             userProfile.UserFlags = 0;
@@ -558,7 +557,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
 
             // Call 'new user' event handler
             string reason;
-            if (!homeScene.NewUserConnection(agentData, out reason))
+            if (!homeScene.NewUserConnection(agentData, (uint)TeleportFlags.ViaLogin, out reason))
             {
                 responseMap["connect"] = OSD.FromBoolean(false);
                 responseMap["message"] = OSD.FromString(String.Format("Connection refused: {0}", reason));
@@ -591,7 +590,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
                     httpaddr = httpsCN;
             }
             
-            // DEPRECIATED
+            // DEPRECATED
             responseMap["seed_capability"] 
                 = OSD.FromString(
                     regionCapsHttpProtocol + httpaddr + ":" + reg.HttpPort + CapsUtil.GetCapsSeedPath(userCap.CapsObjectPath));
@@ -764,7 +763,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
                     responseMap["sim_port"] = OSD.FromInteger(reg.InternalEndPoint.Port);
                     responseMap["sim_host"] = OSD.FromString(reg.ExternalHostName);// + ":" + reg.InternalEndPoint.Port.ToString());
                     
-                    // DEPRECIATED
+                    // DEPRECATED
                     responseMap["sim_ip"] = OSD.FromString(Util.GetHostFromDNS(reg.ExternalHostName).ToString());
 
                     responseMap["session_id"] = OSD.FromUUID(SessionID);
@@ -851,7 +850,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
 
                     string rezRespSeedCap = "";
 
-                    // DEPRECIATED
+                    // DEPRECATED
                     if (rezResponseMap.ContainsKey("seed_capability"))
                         rezRespSeedCap = rezResponseMap["seed_capability"].AsString();
                     
@@ -863,7 +862,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
                     if (rezResponseMap.ContainsKey("rez_avatar/rez"))
                         rezRespSeedCap = rezResponseMap["rez_avatar/rez"].AsString();
 
-                    // DEPRECIATED
+                    // DEPRECATED
                     string rezRespSim_ip = rezResponseMap["sim_ip"].AsString();
                     
                     string rezRespSim_host = rezResponseMap["sim_host"].AsString();
@@ -879,19 +878,19 @@ namespace OpenSim.Region.CoreModules.InterGrid
                     {
                         RezResponsePositionArray = (OSDArray)rezResponseMap["position"];
                     }
-                    // DEPRECIATED
+                    // DEPRECATED
                     responseMap["seed_capability"] = OSD.FromString(rezRespSeedCap);
                     
                     // REPLACEMENT r3
                     responseMap["region_seed_capability"] = OSD.FromString(rezRespSeedCap);
 
-                    // DEPRECIATED
+                    // DEPRECATED
                     responseMap["sim_ip"] = OSD.FromString(Util.GetHostFromDNS(rezRespSim_ip).ToString());
                     
                     responseMap["sim_host"] = OSD.FromString(rezRespSim_host);
                     responseMap["sim_port"] = OSD.FromInteger(rrPort);
-                    responseMap["region_x"] = OSD.FromInteger(rrX );
-                    responseMap["region_y"] = OSD.FromInteger(rrY );
+                    responseMap["region_x"] = OSD.FromInteger(rrX);
+                    responseMap["region_y"] = OSD.FromInteger(rrY);
                     responseMap["region_id"] = OSD.FromUUID(rrRID);
                     responseMap["sim_access"] = OSD.FromString(rrAccess);
 
@@ -1208,10 +1207,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
             if (homeScene.TryGetAvatar(avatarId,out avatar))
             {
                 KillAUser ku = new KillAUser(avatar,mod);
-                Thread ta = new Thread(ku.ShutdownNoLogout);
-                ta.IsBackground = true;
-                ta.Name = "ShutdownThread";
-                ta.Start();
+                Watchdog.StartThread(ku.ShutdownNoLogout, "OGPShutdown", ThreadPriority.Normal, true);
             }
         }
 
@@ -1261,15 +1257,23 @@ namespace OpenSim.Region.CoreModules.InterGrid
 
                 avToBeKilled.ControllingClient.SendLogoutPacketWhenClosing = false;
 
-                Thread.Sleep(30000);
+                int sleepMS = 30000;
+                while (sleepMS > 0)
+                {
+                    Watchdog.UpdateThread();
+                    Thread.Sleep(1000);
+                    sleepMS -= 1000;
+                }
 
                 // test for child agent because they might have come back
                 if (avToBeKilled.IsChildAgent)
                 {
                     m_mod.DeleteOGPState(avUUID);
-                    avToBeKilled.ControllingClient.Close(true);
+                    avToBeKilled.ControllingClient.Close();
                 }
             }
+
+            Watchdog.RemoveThread();
         }
         
     }

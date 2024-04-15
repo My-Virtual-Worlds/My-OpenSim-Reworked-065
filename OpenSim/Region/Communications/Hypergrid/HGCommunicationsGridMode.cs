@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -40,43 +40,21 @@ namespace OpenSim.Region.Communications.Hypergrid
 {
     public class HGCommunicationsGridMode : CommunicationsManager // CommunicationsOGS1
     {
-        private static readonly ILog m_log
-            = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-
-        IHyperlink m_osw = null;
-        public IHyperlink HGServices
-        {
-            get { return m_osw; }
-        }
 
         public HGCommunicationsGridMode(
-            NetworkServersInfo serversInfo, BaseHttpServer httpServer,
-            IAssetCache assetCache, SceneManager sman, LibraryRootFolder libraryRootFolder)
-            : base(serversInfo, httpServer, assetCache, false, libraryRootFolder)
+            NetworkServersInfo serversInfo,
+            SceneManager sman, LibraryRootFolder libraryRootFolder)
+            : base(serversInfo, libraryRootFolder)
         {
-            // From constructor at CommunicationsOGS1
-            HGGridServices gridInterComms = new HGGridServicesGridMode(serversInfo, httpServer, assetCache, sman, m_userProfileCacheService);
-            m_gridService = gridInterComms;
-            m_osw = gridInterComms;
-
-            // The HG InventoryService always uses secure handlers
-            HGInventoryServiceClient invService = new HGInventoryServiceClient(serversInfo.InventoryURL, this.m_userProfileCacheService, true);
-            invService.UserProfileCache = m_userProfileCacheService; 
-            AddSecureInventoryService(invService);
-            m_defaultInventoryHost = invService.Host;
-            if (SecureInventoryService != null)
-                m_log.Info("[HG]: SecureInventoryService.");
-            else
-                m_log.Info("[HG]: Non-secureInventoryService.");
 
             HGUserServices userServices = new HGUserServices(this);
             // This plugin arrangement could eventually be configurable rather than hardcoded here.
             userServices.AddPlugin(new TemporaryUserProfilePlugin());
-            userServices.AddPlugin(new OGS1UserDataPlugin(this));            
+            userServices.AddPlugin(new HGUserDataPlugin(this, userServices));
             
             m_userService = userServices;
             m_messageService = userServices;
-            m_avatarService = userServices;           
+            m_avatarService = userServices;
         }
     }
 }

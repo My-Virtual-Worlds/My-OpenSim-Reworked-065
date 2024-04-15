@@ -44,7 +44,7 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        private string m_sceneIdentifier = string.Empty;
+        // private string m_sceneIdentifier = string.Empty;
         
         private List<BulletDotNETCharacter> m_characters = new List<BulletDotNETCharacter>();
         private List<BulletDotNETPrim> m_prims = new List<BulletDotNETPrim>();
@@ -76,7 +76,7 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
         private float avMovementDivisorWalk = 1.8f;
         private float avMovementDivisorRun = 0.8f;
 
-        private float minimumGroundFlightOffset = 3f;
+        // private float minimumGroundFlightOffset = 3f;
 
         public bool meshSculptedPrim = true;
 
@@ -98,7 +98,7 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
         private float[] _origheightmap;    // Used for Fly height. Kitto Flora
         private bool usingGImpactAlgorithm = false;
 
-        private IConfigSource m_config;
+        // private IConfigSource m_config;
         private readonly btVector3 worldAabbMin = new btVector3(-10f, -10f, 0);
         private readonly btVector3 worldAabbMax = new btVector3((int)Constants.RegionSize + 10f, (int)Constants.RegionSize + 10f, 9000);
 
@@ -107,7 +107,7 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
 
         public BulletDotNETScene(string sceneIdentifier)
         {
-            m_sceneIdentifier = sceneIdentifier;
+            // m_sceneIdentifier = sceneIdentifier;
             VectorZero = new btVector3(0, 0, 0);
             QuatIdentity = new btQuaternion(0, 0, 0, 1);
             TransZero = new btTransform(QuatIdentity, VectorZero);
@@ -119,7 +119,7 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
         public override void Initialise(IMesher meshmerizer, IConfigSource config)
         {
             mesher = meshmerizer;
-            m_config = config;
+            // m_config = config;
             /*
             if (Environment.OSVersion.Platform == PlatformID.Unix)
             {
@@ -139,7 +139,7 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
 
         }
 
-        public override PhysicsActor AddAvatar(string avName, PhysicsVector position, PhysicsVector size, bool isFlying)
+        public override PhysicsActor AddAvatar(string avName, Vector3 position, Vector3 size, bool isFlying)
         {
             BulletDotNETCharacter chr = new BulletDotNETCharacter(avName, this, position, size, avPIDD, avPIDP,
                                                                   avCapRadius, avStandupTensor, avDensity,
@@ -177,14 +177,14 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
             }
         }
 
-        private PhysicsActor AddPrim(String name, PhysicsVector position, PhysicsVector size, Quaternion rotation,
+        private PhysicsActor AddPrim(String name, Vector3 position, Vector3 size, Quaternion rotation,
                                     IMesh mesh, PrimitiveBaseShape pbs, bool isphysical)
         {
-            PhysicsVector pos = new PhysicsVector(position.X, position.Y, position.Z);
+            Vector3 pos = position;
             //pos.X = position.X;
             //pos.Y = position.Y;
             //pos.Z = position.Z;
-            PhysicsVector siz = new PhysicsVector();
+            Vector3 siz = Vector3.Zero;
             siz.X = size.X;
             siz.Y = size.Y;
             siz.Z = size.Z;
@@ -201,12 +201,12 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
             return newPrim;
         }
 
-        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position, PhysicsVector size, Quaternion rotation)
+        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position, Vector3 size, Quaternion rotation)
         {
             return AddPrimShape(primName, pbs, position, size, rotation, false);
         }
 
-        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position, PhysicsVector size, Quaternion rotation, bool isPhysical)
+        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position, Vector3 size, Quaternion rotation, bool isPhysical)
         {
             PhysicsActor result;
             IMesh mesh = null;
@@ -459,7 +459,7 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
         {
             lock (m_prims)
             {
-                foreach ( BulletDotNETPrim prim in m_prims)
+                foreach (BulletDotNETPrim prim in m_prims)
                 {
                     if (prim.Body != null)
                         m_world.removeRigidBody(prim.Body);
@@ -528,7 +528,7 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
         {
             // Teravus: Kitto, this code causes recurring errors that stall physics permenantly unless 
             // the values are checked, so checking below.
-            // Is there any reason that we don't do this in ScenePresence?   
+            // Is there any reason that we don't do this in ScenePresence?
             // The only physics engine that benefits from it in the physics plugin is this one
 
             if (x > (int)Constants.RegionSize || y > (int)Constants.RegionSize ||
@@ -650,7 +650,7 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
 
             if (iPropertiesNotSupportedDefault == 0)
             {
-#if SPAM              
+#if SPAM
                 m_log.Warn("NonMesh");
 #endif
                 return false;
@@ -700,6 +700,8 @@ namespace OpenSim.Region.Physics.BulletDotNETPlugin
                 m_world.SetCollisionAddedCallback(m_CollisionInterface);
             }
         }
+        
+
 
     }
 }

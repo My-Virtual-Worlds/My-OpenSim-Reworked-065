@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -45,7 +45,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.Chat
         private static readonly ILog m_log =
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        private static readonly OpenMetaverse.Vector3 CenterOfRegion = new OpenMetaverse.Vector3(128, 128, 20);
+        private static readonly OpenMetaverse.Vector3 CenterOfRegion = new OpenMetaverse.Vector3(((int)Constants.RegionSize * 0.5f), ((int)Constants.RegionSize * 0.5f), 20);
         private const  int DEBUG_CHANNEL = 2147483647;
 
         private static int _idk_         = 0;
@@ -145,7 +145,11 @@ namespace OpenSim.Region.OptionalModules.Avatar.Chat
                     if (enabled && (cs.irc.Enabled) && (cs.irc.Connected) && (cs.ClientReporting)) 
                     {
                         m_log.InfoFormat("[IRC-Region {0}]: {1} has left", Region, client.Name);
-                        cs.irc.PrivMsg(cs.NoticeMessageFormat, cs.irc.Nick, Region, String.Format("{0} has left", client.Name));
+                        //Check if this person is excluded from IRC
+                        if (!cs.ExcludeList.Contains(client.Name.ToLower()))
+                        {
+                            cs.irc.PrivMsg(cs.NoticeMessageFormat, cs.irc.Nick, Region, String.Format("{0} has left", client.Name));
+                        }
                     }
                     client.OnLogout           -= OnClientLoggedOut;
                     client.OnConnectionClosed -= OnClientLoggedOut;
@@ -209,7 +213,11 @@ namespace OpenSim.Region.OptionalModules.Avatar.Chat
                     {
                         string clientName = String.Format("{0} {1}", presence.Firstname, presence.Lastname);
                         m_log.DebugFormat("[IRC-Region {0}] {1} has arrived", Region, clientName);
-                        cs.irc.PrivMsg(cs.NoticeMessageFormat, cs.irc.Nick, Region, String.Format("{0} has arrived", clientName));
+                        //Check if this person is excluded from IRC
+                        if (!cs.ExcludeList.Contains(clientName.ToLower()))
+                        {
+                            cs.irc.PrivMsg(cs.NoticeMessageFormat, cs.irc.Nick, Region, String.Format("{0} has arrived", clientName));
+                        }
                     }
                 }
             }
@@ -343,7 +351,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.Chat
             {
                 m_log.DebugFormat("[IRC-Region {0}] dropping message {1} on channel {2}", Region, msg, msg.Channel);
                 return;
-            }                
+            }
 
             ScenePresence avatar = null;
             string fromName = msg.From;

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -52,16 +52,11 @@ namespace OpenSim.Region.CoreModules.World.Estate
 
         public EstateTerrainXferHandler(IClientAPI pRemoteClient, string pClientFilename)
         {
-
-            m_asset = new AssetBase();
-            m_asset.FullID = UUID.Zero;
-            m_asset.Type = type;
+            m_asset = new AssetBase(UUID.Zero, pClientFilename, type);
             m_asset.Data = new byte[0];
-            m_asset.Name = pClientFilename;
             m_asset.Description = "empty";
             m_asset.Local = true;
             m_asset.Temporary = true;
-
         }
 
         public ulong XferID

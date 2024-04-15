@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -30,7 +30,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Reflection;
 using log4net;
-using Mono.Data.SqliteClient;
+using Mono.Data.Sqlite;
 using OpenMetaverse;
 using OpenSim.Framework;
 
@@ -88,15 +88,17 @@ namespace OpenSim.Data.SQLite
             invFoldersDa = new SqliteDataAdapter(foldersSelectCmd);
 
             ds = new DataSet();
-
+            
             ds.Tables.Add(createInventoryFoldersTable());
             invFoldersDa.Fill(ds.Tables["inventoryfolders"]);
             setupFoldersCommands(invFoldersDa, conn);
+            CreateDataSetMapping(invFoldersDa, "inventoryfolders");
             m_log.Info("[INVENTORY DB]: Populated Inventory Folders Definitions");
 
             ds.Tables.Add(createInventoryItemsTable());
             invItemsDa.Fill(ds.Tables["inventoryitems"]);
             setupItemsCommands(invItemsDa, conn);
+            CreateDataSetMapping(invItemsDa, "inventoryitems");
             m_log.Info("[INVENTORY DB]: Populated Inventory Items Definitions");
 
             ds.AcceptChanges();
@@ -188,7 +190,7 @@ namespace OpenSim.Data.SQLite
             row["invType"] = item.InvType;
             row["parentFolderID"] = item.Folder.ToString();
             row["avatarID"] = item.Owner.ToString();
-            row["creatorsID"] = item.CreatorId;
+            row["creatorsID"] = item.CreatorId.ToString();
             row["inventoryName"] = item.Name;
             row["inventoryDescription"] = item.Description;
 
@@ -202,7 +204,7 @@ namespace OpenSim.Data.SQLite
             row["salePrice"] = item.SalePrice;
             row["saleType"] = item.SaleType;
             row["creationDate"] = item.CreationDate;
-            row["groupID"] = item.GroupID;
+            row["groupID"] = item.GroupID.ToString();
             row["groupOwned"] = item.GroupOwned;
             row["flags"] = item.Flags;
         }
@@ -301,7 +303,8 @@ namespace OpenSim.Data.SQLite
                 DataTable inventoryFolderTable = ds.Tables["inventoryfolders"];
 
                 inventoryRow = inventoryFolderTable.Rows.Find(item.Folder.ToString());
-                inventoryRow["version"] = (int)inventoryRow["version"] + 1;
+                if (inventoryRow != null) //MySQL doesn't throw an exception here, so sqlite shouldn't either.
+                    inventoryRow["version"] = (int)inventoryRow["version"] + 1;
 
                 invFoldersDa.Update(ds, "inventoryfolders");
             }
@@ -627,12 +630,12 @@ namespace OpenSim.Data.SQLite
 
         public InventoryItemBase queryInventoryItem(UUID itemID)
         {
-            return null;
+            return getInventoryItem(itemID);
         }
 
         public InventoryFolderBase queryInventoryFolder(UUID folderID)
         {
-            return null;
+            return getInventoryFolder(folderID);
         }
 
         /// <summary>
@@ -719,6 +722,15 @@ namespace OpenSim.Data.SQLite
          *  Data Table definitions
          *
          **********************************************************************/
+
+        protected void CreateDataSetMapping(IDataAdapter da, string tableName)
+        {       
+            ITableMapping dbMapping = da.TableMappings.Add(tableName, tableName);
+            foreach (DataColumn col in ds.Tables[tableName].Columns)
+            {       
+                dbMapping.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+            }       
+        }
 
         /// <summary>
         /// Create the "inventoryitems" table

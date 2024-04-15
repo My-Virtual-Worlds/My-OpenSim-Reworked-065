@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -46,6 +46,8 @@ namespace OpenSim.Framework
         public bool HttpSSL = ConfigSettings.DefaultUserServerHttpSSL;
         public uint DefaultUserLevel = 0;
         public string LibraryXmlfile = "";
+        public string ConsoleUser = String.Empty;
+        public string ConsolePass = String.Empty;
 
         private Uri m_inventoryUrl;
 
@@ -131,7 +133,7 @@ namespace OpenSim.Framework
             m_configMember.addConfigurationOption("library_location",
                                                 ConfigurationOption.ConfigurationTypes.TYPE_STRING_NOT_EMPTY,
                                                 "Path to library control file",
-                                                string.Format(".{0}inventory{0}Libraries.xml", Path.DirectorySeparatorChar), false);            
+                                                string.Format(".{0}inventory{0}Libraries.xml", Path.DirectorySeparatorChar), false);
             
             m_configMember.addConfigurationOption("database_provider", ConfigurationOption.ConfigurationTypes.TYPE_STRING,
                                                 "DLL for database provider", "OpenSim.Data.MySQL.dll", false);
@@ -155,6 +157,12 @@ namespace OpenSim.Framework
             m_configMember.addConfigurationOption("default_loginLevel", ConfigurationOption.ConfigurationTypes.TYPE_UINT32,
                                                 "Minimum Level a user should have to login [0 default]", "0", false);
             
+            m_configMember.addConfigurationOption("console_user", ConfigurationOption.ConfigurationTypes.TYPE_STRING,
+                                                "Remote console access user name [Default: disabled]", "", false);
+            
+            m_configMember.addConfigurationOption("console_pass", ConfigurationOption.ConfigurationTypes.TYPE_STRING,
+                                                "Remote console access password [Default: disabled]", "", false);
+            
         }
 
         public bool handleIncomingConfiguration(string configuration_key, object configuration_result)
@@ -165,7 +173,7 @@ namespace OpenSim.Framework
                     DefaultStartupMsg = (string) configuration_result;
                     break;
                 case "default_grid_server":
-                    GridServerURL = new Uri( (string) configuration_result );
+                    GridServerURL = new Uri((string) configuration_result);
                     break;
                 case "grid_send_key":
                     GridSendKey = (string) configuration_result;
@@ -208,6 +216,12 @@ namespace OpenSim.Framework
                     break;
                 case "library_location":
                     LibraryXmlfile = (string)configuration_result;
+                    break;
+                case "console_user":
+                    ConsoleUser = (string)configuration_result;
+                    break;
+                case "console_pass":
+                    ConsolePass = (string)configuration_result;
                     break;
             }
 

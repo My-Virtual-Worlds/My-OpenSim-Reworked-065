@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,6 +29,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Net;
 using log4net;
 using Nini.Config;
 using OpenMetaverse;
@@ -83,6 +84,7 @@ namespace OpenSim.Region.CoreModules.World.Terrain
         private ITerrainChannel m_revert;
         private Scene m_scene;
         private volatile bool m_tainted;
+        private readonly UndoStack<LandUndoState> m_undo = new UndoStack<LandUndoState>(5);
 
         #region ICommandableModule Members
 
@@ -159,6 +161,11 @@ namespace OpenSim.Region.CoreModules.World.Terrain
         {
         }
 
+        public Type ReplaceableInterface 
+        {
+            get { return null; }
+        }
+
         public string Name
         {
             get { return "TerrainModule"; }
@@ -167,6 +174,11 @@ namespace OpenSim.Region.CoreModules.World.Terrain
         #endregion
 
         #region ITerrainModule Members
+
+        public void UndoTerrain(ITerrainChannel channel)
+        {
+            m_channel = channel;
+        }
 
         /// <summary>
         /// Loads a terrain file from disk and installs it in the scene.
@@ -254,6 +266,16 @@ namespace OpenSim.Region.CoreModules.World.Terrain
         }
 
         /// <summary>
+        /// Loads a terrain file from the specified URI
+        /// </summary>
+        /// <param name="filename">The name of the terrain to load</param>
+        /// <param name="pathToTerrainHeightmap">The URI to the terrain height map</param>
+        public void LoadFromStream(string filename, Uri pathToTerrainHeightmap)
+        {
+            LoadFromStream(filename, URIFetch(pathToTerrainHeightmap));
+        }
+
+        /// <summary>
         /// Loads a terrain file from a stream and installs it in the scene.
         /// </summary>
         /// <param name="filename">Filename to terrain file. Type is determined by extension.</param>
@@ -262,7 +284,7 @@ namespace OpenSim.Region.CoreModules.World.Terrain
         {
             foreach (KeyValuePair<string, ITerrainLoader> loader in m_loaders)
             {
-                if (@filename.EndsWith(loader.Key))
+                if (filename.EndsWith(loader.Key))
                 {
                     lock (m_scene)
                     {
@@ -290,6 +312,25 @@ namespace OpenSim.Region.CoreModules.World.Terrain
             throw new TerrainException(String.Format("unable to load heightmap from file {0}: no loader available for that format", filename));
         }
 
+        private static Stream URIFetch(Uri uri)
+        {
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
+
+            // request.Credentials = credentials;
+
+            request.ContentLength = 0;
+            request.KeepAlive = false;
+
+            WebResponse response = request.GetResponse();
+            Stream file = response.GetResponseStream();
+
+            if (response.ContentLength == 0)
+                throw new Exception(String.Format("{0} returned an empty file", uri.ToString()));
+
+            // return new BufferedStream(file, (int) response.ContentLength);
+            return new BufferedStream(file, 1000000);
+        }
+
         /// <summary>
         /// Modify Land
         /// </summary>
@@ -299,7 +340,10 @@ namespace OpenSim.Region.CoreModules.World.Terrain
         /// <param name="agentId">UUID of script-owner</param>
         public void ModifyTerrain(UUID user, Vector3 pos, byte size, byte action, UUID agentId)
         {
-            client_OnModifyTerrain(user, (float)pos.Z, (float)0.25, size, action, pos.Y, pos.X, pos.Y, pos.X, agentId);
+            float duration = 0.25f;
+            if (action == 0)
+                duration = 4.0f;
+            client_OnModifyTerrain(user, (float)pos.Z, duration, size, action, pos.Y, pos.X, pos.Y, pos.X, agentId);
         }
 
         /// <summary>
@@ -536,6 +580,7 @@ namespace OpenSim.Region.CoreModules.World.Terrain
         {
             client.OnModifyTerrain += client_OnModifyTerrain;
             client.OnBakeTerrain += client_OnBakeTerrain;
+            client.OnLandUndo += client_OnLandUndo;
         }
 
         /// <summary>
@@ -626,6 +671,19 @@ namespace OpenSim.Region.CoreModules.World.Terrain
             return changesLimited;
         }
 
+        private void client_OnLandUndo(IClientAPI client)
+        {
+            lock (m_undo)
+            {
+                if (m_undo.Count > 0)
+                {
+                    LandUndoState goback = m_undo.Pop();
+                    if (goback != null)
+                        goback.PlaybackState();
+                }
+            }
+        }
+
         /// <summary>
         /// Sends a copy of the current terrain to the scenes clients
         /// </summary>
@@ -680,6 +738,7 @@ namespace OpenSim.Region.CoreModules.World.Terrain
                     }
                     if (allowed)
                     {
+                        StoreUndoState();
                         m_painteffects[(StandardTerrainEffects) action].PaintEffect(
                             m_channel, allowMask, west, south, height, size, seconds);
 
@@ -720,6 +779,7 @@ namespace OpenSim.Region.CoreModules.World.Terrain
 
                     if (allowed)
                     {
+                        StoreUndoState();
                         m_floodeffects[(StandardTerrainEffects) action].FloodEffect(
                             m_channel, fillArea, size);
 
@@ -741,6 +801,25 @@ namespace OpenSim.Region.CoreModules.World.Terrain
             if (m_scene.Permissions.CanIssueEstateCommand(remoteClient.AgentId, true))
             {
                 InterfaceBakeTerrain(null); //bake terrain does not use the passed in parameter
+            }
+        }
+
+        private void StoreUndoState()
+        {
+            lock (m_undo)
+            {
+                if (m_undo.Count > 0)
+                {
+                    LandUndoState last = m_undo.Peek();
+                    if (last != null)
+                    {
+                        if (last.Compare(m_channel))
+                            return;
+                    }
+                }
+
+                LandUndoState nUndo = new LandUndoState(this, m_channel);
+                m_undo.Push(nUndo);
             }
         }
 

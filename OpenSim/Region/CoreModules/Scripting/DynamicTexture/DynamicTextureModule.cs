@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -42,6 +42,13 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
 {
     public class DynamicTextureModule : IRegionModule, IDynamicTextureManager
     {
+        //private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+
+        private const int ALL_SIDES = -1;
+
+        public const int DISP_EXPIRE = 1;
+        public const int DISP_TEMP   = 2;
+
         private Dictionary<UUID, Scene> RegisteredScenes = new Dictionary<UUID, Scene>();
 
         private Dictionary<string, IDynamicTextureRender> RenderPlugins =
@@ -106,10 +113,17 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
         public UUID AddDynamicTextureURL(UUID simID, UUID primID, string contentType, string url,
                                          string extraParams, int updateTimer, bool SetBlending, byte AlphaValue)
         {
+            return AddDynamicTextureURL(simID, primID, contentType, url,
+                                          extraParams, updateTimer, SetBlending, 
+                                         (int)(DISP_TEMP|DISP_EXPIRE), AlphaValue, ALL_SIDES);
+        }
+
+        public UUID AddDynamicTextureURL(UUID simID, UUID primID, string contentType, string url,
+                                         string extraParams, int updateTimer, bool SetBlending, 
+                                         int disp, byte AlphaValue, int face)
+        {
             if (RenderPlugins.ContainsKey(contentType))
             {
-                //m_log.Debug("dynamic texture being created: " + url + " of type " + contentType);
-
                 DynamicTextureUpdater updater = new DynamicTextureUpdater();
                 updater.SimUUID = simID;
                 updater.PrimID = primID;
@@ -120,6 +134,8 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
                 updater.Params = extraParams;
                 updater.BlendWithOldTexture = SetBlending;
                 updater.FrontAlpha = AlphaValue;
+                updater.Face = face;
+                updater.Disp = disp;
 
                 lock (Updaters)
                 {
@@ -144,6 +160,13 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
         public UUID AddDynamicTextureData(UUID simID, UUID primID, string contentType, string data,
                                           string extraParams, int updateTimer, bool SetBlending, byte AlphaValue)
         {
+            return AddDynamicTextureData(simID, primID, contentType, data, extraParams, updateTimer, SetBlending, 
+                                          (int) (DISP_TEMP|DISP_EXPIRE), AlphaValue, ALL_SIDES);
+        }
+
+        public UUID AddDynamicTextureData(UUID simID, UUID primID, string contentType, string data,
+                                          string extraParams, int updateTimer, bool SetBlending, int disp, byte AlphaValue, int face)
+        {
             if (RenderPlugins.ContainsKey(contentType))
             {
                 DynamicTextureUpdater updater = new DynamicTextureUpdater();
@@ -156,6 +179,9 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
                 updater.Params = extraParams;
                 updater.BlendWithOldTexture = SetBlending;
                 updater.FrontAlpha = AlphaValue;
+                updater.Face = face;
+                updater.Url = "Local image";
+                updater.Disp = disp;
 
                 lock (Updaters)
                 {
@@ -232,6 +258,8 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
             public UUID SimUUID;
             public UUID UpdaterID;
             public int UpdateTimer;
+            public int Face;
+            public int Disp;
             public string Url;
 
             public DynamicTextureUpdater()
@@ -246,10 +274,9 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
             /// </summary>
             public void DataReceived(byte[] data, Scene scene)
             {
-
                 SceneObjectPart part = scene.GetSceneObjectPart(PrimID);
 
-                if (data == null)
+                if (part == null || data == null || data.Length <= 1)
                 {
                     string msg = 
                         String.Format("DynamicTextureModule: Error preparing image using URL {0}", Url);
@@ -264,7 +291,7 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
                 if (BlendWithOldTexture)
                 {
                     UUID lastTextureID = part.Shape.Textures.DefaultTexture.TextureID;
-                    oldAsset = scene.CommsManager.AssetCache.GetAsset(lastTextureID, true);
+                    oldAsset = scene.AssetService.Get(lastTextureID.ToString());
                     if (oldAsset != null)
                     {
                         assetData = BlendTextures(data, oldAsset.Data, SetNewFrontAlpha, FrontAlpha);
@@ -282,40 +309,68 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
                 }
 
                 // Create a new asset for user
-                AssetBase asset = new AssetBase();
-                asset.FullID = UUID.Random();
+                AssetBase asset = new AssetBase(UUID.Random(), "DynamicImage" + Util.RandomClass.Next(1, 10000), (sbyte)AssetType.Texture);
                 asset.Data = assetData;
-                asset.Name = "DynamicImage" + Util.RandomClass.Next(1, 10000);
-                asset.Type = 0;
-                asset.Description = "dynamic image";
+                asset.Description = String.Format("URL image : {0}", Url);
                 asset.Local = false;
-                asset.Temporary = true;
-                scene.CommsManager.AssetCache.AddAsset(asset);
-
-                LastAssetID = asset.FullID;
+                asset.Temporary = ((Disp & DISP_TEMP) != 0);
+                scene.AssetService.Store(asset);
+//                scene.CommsManager.AssetCache.AddAsset(asset);
 
                 IJ2KDecoder cacheLayerDecode = scene.RequestModuleInterface<IJ2KDecoder>();
                 if (cacheLayerDecode != null)
                 {
-                    cacheLayerDecode.syncdecode(asset.FullID, asset.Data);
+                    cacheLayerDecode.Decode(asset.FullID, asset.Data);
+                    cacheLayerDecode = null;
+                    LastAssetID = asset.FullID;
                 }
-                cacheLayerDecode = null;
 
-                // mostly keep the values from before
-                Primitive.TextureEntry tmptex = part.Shape.Textures;
+                UUID oldID = UUID.Zero;
 
-                // remove the old asset from the cache
-                UUID oldID = tmptex.DefaultTexture.TextureID;
-                
-                tmptex.DefaultTexture.TextureID = asset.FullID;
-                // I'm pretty sure we always want to force this to true
-                // I'm pretty sure noone whats to set fullbright true if it wasn't true before.
-                // tmptex.DefaultTexture.Fullbright = true;
+                lock (part)
+                {
+                    // mostly keep the values from before
+                    Primitive.TextureEntry tmptex = part.Shape.Textures;
 
-                part.Shape.Textures = tmptex;
-                part.ScheduleFullUpdate();
+                    // remove the old asset from the cache
+                    oldID = tmptex.DefaultTexture.TextureID;
+                    
+                    if (Face == ALL_SIDES)
+                    {
+                        tmptex.DefaultTexture.TextureID = asset.FullID;
+                    }
+                    else
+                    {
+                        try
+                        {
+                            Primitive.TextureEntryFace texface = tmptex.CreateFace((uint)Face);
+                            texface.TextureID = asset.FullID;
+                            tmptex.FaceTextures[Face] = texface;
+                        }
+                        catch (Exception)
+                        {
+                            tmptex.DefaultTexture.TextureID = asset.FullID;
+                        }
+                    }
 
-                scene.CommsManager.AssetCache.ExpireAsset(oldID);
+                    // I'm pretty sure we always want to force this to true
+                    // I'm pretty sure noone whats to set fullbright true if it wasn't true before.
+                    // tmptex.DefaultTexture.Fullbright = true;
+
+                    part.UpdateTexture(tmptex);
+                }
+
+                if (oldID != UUID.Zero && ((Disp & DISP_EXPIRE) != 0))
+                {
+                    if (oldAsset == null) oldAsset = scene.AssetService.Get(oldID.ToString());
+                    if (oldAsset != null)
+                    {
+                        if (oldAsset.Temporary == true)
+                        {
+                            scene.AssetService.Delete(oldID.ToString());
+                        }
+                    }
+                }
             }
 
             private byte[] BlendTextures(byte[] frontImage, byte[] backImage, bool setNewAlpha, byte newAlpha)

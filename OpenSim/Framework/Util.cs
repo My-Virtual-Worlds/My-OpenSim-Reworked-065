@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -41,19 +41,35 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
+using System.Threading;
 using log4net;
 using Nini.Config;
 using Nwc.XmlRpc;
+using BclExtras;
 using OpenMetaverse;
+using OpenMetaverse.StructuredData;
+using Amib.Threading;
 
 namespace OpenSim.Framework
 {
+    /// <summary>
+    /// The method used by Util.FireAndForget for asynchronously firing events
+    /// </summary>
+    public enum FireAndForgetMethod
+    {
+        UnsafeQueueUserWorkItem,
+        QueueUserWorkItem,
+        BeginInvoke,
+        SmartThreadPool,
+        Thread,
+    }
+
     /// <summary>
     /// Miscellaneous utility functions
     /// </summary>
     public class Util
     {
-        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);       
+        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private static uint nextXferID = 5000;
         private static Random randomClass = new Random();
@@ -61,6 +77,9 @@ namespace OpenSim.Framework
         private static string regexInvalidFileChars = "[" + new String(Path.GetInvalidFileNameChars()) + "]";
         private static string regexInvalidPathChars = "[" + new String(Path.GetInvalidPathChars()) + "]";
         private static object XferLock = new object();
+        /// <summary>Thread pool used for Util.FireAndForget if
+        /// FireAndForgetMethod.SmartThreadPool is used</summary>
+        private static SmartThreadPool m_ThreadPool;
 
         // Unix-epoch starts at January 1st 1970, 00:00:00 UTC. And all our times in the server are (or at least should be) in UTC.
         private static readonly DateTime unixEpoch =
@@ -68,7 +87,44 @@ namespace OpenSim.Framework
 
         public static readonly Regex UUIDPattern 
             = new Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
-        
+
+        public static FireAndForgetMethod FireAndForgetMethod = FireAndForgetMethod.SmartThreadPool;
+
+        /// <summary>
+        /// Linear interpolates B<->C using percent A
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <param name="c"></param>
+        /// <returns></returns>
+        public static double lerp(double a, double b, double c)
+        {
+            return (b*a) + (c*(1 - a));
+        }
+
+        /// <summary>
+        /// Bilinear Interpolate, see Lerp but for 2D using 'percents' X & Y.
+        /// Layout:
+        ///     A B
+        ///     C D
+        /// A<->C = Y
+        /// C<->D = X
+        /// </summary>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <param name="c"></param>
+        /// <param name="d"></param>
+        /// <returns></returns>
+        public static double lerp2D(double x, double y, double a, double b, double c, double d)
+        {
+            return lerp(y, lerp(x, a, b), lerp(x, c, d));
+        }
+
+
+        public static Encoding UTF8 = Encoding.UTF8;
+
         /// <value>
         /// Well known UUID for the blank texture used in the Linden SL viewer version 1.20 (and hopefully onwards) 
         /// </value>
@@ -102,7 +158,7 @@ namespace OpenSim.Framework
             float dx = a.X - b.X;
             float dy = a.Y - b.Y;
             float dz = a.Z - b.Z;
-            return (dx*dx + dy*dy + dz*dz) < (amount*amount);           
+            return (dx*dx + dy*dy + dz*dz) < (amount*amount);
         }
 
         /// <summary>
@@ -431,7 +487,7 @@ namespace OpenSim.Framework
                     output.Append(": ");
                 }
 
-                output.Append(CleanString(Encoding.UTF8.GetString(bytes, 0, bytes.Length - 1)));
+                output.Append(CleanString(Util.UTF8.GetString(bytes, 0, bytes.Length - 1)));
             }
             else
             {
@@ -517,13 +573,33 @@ namespace OpenSim.Framework
             return null;
         }
 
+        public static Uri GetURI(string protocol, string hostname, int port, string path)
+        {
+            return new UriBuilder(protocol, hostname, port, path).Uri;
+        }
+
+        /// <summary>
+        /// Gets a list of all local system IP addresses
+        /// </summary>
+        /// <returns></returns>
+        public static IPAddress[] GetLocalHosts()
+        {
+            return Dns.GetHostAddresses(Dns.GetHostName());
+        }
+
         public static IPAddress GetLocalHost()
         {
-            string dnsAddress = "localhost";
+            IPAddress[] iplist = GetLocalHosts();
 
-            IPAddress[] hosts = Dns.GetHostEntry(dnsAddress).AddressList;
+            if (iplist.Length == 0) // No accessible external interfaces
+            {
+                IPAddress[] loopback = Dns.GetHostAddresses("localhost");
+                IPAddress localhost = loopback[0];
 
-            foreach (IPAddress host in hosts)
+                return localhost;
+            }
+
+            foreach (IPAddress host in iplist)
             {
                 if (!IPAddress.IsLoopback(host) && host.AddressFamily == AddressFamily.InterNetwork)
                 {
@@ -531,8 +607,16 @@ namespace OpenSim.Framework
                 }
             }
 
-            if (hosts.Length > 0)
-                return hosts[0];
+            if (iplist.Length > 0)
+            {
+                foreach (IPAddress host in iplist)
+                {
+                    if (host.AddressFamily == AddressFamily.InterNetwork)
+                        return host;
+                }
+                // Well all else failed...
+                return iplist[0];
+            }
 
             return null;
         }
@@ -770,7 +854,7 @@ namespace OpenSim.Framework
 
         public static string Compress(string text)
         {
-            byte[] buffer = Encoding.UTF8.GetBytes(text);
+            byte[] buffer = Util.UTF8.GetBytes(text);
             MemoryStream memory = new MemoryStream();
             using (GZipStream compressor = new GZipStream(memory, CompressionMode.Compress, true))
             {
@@ -804,7 +888,7 @@ namespace OpenSim.Framework
                     decompressor.Read(buffer, 0, buffer.Length);
                 }
 
-                return Encoding.UTF8.GetString(buffer);
+                return Util.UTF8.GetString(buffer);
             }
         }
 
@@ -919,7 +1003,7 @@ namespace OpenSim.Framework
             else
             {
                 os = ReadEtcIssue();
-            }         
+            }
                       
             if (os.Length > 45)
             {
@@ -927,6 +1011,26 @@ namespace OpenSim.Framework
             }
             
             return os;
+        }
+
+        public static string GetRuntimeInformation()
+        {
+            string ru = String.Empty;
+
+            if (Environment.OSVersion.Platform == PlatformID.Unix)
+                ru = "Unix/Mono";
+            else
+                if (Environment.OSVersion.Platform == PlatformID.MacOSX)
+                    ru = "OSX/Mono";
+                else
+                {
+                    if (Type.GetType("Mono.Runtime") != null)
+                        ru = "Win/Mono";
+                    else
+                        ru = "Win/.NET";
+                }
+
+            return ru;
         }
 
         /// <summary>
@@ -1037,11 +1141,11 @@ namespace OpenSim.Framework
 
         public static Guid GetHashGuid(string data, string salt)
         {
-            byte[] hash = ComputeMD5Hash( data + salt );
+            byte[] hash = ComputeMD5Hash(data + salt);
 
             //string s = BitConverter.ToString(hash);
 
-            Guid guid = new Guid( hash );
+            Guid guid = new Guid(hash);
 
             return guid;
         }
@@ -1066,8 +1170,285 @@ namespace OpenSim.Framework
 
         }
 
+        public static uint ConvertAccessLevelToMaturity(byte maturity)
+        {
+            if (maturity <= 13)
+                return 0;
+            else if (maturity <= 21)
+                return 1;
+            else
+                return 2;
+        }
 
+        /// <summary>
+        /// Produces an OSDMap from its string representation on a stream
+        /// </summary>
+        /// <param name="data">The stream</param>
+        /// <param name="length">The size of the data on the stream</param>
+        /// <returns>The OSDMap or an exception</returns>
+        public static OSDMap GetOSDMap(Stream stream, int length)
+        {
+            byte[] data = new byte[length];
+            stream.Read(data, 0, length);
+            string strdata = Util.UTF8.GetString(data);
+            OSDMap args = null;
+            OSD buffer;
+            buffer = OSDParser.DeserializeJson(strdata);
+            if (buffer.Type == OSDType.Map)
+            {
+                args = (OSDMap)buffer;
+                return args;
+            }
+            return null;
+        }
 
+        public static string[] Glob(string path)
+        {
+            string vol=String.Empty;
 
+            if (Path.VolumeSeparatorChar != Path.DirectorySeparatorChar)
+            {
+                string[] vcomps = path.Split(new char[] {Path.VolumeSeparatorChar}, 2, StringSplitOptions.RemoveEmptyEntries);
+
+                if (vcomps.Length > 1)
+                {
+                    path = vcomps[1];
+                    vol = vcomps[0];
+                }
+            }
+            
+            string[] comps = path.Split(new char[] {Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar}, StringSplitOptions.RemoveEmptyEntries);
+
+            // Glob
+
+            path = vol;
+            if (vol != String.Empty)
+                path += new String(new char[] {Path.VolumeSeparatorChar, Path.DirectorySeparatorChar});
+            else
+                path = new String(new char[] {Path.DirectorySeparatorChar});
+
+            List<string> paths = new List<string>();
+            List<string> found = new List<string>();
+            paths.Add(path);
+
+            int compIndex = -1;
+            foreach (string c in comps)
+            {
+                compIndex++;
+
+                List<string> addpaths = new List<string>();
+                foreach (string p in paths)
+                {
+                    string[] dirs = Directory.GetDirectories(p, c);
+
+                    if (dirs.Length != 0)
+                    {
+                        foreach (string dir in dirs)
+                            addpaths.Add(Path.Combine(path, dir));
+                    }
+
+                    // Only add files if that is the last path component
+                    if (compIndex == comps.Length - 1)
+                    {
+                        string[] files = Directory.GetFiles(p, c);
+                        foreach (string f in files)
+                            found.Add(f);
+                    }
+                }
+                paths = addpaths;
+            }
+
+            return found.ToArray();
+        }
+
+        public static string ServerURI(string uri)
+        {
+            if (uri == string.Empty)
+                return string.Empty;
+
+            // Get rid of eventual slashes at the end
+            uri = uri.TrimEnd('/');
+
+            IPAddress ipaddr1 = null;
+            string port1 = "";
+            try
+            {
+                ipaddr1 = Util.GetHostFromURL(uri);
+            }
+            catch { }
+
+            try
+            {
+                port1 = uri.Split(new char[] { ':' })[2];
+            }
+            catch { }
+
+            // We tried our best to convert the domain names to IP addresses
+            return (ipaddr1 != null) ? "http://" + ipaddr1.ToString() + ":" + port1 : uri;
+        }
+
+        public static byte[] StringToBytes256(string str)
+        {
+            if (String.IsNullOrEmpty(str)) { return Utils.EmptyBytes; }
+            if (str.Length > 254) str = str.Remove(254);
+            if (!str.EndsWith("\0")) { str += "\0"; }
+            
+            // Because this is UTF-8 encoding and not ASCII, it's possible we
+            // might have gotten an oversized array even after the string trim
+            byte[] data = UTF8.GetBytes(str);
+            if (data.Length > 256)
+            {
+                Array.Resize<byte>(ref data, 256);
+                data[255] = 0;
+            }
+
+            return data;
+        }
+
+        public static byte[] StringToBytes1024(string str)
+        {
+            if (String.IsNullOrEmpty(str)) { return Utils.EmptyBytes; }
+            if (str.Length > 1023) str = str.Remove(1023);
+            if (!str.EndsWith("\0")) { str += "\0"; }
+
+            // Because this is UTF-8 encoding and not ASCII, it's possible we
+            // might have gotten an oversized array even after the string trim
+            byte[] data = UTF8.GetBytes(str);
+            if (data.Length > 1024)
+            {
+                Array.Resize<byte>(ref data, 1024);
+                data[1023] = 0;
+            }
+
+            return data;
+        }
+
+        #region FireAndForget Threading Pattern
+
+        /// <summary>
+        /// Created to work around a limitation in Mono with nested delegates
+        /// </summary>
+        private class FireAndForgetWrapper
+        {
+            public void FireAndForget(System.Threading.WaitCallback callback)
+            {
+                callback.BeginInvoke(null, EndFireAndForget, callback);
+            }
+
+            public void FireAndForget(System.Threading.WaitCallback callback, object obj)
+            {
+                callback.BeginInvoke(obj, EndFireAndForget, callback);
+            }
+
+            private static void EndFireAndForget(IAsyncResult ar)
+            {
+                System.Threading.WaitCallback callback = (System.Threading.WaitCallback)ar.AsyncState;
+
+                try { callback.EndInvoke(ar); }
+                catch (Exception ex) { m_log.Error("[UTIL]: Asynchronous method threw an exception: " + ex.Message, ex); }
+
+                ar.AsyncWaitHandle.Close();
+            }
+        }
+
+        public static void FireAndForget(System.Threading.WaitCallback callback)
+        {
+            FireAndForget(callback, null);
+        }
+
+        public static void InitThreadPool(int maxThreads)
+        {
+            if (maxThreads < 2)
+                throw new ArgumentOutOfRangeException("maxThreads", "maxThreads must be greater than 2");
+            if (m_ThreadPool != null)
+                throw new InvalidOperationException("SmartThreadPool is already initialized");
+
+            m_ThreadPool = new SmartThreadPool(2000, maxThreads, 2);
+        }
+
+        public static int FireAndForgetCount()
+        {
+            const int MAX_SYSTEM_THREADS = 200;
+
+            switch (FireAndForgetMethod)
+            {
+                case FireAndForgetMethod.UnsafeQueueUserWorkItem:
+                case FireAndForgetMethod.QueueUserWorkItem:
+                case FireAndForgetMethod.BeginInvoke:
+                    int workerThreads, iocpThreads;
+                    ThreadPool.GetAvailableThreads(out workerThreads, out iocpThreads);
+                    return workerThreads;
+                case FireAndForgetMethod.SmartThreadPool:
+                    return m_ThreadPool.MaxThreads - m_ThreadPool.InUseThreads;
+                case FireAndForgetMethod.Thread:
+                    return MAX_SYSTEM_THREADS - System.Diagnostics.Process.GetCurrentProcess().Threads.Count;
+                default:
+                    throw new NotImplementedException();
+            }
+        }
+
+        public static void FireAndForget(System.Threading.WaitCallback callback, object obj)
+        {
+            switch (FireAndForgetMethod)
+            {
+                case FireAndForgetMethod.UnsafeQueueUserWorkItem:
+                    ThreadPool.UnsafeQueueUserWorkItem(callback, obj);
+                    break;
+                case FireAndForgetMethod.QueueUserWorkItem:
+                    ThreadPool.QueueUserWorkItem(callback, obj);
+                    break;
+                case FireAndForgetMethod.BeginInvoke:
+                    FireAndForgetWrapper wrapper = Singleton.GetInstance<FireAndForgetWrapper>();
+                    wrapper.FireAndForget(callback, obj);
+                    break;
+                case FireAndForgetMethod.SmartThreadPool:
+                    if (m_ThreadPool == null)
+                        m_ThreadPool = new SmartThreadPool(2000, 15, 2);
+                    m_ThreadPool.QueueWorkItem(SmartThreadPoolCallback, new object[] { callback, obj });
+                    break;
+                case FireAndForgetMethod.Thread:
+                    Thread thread = new Thread(delegate(object o) { callback(o); });
+                    thread.Start(obj);
+                    break;
+                default:
+                    throw new NotImplementedException();
+            }
+        }
+
+        private static object SmartThreadPoolCallback(object o)
+        {
+            object[] array = (object[])o;
+            WaitCallback callback = (WaitCallback)array[0];
+            object obj = array[1];
+
+            callback(obj);
+            return null;
+        }
+
+        #endregion FireAndForget Threading Pattern
+        /// <summary>
+        /// Environment.TickCount is an int but it counts all 32 bits so it goes positive
+        /// and negative every 24.9 days. This trims down TickCount so it doesn't wrap
+        /// for the callers. 
+        /// This trims it to a 12 day interval so don't let your frame time get too long.
+        /// </summary>
+        /// <returns></returns>
+        public static Int32 EnvironmentTickCount()
+        {
+            return Environment.TickCount & EnvironmentTickCountMask;
+        }
+        const Int32 EnvironmentTickCountMask = 0x3fffffff;
+
+        /// <summary>
+        /// Environment.TickCount is an int but it counts all 32 bits so it goes positive
+        /// and negative every 24.9 days. Subtracts the passed value (previously fetched by
+        /// 'EnvironmentTickCount()') and accounts for any wrapping.
+        /// </summary>
+        /// <returns>subtraction of passed prevValue from current Environment.TickCount</returns>
+        public static Int32 EnvironmentTickCountSubtract(Int32 prevValue)
+        {
+            Int32 diff = EnvironmentTickCount() - prevValue;
+            return (diff >= 0) ? diff : (diff + EnvironmentTickCountMask + 1);
+        }
     }
 }

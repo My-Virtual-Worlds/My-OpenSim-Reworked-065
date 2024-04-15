@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,29 +29,34 @@ using System;
 
 namespace OpenSim.Region.Physics.Manager
 {
-    public class PhysicsVector
+    /*public class PhysicsVector
     {
         public float X;
         public float Y;
         public float Z;
 
-        public PhysicsVector()
+        public Vector3()
         {
         }
 
-        public PhysicsVector(float x, float y, float z)
+        public Vector3(float x, float y, float z)
         {
             X = x;
             Y = y;
             Z = z;
         }
 
+        public Vector3(Vector3 pv) : this(pv.X, pv.Y, pv.Z)
+        {
+        }
+        
         public void setValues(float x, float y, float z)
         {
             X = x;
             Y = y;
             Z = z;
         }
+
         public static readonly PhysicsVector Zero = new PhysicsVector(0f, 0f, 0f);
 
         public override string ToString()
@@ -110,17 +115,17 @@ namespace OpenSim.Region.Physics.Manager
         }
 
         // Operations
-        public static PhysicsVector operator +(PhysicsVector a, PhysicsVector b)
+        public static PhysicsVector operator +(Vector3 a, Vector3 b)
         {
             return new PhysicsVector(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
         }
 
-        public static PhysicsVector operator -(PhysicsVector a, PhysicsVector b)
+        public static PhysicsVector operator -(Vector3 a, Vector3 b)
         {
             return new PhysicsVector(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
         }
 
-        public static PhysicsVector cross(PhysicsVector a, PhysicsVector b)
+        public static PhysicsVector cross(Vector3 a, Vector3 b)
         {
             return new PhysicsVector(a.Y*b.Z - a.Z*b.Y, a.Z*b.X - a.X*b.Z, a.X*b.Y - a.Y*b.X);
         }
@@ -130,7 +135,7 @@ namespace OpenSim.Region.Physics.Manager
             return (float) Math.Sqrt(X*X + Y*Y + Z*Z);
         }
 
-        public static float GetDistanceTo(PhysicsVector a, PhysicsVector b)
+        public static float GetDistanceTo(Vector3 a, Vector3 b)
         {
             float dx = a.X - b.X;
             float dy = a.Y - b.Y;
@@ -138,22 +143,22 @@ namespace OpenSim.Region.Physics.Manager
             return (float) Math.Sqrt(dx * dx + dy * dy + dz * dz);
         }
 
-        public static PhysicsVector operator /(PhysicsVector v, float f)
+        public static PhysicsVector operator /(Vector3 v, float f)
         {
             return new PhysicsVector(v.X/f, v.Y/f, v.Z/f);
         }
 
-        public static PhysicsVector operator *(PhysicsVector v, float f)
+        public static PhysicsVector operator *(Vector3 v, float f)
         {
             return new PhysicsVector(v.X*f, v.Y*f, v.Z*f);
         }
 
-        public static PhysicsVector operator *(float f, PhysicsVector v)
+        public static PhysicsVector operator *(float f, Vector3 v)
         {
             return v*f;
         }
 
-        public static bool isFinite(PhysicsVector v)
+        public static bool isFinite(Vector3 v)
         {
             if (v == null)
                 return false;
@@ -167,7 +172,7 @@ namespace OpenSim.Region.Physics.Manager
             return true;
         }
 
-        public virtual bool IsIdentical(PhysicsVector v, float tolerance)
+        public virtual bool IsIdentical(Vector3 v, float tolerance)
         {
             PhysicsVector diff = this - v;
             float d = diff.length();
@@ -177,5 +182,5 @@ namespace OpenSim.Region.Physics.Manager
             return false;
         }
 
-    }
+    }*/
 }

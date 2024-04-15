@@ -88,23 +88,22 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             if (!UUID.TryParse(param, out assetID))
                 return false;
 
-            AssetBase asset = m_scene.CommsManager.AssetCache.GetAsset(assetID, true);
+            AssetBase asset = m_scene.AssetService.Get(assetID.ToString());
 
             if (asset == null)
                 return false;
 
             ManagedImage tmp;
             Image imgData;
+            byte[] jpegdata;
 
             OpenJPEG.DecodeToImage(asset.Data, out tmp, out imgData);
-            
-            MemoryStream ms = new MemoryStream();
 
-            imgData.Save(ms, ImageFormat.Jpeg);
-
-            byte[] jpegdata = ms.GetBuffer();
-
-            ms.Close();
+            using (MemoryStream ms = new MemoryStream())
+            {
+                imgData.Save(ms, ImageFormat.Jpeg);
+                jpegdata = ms.GetBuffer();
+            }
 
             resp.ContentType = "image/jpeg";
             resp.ContentLength = jpegdata.Length;
@@ -208,6 +207,11 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             get { throw new System.NotImplementedException(); }
         }
 
+        public IPEndPoint RemoteEndPoint
+        {
+            get { throw new System.NotImplementedException(); }
+        }
+
         public event GenericMessage OnGenericMessage = delegate { };
         public event ImprovedInstantMessage OnInstantMessage = delegate { };
         public event ChatMessage OnChatFromClient = delegate { };
@@ -252,13 +256,14 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public event ObjectDuplicate OnObjectDuplicate = delegate { };
         public event ObjectDuplicateOnRay OnObjectDuplicateOnRay = delegate { };
         public event GrabObject OnGrabObject = delegate { };
-        public event ObjectSelect OnDeGrabObject = delegate { };
+        public event DeGrabObject OnDeGrabObject = delegate { };
         public event MoveObject OnGrabUpdate = delegate { };
         public event SpinStart OnSpinStart = delegate { };
         public event SpinObject OnSpinUpdate = delegate { };
         public event SpinStop OnSpinStop = delegate { };
         public event UpdateShape OnUpdatePrimShape = delegate { };
         public event ObjectExtraParams OnUpdateExtraParams = delegate { };
+        public event ObjectRequest OnObjectRequest = delegate { };
         public event ObjectSelect OnObjectSelect = delegate { };
         public event ObjectDeselect OnObjectDeselect = delegate { };
         public event GenericCall7 OnObjectDescription = delegate { };
@@ -272,6 +277,7 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public event UpdateVector OnUpdatePrimSinglePosition = delegate { };
         public event UpdatePrimRotation OnUpdatePrimGroupRotation = delegate { };
         public event UpdatePrimSingleRotation OnUpdatePrimSingleRotation = delegate { };
+        public event UpdatePrimSingleRotationPosition OnUpdatePrimSingleRotationPosition = delegate { };
         public event UpdatePrimGroupRotation OnUpdatePrimGroupMouseRotation = delegate { };
         public event UpdateVector OnUpdatePrimScale = delegate { };
         public event UpdateVector OnUpdatePrimGroupScale = delegate { };
@@ -321,6 +327,7 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public event FriendActionDelegate OnApproveFriendRequest = delegate { };
         public event FriendActionDelegate OnDenyFriendRequest = delegate { };
         public event FriendshipTermination OnTerminateFriendship = delegate { };
+        public event GrantUserFriendRights OnGrantUserRights = delegate { };
         public event MoneyTransferRequest OnMoneyTransferRequest = delegate { };
         public event EconomyDataRequest OnEconomyDataRequest = delegate { };
         public event MoneyBalanceRequest OnMoneyBalanceRequest = delegate { };
@@ -336,6 +343,8 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public event UUIDNameRequest OnTeleportHomeRequest = delegate { };
         public event ScriptAnswer OnScriptAnswer = delegate { };
         public event AgentSit OnUndo = delegate { };
+        public event AgentSit OnRedo = delegate { };
+        public event LandUndo OnLandUndo = delegate { };
         public event ForceReleaseControls OnForceReleaseControls = delegate { };
         public event GodLandStatRequest OnLandStatRequest = delegate { };
         public event DetailedEstateDataRequest OnDetailedEstateDataRequest = delegate { };
@@ -396,7 +405,28 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public event PickInfoUpdate OnPickInfoUpdate = delegate { };
         public event AvatarNotesUpdate OnAvatarNotesUpdate = delegate { };
         public event MuteListRequest OnMuteListRequest = delegate { };
+        public event AvatarInterestUpdate OnAvatarInterestUpdate = delegate { };
         public event PlacesQuery OnPlacesQuery = delegate { };
+        public event FindAgentUpdate OnFindAgent = delegate { };
+        public event TrackAgentUpdate OnTrackAgent = delegate { };
+        public event NewUserReport OnUserReport = delegate { };
+        public event SaveStateHandler OnSaveState = delegate { };
+        public event GroupAccountSummaryRequest OnGroupAccountSummaryRequest = delegate { };
+        public event GroupAccountDetailsRequest OnGroupAccountDetailsRequest = delegate { };
+        public event GroupAccountTransactionsRequest OnGroupAccountTransactionsRequest = delegate { };
+        public event FreezeUserUpdate OnParcelFreezeUser = delegate { };
+        public event EjectUserUpdate OnParcelEjectUser = delegate { };
+        public event ParcelBuyPass OnParcelBuyPass = delegate { };
+        public event ParcelGodMark OnParcelGodMark = delegate { };
+        public event GroupActiveProposalsRequest OnGroupActiveProposalsRequest = delegate { };
+        public event GroupVoteHistoryRequest OnGroupVoteHistoryRequest = delegate { };
+        public event SimWideDeletesDelegate OnSimWideDeletes = delegate { };
+        public event SendPostcard OnSendPostcard = delegate { };
+        public event MuteListEntryUpdate OnUpdateMuteListEntry = delegate { };
+        public event MuteListEntryRemove OnRemoveMuteListEntry = delegate { };
+        public event GodlikeMessage onGodlikeMessage = delegate { };
+        public event GodUpdateRegionInfoUpdate OnGodUpdateRegionInfoUpdate = delegate { };
+
 
 
         public void SetDebugPacketLevel(int newDebug)
@@ -414,7 +444,7 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void Close(bool ShutdownCircuit)
+        public void Close()
         {
             throw new System.NotImplementedException();
         }
@@ -554,12 +584,12 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void SendAvatarData(ulong regionHandle, string firstName, string lastName, string grouptitle, UUID avatarID, uint avatarLocalID, Vector3 Pos, byte[] textureEntry, uint parentID, Quaternion rotation)
+        public void SendAvatarData(SendAvatarData data)
         {
             throw new System.NotImplementedException();
         }
 
-        public void SendAvatarTerseUpdate(ulong regionHandle, ushort timeDilation, uint localID, Vector3 position, Vector3 velocity, Quaternion rotation, UUID uuid)
+        public void SendAvatarTerseUpdate(SendAvatarTerseData data)
         {
             throw new System.NotImplementedException();
         }
@@ -579,17 +609,17 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void SendPrimitiveToClient(ulong regionHandle, ushort timeDilation, uint localID, PrimitiveBaseShape primShape, Vector3 pos, Vector3 vel, Vector3 acc, Quaternion rotation, Vector3 rvel, uint flags, UUID objectID, UUID ownerID, string text, byte[] color, uint parentID, byte[] particleSystem, byte clickAction, byte material, byte[] textureanim, bool attachment, uint AttachPoint, UUID AssetId, UUID SoundId, double SoundVolume, byte SoundFlags, double SoundRadius)
+        public void SendPrimitiveToClient(SendPrimitiveData data)
         {
             throw new System.NotImplementedException();
         }
 
-        public void SendPrimitiveToClient(ulong regionHandle, ushort timeDilation, uint localID, PrimitiveBaseShape primShape, Vector3 pos, Vector3 vel, Vector3 acc, Quaternion rotation, Vector3 rvel, uint flags, UUID objectID, UUID ownerID, string text, byte[] color, uint parentID, byte[] particleSystem, byte clickAction, byte material)
+        public void SendPrimTerseUpdate(SendPrimitiveTerseData data)
         {
             throw new System.NotImplementedException();
         }
 
-        public void SendPrimTerseUpdate(ulong regionHandle, ushort timeDilation, uint localID, Vector3 position, Quaternion rotation, Vector3 velocity, Vector3 rotationalvelocity, byte state, UUID AssetId, UUID owner, int attachPoint)
+        public void ReprioritizeUpdates(StateUpdateTypes type, UpdatePriorityHandler handler)
         {
             throw new System.NotImplementedException();
         }
@@ -599,7 +629,7 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void SendInventoryFolderDetails(UUID ownerID, UUID folderID, List<InventoryItemBase> items, List<InventoryFolderBase> folders, bool fetchFolders, bool fetchItems)
+        public void SendInventoryFolderDetails(UUID ownerID, UUID folderID, List<InventoryItemBase> items, List<InventoryFolderBase> folders, int version, bool fetchFolders, bool fetchItems)
         {
             throw new System.NotImplementedException();
         }
@@ -694,7 +724,7 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void SendDialog(string objectname, UUID objectID, UUID ownerID, string msg, UUID textureID, int ch, string[] buttonlabels)
+        public void SendDialog(string objectname, UUID objectID, string ownerFirstName, string ownerLastName, string msg, UUID textureID, int ch, string[] buttonlabels)
         {
             throw new System.NotImplementedException();
         }
@@ -739,7 +769,7 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void SendEstateManagersList(UUID invoice, UUID[] EstateManagers, uint estateID)
+        public void SendEstateList(UUID invoice, int code, UUID[] Data, uint estateID)
         {
             throw new System.NotImplementedException();
         }
@@ -777,6 +807,11 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public void SendForceClientSelectObjects(List<uint> objectIDs)
         {
             throw new System.NotImplementedException();
+        }
+
+        public void SendCameraConstraint(Vector4 ConstraintPlane)
+        {
+
         }
 
         public void SendLandObjectOwners(LandData land, List<UUID> groups, Dictionary<UUID, int> ownersAndCount)
@@ -942,6 +977,11 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
+        public EndPoint GetClientEP()
+        {
+            return null;
+        }
+
         public ClientInfo GetClientInfo()
         {
             throw new System.NotImplementedException();
@@ -1102,6 +1142,11 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
+        public void SendAvatarInterestUpdate(IClientAPI client, uint wantmask, string wanttext, uint skillsmask, string skillstext, string languages)
+        {
+            throw new System.NotImplementedException();
+        }
+
         public void SendParcelDwellReply(int localID, UUID parcelID, float dwell)
         {
             throw new System.NotImplementedException();
@@ -1133,5 +1178,33 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         }
 
         #endregion
+
+        public void SendRebakeAvatarTextures(UUID textureID)
+        {
+        }
+
+        public void SendAvatarInterestsReply(UUID avatarID, uint wantMask, string wantText, uint skillsMask, string skillsText, string languages)
+        {
+        }
+
+        public void SendGroupAccountingDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID, int amt)
+        {
+        }
+        
+        public void SendGroupAccountingSummary(IClientAPI sender,UUID groupID, uint moneyAmt, int totalTier, int usedTier)
+        {
+        }
+        
+        public void SendGroupTransactionsSummaryDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID,int amt)
+        {
+        }
+
+        public void SendGroupVoteHistory(UUID groupID, UUID transactionID, GroupVoteHistory[] Votes)
+        {
+        }
+
+        public void SendGroupActiveProposals(UUID groupID, UUID transactionID, GroupActiveProposals[] Proposals)
+        {
+        }
     }
 }

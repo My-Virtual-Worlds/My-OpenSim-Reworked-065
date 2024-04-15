@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -46,6 +46,11 @@ namespace OpenSim.Framework
         private Dictionary<string, Resource> Resources = new Dictionary<string, Resource>();
         private Dictionary<string, Role> Roles = new Dictionary<string, Role>();
 
+        /// <summary>
+        /// Adds a new role
+        /// </summary>
+        /// <param name="role"></param>
+        /// <returns></returns>
         public ACL AddRole(Role role)
         {
             if (Roles.ContainsKey(role.Name))
@@ -56,6 +61,11 @@ namespace OpenSim.Framework
             return this;
         }
 
+        /// <summary>
+        /// Adds a new resource
+        /// </summary>
+        /// <param name="resource"></param>
+        /// <returns></returns>
         public ACL AddResource(Resource resource)
         {
             Resources.Add(resource.Name, resource);
@@ -63,6 +73,12 @@ namespace OpenSim.Framework
             return this;
         }
 
+        /// <summary>
+        /// Permision for user/roll on a resource
+        /// </summary>
+        /// <param name="role"></param>
+        /// <param name="resource"></param>
+        /// <returns></returns>
         public Permission HasPermission(string role, string resource)
         {
             if (!Roles.ContainsKey(role))
@@ -232,32 +248,5 @@ namespace OpenSim.Framework
 
     #endregion
 
-    #region Tests
-
-    internal class ACLTester
-    {
-        public ACLTester()
-        {
-            ACL acl = new ACL();
-
-            Role Guests = new Role("Guests");
-            acl.AddRole(Guests);
-
-            Role[] parents = new Role[0];
-            parents[0] = Guests;
-
-            Role JoeGuest = new Role("JoeGuest", parents);
-            acl.AddRole(JoeGuest);
-
-            Resource CanBuild = new Resource("CanBuild");
-            acl.AddResource(CanBuild);
-
-
-            acl.GrantPermission("Guests", "CanBuild");
-
-            acl.HasPermission("JoeGuest", "CanBuild");
-        }
-    }
-
-    #endregion
+   
 }

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -34,6 +34,7 @@ using OpenSim.Framework;
 using OpenSim.Region.CoreModules.World.WorldMap;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 namespace OpenSim.Region.CoreModules.Hypergrid
 {
@@ -59,7 +60,17 @@ namespace OpenSim.Region.CoreModules.Hypergrid
 
         protected override void GetAndSendBlocks(IClientAPI remoteClient, int minX, int minY, int maxX, int maxY, uint flag)
         {
-            List<MapBlockData> mapBlocks = m_scene.SceneGridService.RequestNeighbourMapBlocks(minX - 4, minY - 4, maxX + 4, maxY + 4);
+            List<MapBlockData> mapBlocks = new List<MapBlockData>();
+            List<GridRegion> regions = m_scene.GridService.GetRegionRange(m_scene.RegionInfo.ScopeID,
+                (minX - 4) * (int)Constants.RegionSize, (maxX + 4) * (int)Constants.RegionSize, 
+                (minY - 4) * (int)Constants.RegionSize, (maxY + 4) * (int)Constants.RegionSize);
+
+            foreach (GridRegion r in regions)
+            {
+                MapBlockData block = new MapBlockData();
+                MapBlockFromGridRegion(block, r);
+                mapBlocks.Add(block);
+            }
 
             // Different from super
             FillInMap(mapBlocks, minX, minY, maxX, maxY);

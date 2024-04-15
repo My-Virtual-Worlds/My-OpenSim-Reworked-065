@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,6 +33,8 @@ using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Region.Framework.Scenes.Hypergrid;
+using OpenSim.Services.Interfaces;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 namespace OpenSim.Region.CoreModules.World.WorldMap
 {
@@ -92,13 +94,13 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
             }
             
             // try to fetch from GridServer
-            List<RegionInfo> regionInfos = m_scene.SceneGridService.RequestNamedRegions(mapName, 20);
+            List<GridRegion> regionInfos = m_scene.GridService.GetRegionsByName(UUID.Zero, mapName, 20);
             if (regionInfos == null)
             {
                 m_log.Warn("[MAPSEARCHMODULE]: RequestNamedRegions returned null. Old gridserver?");
                 // service wasn't available; maybe still an old GridServer. Try the old API, though it will return only one region
-                regionInfos = new List<RegionInfo>();
-                RegionInfo info = m_scene.SceneGridService.RequestClosestRegion(mapName);
+                regionInfos = new List<GridRegion>();
+                GridRegion info = m_scene.GridService.GetRegionByName(UUID.Zero, mapName);
                 if (info != null) regionInfos.Add(info);
             }
 
@@ -106,14 +108,18 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
             {
                 // OK, we tried but there are no regions matching that name.
                 // Let's check quickly if this is a domain name, and if so link to it
-                if (mapName.Contains(".") && mapName.Contains(":"))
+                if (mapName.Contains("."))
                 {
                     // It probably is a domain name. Try to link to it.
-                    RegionInfo regInfo;
+                    GridRegion regInfo;
                     Scene cScene = GetClientScene(remoteClient);
-                    regInfo = HGHyperlink.TryLinkRegion(cScene, remoteClient, mapName);
-                    if (regInfo != null)
-                        regionInfos.Add(regInfo);
+                    IHyperlinkService hyperService = cScene.RequestModuleInterface<IHyperlinkService>();
+                    if (hyperService != null)
+                    {
+                        regInfo = hyperService.TryLinkRegion(remoteClient, mapName);
+                        if (regInfo != null)
+                            regionInfos.Add(regInfo);
+                    }
                 }
             }
 
@@ -122,17 +128,17 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
             MapBlockData data;
             if (regionInfos.Count > 0)
             {
-                foreach (RegionInfo info in regionInfos)
+                foreach (GridRegion info in regionInfos)
                 {
                     data = new MapBlockData();
                     data.Agents = 0;
-                    data.Access = info.AccessLevel;
-                    data.MapImageId = info.RegionSettings.TerrainImageID;
+                    data.Access = info.Access;
+                    data.MapImageId = info.TerrainImage;
                     data.Name = info.RegionName;
                     data.RegionFlags = 0; // TODO not used?
                     data.WaterHeight = 0; // not used
-                    data.X = (ushort)info.RegionLocX;
-                    data.Y = (ushort)info.RegionLocY;
+                    data.X = (ushort)(info.RegionLocX / Constants.RegionSize);
+                    data.Y = (ushort)(info.RegionLocY / Constants.RegionSize);
                     blocks.Add(data);
                 }
             }

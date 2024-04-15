@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -25,6 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using log4net;
@@ -44,8 +45,7 @@ namespace OpenSim.Region.CoreModules.Agent.TextureDownload
     /// </summary>
     public class UserTextureDownloadService
     {
-        private static readonly ILog m_log
-            = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+//        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         /// <summary>
         /// True if the service has been closed, probably because a user with texture requests still queued
@@ -60,22 +60,22 @@ namespace OpenSim.Region.CoreModules.Agent.TextureDownload
         /// currently handle properly as far as I know).  However, this situation should be handled in a more
         /// sophisticated way.
         /// </summary>
-        private static readonly int MAX_ALLOWED_TEXTURE_REQUESTS = 5;
+//        private static readonly int MAX_ALLOWED_TEXTURE_REQUESTS = 5;
 
         /// <summary>
         /// XXX Also going to limit requests for found textures.
         /// </summary>
-        private readonly IRequestLimitStrategy<UUID> foundTextureLimitStrategy
-            = new RepeatLimitStrategy<UUID>(MAX_ALLOWED_TEXTURE_REQUESTS);
+//        private readonly IRequestLimitStrategy<UUID> foundTextureLimitStrategy
+//            = new RepeatLimitStrategy<UUID>(MAX_ALLOWED_TEXTURE_REQUESTS);
 
-        private readonly IClientAPI m_client;
+//        private readonly IClientAPI m_client;
         private readonly Scene m_scene;
 
         /// <summary>
         /// Texture Senders are placed in this queue once they have received their texture from the asset
         /// cache.  Another module actually invokes the send.
         /// </summary>
-        private readonly OpenSim.Framework.BlockingQueue<ITextureSender> m_sharedSendersQueue;
+//        private readonly OpenSim.Framework.BlockingQueue<ITextureSender> m_sharedSendersQueue;
 
         /// <summary>
         /// Holds texture senders before they have received the appropriate texture from the asset cache.
@@ -87,15 +87,15 @@ namespace OpenSim.Region.CoreModules.Agent.TextureDownload
         /// XXX This is really a temporary solution to deal with the situation where a client continually requests
         /// the same missing textures
         /// </summary>
-        private readonly IRequestLimitStrategy<UUID> missingTextureLimitStrategy
-            = new RepeatLimitStrategy<UUID>(MAX_ALLOWED_TEXTURE_REQUESTS);
+//        private readonly IRequestLimitStrategy<UUID> missingTextureLimitStrategy
+//            = new RepeatLimitStrategy<UUID>(MAX_ALLOWED_TEXTURE_REQUESTS);
 
         public UserTextureDownloadService(
             IClientAPI client, Scene scene, OpenSim.Framework.BlockingQueue<ITextureSender> sharedQueue)
         {
-            m_client = client;
+//            m_client = client;
             m_scene = scene;
-            m_sharedSendersQueue = sharedQueue;
+//            m_sharedSendersQueue = sharedQueue;
         }
 
         /// <summary>
@@ -105,67 +105,63 @@ namespace OpenSim.Region.CoreModules.Agent.TextureDownload
         /// <param name="e"></param>
         public void HandleTextureRequest(TextureRequestArgs e)
         {
-            TextureSender.TextureSender textureSender;
+
+            //TextureSender.TextureSender textureSender;
 
             //TODO: should be working out the data size/ number of packets to be sent for each discard level
-            if ((e.DiscardLevel >= 0) || (e.Priority != 0))
-            {
-                lock (m_textureSenders)
-                {
-                    if (m_textureSenders.TryGetValue(e.RequestedAssetID, out textureSender))
-                    {
+            //if ((e.DiscardLevel >= 0) || (e.Priority != 0))
+            //{
+                //lock (m_textureSenders)
+                //{
+                    //if (m_textureSenders.TryGetValue(e.RequestedAssetID, out textureSender))
+                    //{
                         // If we've received new non UUID information for this request and it hasn't dispatched
                         // yet, then update the request accordingly.
-                        textureSender.UpdateRequest(e.DiscardLevel, e.PacketNumber);
-                    }
-                    else
-                    {
+                     //   textureSender.UpdateRequest(e.DiscardLevel, e.PacketNumber);
+                    //}
+                    //else
+                    //{
                         //                        m_log.DebugFormat("[TEXTURE]: Received a request for texture {0}", e.RequestedAssetID);
 
-                        if (!foundTextureLimitStrategy.AllowRequest(e.RequestedAssetID))
-                        {
+                        //if (!foundTextureLimitStrategy.AllowRequest(e.RequestedAssetID))
+                        //{
                             //                            m_log.DebugFormat(
                             //                                "[TEXTURE]: Refusing request for {0} from client {1}",
                             //                                e.RequestedAssetID, m_client.AgentId);
 
-                            return;
-                        }
-                        else if (!missingTextureLimitStrategy.AllowRequest(e.RequestedAssetID))
-                        {
-                            if (missingTextureLimitStrategy.IsFirstRefusal(e.RequestedAssetID))
-                            {
-                                if (StatsManager.SimExtraStats != null)
-                                    StatsManager.SimExtraStats.AddBlockedMissingTextureRequest();
+                            //return;
+                        //}
+                        //else if (!missingTextureLimitStrategy.AllowRequest(e.RequestedAssetID))
+                        //{
+                        //    if (missingTextureLimitStrategy.IsFirstRefusal(e.RequestedAssetID))
+                        //    {
+                         //       if (StatsManager.SimExtraStats != null)
+                         //           StatsManager.SimExtraStats.AddBlockedMissingTextureRequest();
 
                                 // Commenting out this message for now as it causes too much noise with other
                                 // debug messages.
                                 //                                m_log.DebugFormat(
                                 //                                    "[TEXTURE]: Dropping requests for notified missing texture {0} for client {1} since we have received more than {2} requests",
                                 //                                    e.RequestedAssetID, m_client.AgentId, MAX_ALLOWED_TEXTURE_REQUESTS);
-                            }
+                         //   }
 
-                            return;
-                        }
+                        //    return;
+                        //}
 
-                        m_scene.StatsReporter.AddPendingDownloads(1);
+                m_scene.StatsReporter.AddPendingDownloads(1);
 
-                        TextureSender.TextureSender requestHandler = new TextureSender.TextureSender(m_client, e.DiscardLevel, e.PacketNumber);
-                        m_textureSenders.Add(e.RequestedAssetID, requestHandler);
+                //TextureSender.TextureSender requestHandler = new TextureSender.TextureSender(m_client, e.DiscardLevel, e.PacketNumber);
+                //m_textureSenders.Add(e.RequestedAssetID, null);
 
-                        m_scene.CommsManager.AssetCache.GetAsset(e.RequestedAssetID, TextureCallback, true);
-                    }
-                }
-            }
-            else
-            {
-                lock (m_textureSenders)
-                {
-                    if (m_textureSenders.TryGetValue(e.RequestedAssetID, out textureSender))
-                    {
-                        textureSender.Cancel = true;
-                    }
-                }
-            }
+                m_scene.AssetService.Get(e.RequestedAssetID.ToString(), this, TextureReceived);
+               
+           
+        }
+
+        protected void TextureReceived(string id, Object sender, AssetBase asset)
+        {
+            if (asset != null)
+                TextureCallback(asset.FullID, asset);
         }
 
         /// <summary>
@@ -182,6 +178,7 @@ namespace OpenSim.Region.CoreModules.Agent.TextureDownload
             if (closed)
                 return;
 
+            /*
             lock (m_textureSenders)
             {
                 TextureSender.TextureSender textureSender;
@@ -226,22 +223,23 @@ namespace OpenSim.Region.CoreModules.Agent.TextureDownload
                         textureID);
                 }
             }
+          */
         }
 
         /// <summary>
         /// Place a ready texture sender on the processing queue.
         /// </summary>
         /// <param name="textureSender"></param>
-        private void EnqueueTextureSender(ITextureSender textureSender)
-        {
-            textureSender.Cancel = false;
-            textureSender.Sending = true;
-
-            if (!m_sharedSendersQueue.Contains(textureSender))
-            {
-                m_sharedSendersQueue.Enqueue(textureSender);
-            }
-        }
+//        private void EnqueueTextureSender(ITextureSender textureSender)
+//        {
+//            textureSender.Cancel = false;
+//            textureSender.Sending = true;
+//
+//            if (!m_sharedSendersQueue.Contains(textureSender))
+//            {
+//                m_sharedSendersQueue.Enqueue(textureSender);
+//            }
+//        }
 
         /// <summary>
         /// Close this module.

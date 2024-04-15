@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -79,14 +79,19 @@ namespace OpenSim.Data.MySQL
 
             // This actually does the roll forward assembly stuff
             Assembly assem = GetType().Assembly;
-            Migration m = new Migration(database.Connection, assem, "LogStore");
 
-            // TODO: After rev 6000, remove this.  People should have
-            // been rolled onto the new migration code by then.
-            TestTables(m);
+            using (MySql.Data.MySqlClient.MySqlConnection dbcon = new MySql.Data.MySqlClient.MySqlConnection(connect))
+            {
+                dbcon.Open();
 
-            m.Update();
+                Migration m = new Migration(dbcon, assem, "LogStore");
 
+                // TODO: After rev 6000, remove this.  People should have
+                // been rolled onto the new migration code by then.
+                TestTables(m);
+
+                m.Update();
+            }
         }
 
         /// <summary></summary>
@@ -128,7 +133,6 @@ namespace OpenSim.Data.MySQL
             }
             catch
             {
-                database.Reconnect();
             }
         }
 

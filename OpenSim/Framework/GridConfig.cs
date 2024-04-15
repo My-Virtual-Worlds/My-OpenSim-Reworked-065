@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -45,6 +45,8 @@ namespace OpenSim.Framework
         public string SimSendKey = String.Empty;
         public string UserRecvKey = String.Empty;
         public string UserSendKey = String.Empty;
+        public string ConsoleUser = String.Empty;
+        public string ConsolePass = String.Empty;
 
         public GridConfig(string description, string filename)
         {
@@ -88,13 +90,19 @@ namespace OpenSim.Framework
 
             m_configMember.addConfigurationOption("allow_forceful_banlines",
                                                 ConfigurationOption.ConfigurationTypes.TYPE_STRING,
-                                                "Allow Forceful Banlines", "TRUE", true);   
+                                                "Allow Forceful Banlines", "TRUE", true);
             
             m_configMember.addConfigurationOption("allow_region_registration", 
                                                 ConfigurationOption.ConfigurationTypes.TYPE_BOOLEAN,
                                                 "Allow regions to register immediately upon grid server startup? true/false", 
                                                 "True", 
-                                                false);            
+                                                false);
+            m_configMember.addConfigurationOption("console_user", ConfigurationOption.ConfigurationTypes.TYPE_STRING,
+                                                 "Remote console access user name [Default: disabled]", "", false);
+
+            m_configMember.addConfigurationOption("console_pass", ConfigurationOption.ConfigurationTypes.TYPE_STRING,
+                                                 "Remote console access password [Default: disabled]", "", false);
+
         }
 
         public bool handleIncomingConfiguration(string configuration_key, object configuration_result)
@@ -139,7 +147,13 @@ namespace OpenSim.Framework
                     break;
                 case "allow_region_registration":
                     AllowRegionRegistration = (bool)configuration_result;
-                    break;                
+                    break;
+                case "console_user":
+                    ConsoleUser = (string)configuration_result;
+                    break;
+                case "console_pass":
+                    ConsolePass = (string)configuration_result;
+                    break;
             }
 
             return true;

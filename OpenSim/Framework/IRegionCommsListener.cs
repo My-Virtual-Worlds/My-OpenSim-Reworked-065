@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -32,7 +32,6 @@ namespace OpenSim.Framework
 {
     public delegate void ExpectUserDelegate(AgentCircuitData agent);
 
-    public delegate bool ExpectPrimDelegate(UUID primID, string objData, int XMLMethod);
 
     public delegate void UpdateNeighbours(List<RegionInfo> neighbours);
 
@@ -46,8 +45,6 @@ namespace OpenSim.Framework
 
     public delegate bool CloseAgentConnection(UUID agentID);
 
-    public delegate bool RegionUp(RegionInfo region);
-
     public delegate bool ChildAgentUpdate(ChildAgentDataUpdate cAgentData);
 
     public delegate void LogOffUser(UUID agentID, UUID regionSecret, string message);
@@ -57,7 +54,6 @@ namespace OpenSim.Framework
     public interface IRegionCommsListener
     {
         event ExpectUserDelegate OnExpectUser;
-        event ExpectPrimDelegate OnExpectPrim;
         event GenericCall2 OnExpectChildAgent;
         event AgentCrossing OnAvatarCrossingIntoRegion;
         event PrimCrossing OnPrimCrossingIntoRegion;
@@ -65,7 +61,6 @@ namespace OpenSim.Framework
         event AcknowledgePrimCross OnAcknowledgePrimCrossed;
         event UpdateNeighbours OnNeighboursUpdate;
         event CloseAgentConnection OnCloseAgentConnection;
-        event RegionUp OnRegionUp;
         event ChildAgentUpdate OnChildAgentUpdate;
         event LogOffUser OnLogOffUser;
         event GetLandData OnGetLandData;

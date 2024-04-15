@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -32,6 +32,7 @@ using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Communications.Cache;
+using OpenSim.Region.Framework.Interfaces;
 
 namespace OpenSim.Region.Framework.Scenes.Hypergrid
 {
@@ -41,6 +42,21 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private HGAssetMapper m_assMapper;
+        public HGAssetMapper AssetMapper
+        {
+            get { return m_assMapper; }
+        }
+
+        private IHyperAssetService m_hyper;
+        private IHyperAssetService HyperAssets
+        {
+            get
+            {
+                if (m_hyper == null)
+                    m_hyper = RequestModuleInterface<IHyperAssetService>();
+                return m_hyper;
+            }
+        }
 
         #endregion
 
@@ -113,27 +129,26 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
                                                    UUID RayTargetID, byte BypassRayCast, bool RayEndIsIntersection,
                                                    bool RezSelected, bool RemoveItem, UUID fromTaskID, bool attachment)
         {
-            CachedUserInfo userInfo = CommsManager.UserProfileCacheService.GetUserDetails(remoteClient.AgentId);
-            if (userInfo != null)
-            {
-                if (userInfo.RootFolder != null)
-                {
-                    InventoryItemBase item = userInfo.RootFolder.FindItem(itemID);
+            m_log.DebugFormat("[HGScene] RezObject itemID={0} fromTaskID={1}", itemID, fromTaskID);
 
-                    if (item == null)
-                    { // Fetch the item
-                        item = new InventoryItemBase();
-                        item.Owner = remoteClient.AgentId;
-                        item.ID = itemID;
-                        item = m_assMapper.Get(item, userInfo.RootFolder.ID, userInfo);
-                    }
-                    if (item != null)
-                    {
-                        m_assMapper.Get(item.AssetID, remoteClient.AgentId);
-                        
-                    }
-                }
+            //if (fromTaskID.Equals(UUID.Zero))
+            //{
+            InventoryItemBase item = new InventoryItemBase(itemID);
+            item.Owner = remoteClient.AgentId;
+            item = InventoryService.GetItem(item);
+            //if (item == null)
+            //{ // Fetch the item
+            //    item = new InventoryItemBase();
+            //    item.Owner = remoteClient.AgentId;
+            //    item.ID = itemID;
+            //    item = m_assMapper.Get(item, userInfo.RootFolder.ID, userInfo);
+            //}
+            if (item != null)
+            {
+                m_assMapper.Get(item.AssetID, remoteClient.AgentId);
+
             }
+            //}
 
             // OK, we're done fetching. Pass it up to the default RezObject
             return base.RezObject(remoteClient, itemID, RayEnd, RayStart, RayTargetID, BypassRayCast, RayEndIsIntersection, 
@@ -141,6 +156,16 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
 
         }
 
+        protected override void TransferInventoryAssets(InventoryItemBase item, UUID sender, UUID receiver)
+        {
+            string userAssetServer = HyperAssets.GetUserAssetServer(sender);
+            if ((userAssetServer != string.Empty) && (userAssetServer != HyperAssets.GetSimAssetServer()))
+                m_assMapper.Get(item.AssetID, sender);
+
+            userAssetServer = HyperAssets.GetUserAssetServer(receiver);
+            if ((userAssetServer != string.Empty) && (userAssetServer != HyperAssets.GetSimAssetServer()))
+                m_assMapper.Post(item.AssetID, receiver);
+        }
 
         #endregion
 

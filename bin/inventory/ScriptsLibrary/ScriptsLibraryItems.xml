@@ -304,8 +304,9 @@
 <!-- W == <Key Name="folderID" Value="30000112-000f-0000-0000-000100bba022"/> -->
 
 <!-- X == <Key Name="folderID" Value="30000112-000f-0000-0000-000100bba023"/> -->
-	
-<!-- .Other testing scripts == <Key Name="folderID" Value="30000112-000f-0000-0000-000100bba025"/> -->
+
+<!-- Other testing scripts == <Key Name="folderID" Value="30000112-000f-0000-0000-000100bba025"/> -->
+
 <!-- OpenSim Specific Scripts == <Key Name="folderID" Value="284858c8-9391-6bf1-ddf5-b936f73de853"/> -->
   <Section Name="osTextBoard">
     <Key Name="inventoryID" Value="2ddcb059-20c5-d169-4c42-673f16d3284b" />
@@ -337,7 +338,7 @@
     <Key Name="inventoryID" Value="81305ee4-8caa-9e0a-69a4-76ed57df0c8f" />
     <Key Name="assetID" Value="81305ee4-8caa-9e0a-69a4-76ed57df0c8f" />
     <Key Name="folderID" Value="284858c8-9391-6bf1-ddf5-b936f73de853" />
-    <Key Name="description" Value="A text board that records what you say - contributed by Justin Clarke Casey" />
+    <Key Name="description" Value="A text board that records what you say - contributed by Justin Clark-Casey" />
     <Key Name="name" Value="GrafittiBoard" />
     <Key Name="assetType" Value="10" />
     <Key Name="inventoryType" Value="10" />

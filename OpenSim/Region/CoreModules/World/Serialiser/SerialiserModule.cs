@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -28,7 +28,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
+
+using log4net;
 using Nini.Config;
+
 using OpenMetaverse;
 using OpenSim.Region.CoreModules.Framework.InterfaceCommander;
 using OpenSim.Region.Framework.Interfaces;
@@ -37,25 +41,32 @@ using OpenSim.Region.Framework.Scenes.Serialization;
 
 namespace OpenSim.Region.CoreModules.World.Serialiser
 {
-    public class SerialiserModule : IRegionModule, IRegionSerialiserModule
+    public class SerialiserModule : ISharedRegionModule, IRegionSerialiserModule
     {
+        private static readonly ILog m_log = 
+            LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+
         private Commander m_commander = new Commander("export");
         private List<Scene> m_regions = new List<Scene>();
         private string m_savedir = "exports" + "/";
         private List<IFileSerialiser> m_serialisers = new List<IFileSerialiser>();
 
-        #region IRegionModule Members
+        #region ISharedRegionModule Members
 
-        public void Initialise(Scene scene, IConfigSource source)
+        public Type ReplaceableInterface 
+        { 
+            get { return null; }
+        }
+
+        public void Initialise(IConfigSource source)
         {
-            scene.RegisterModuleCommander(m_commander);
-            scene.EventManager.OnPluginConsole += EventManager_OnPluginConsole;
-            scene.RegisterModuleInterface<IRegionSerialiserModule>(this);
-
-            lock (m_regions)
+            IConfig config = source.Configs["Serialiser"];
+            if (config != null) 
             {
-                m_regions.Add(scene);
+                m_savedir = config.GetString("save_dir", m_savedir);
             }
+
+            m_log.InfoFormat("[Serialiser] Enabled, using save dir \"{0}\"", m_savedir);
         }
 
         public void PostInitialise()
@@ -69,6 +80,31 @@ namespace OpenSim.Region.CoreModules.World.Serialiser
             LoadCommanderCommands();
         }
 
+
+        public void AddRegion(Scene scene)
+        {
+            scene.RegisterModuleCommander(m_commander);
+            scene.EventManager.OnPluginConsole += EventManager_OnPluginConsole;
+            scene.RegisterModuleInterface<IRegionSerialiserModule>(this);
+
+            lock (m_regions)
+            {
+                m_regions.Add(scene);
+            }
+        }
+
+        public void RegionLoaded(Scene scene)
+        {
+        }
+
+        public void RemoveRegion(Scene scene)
+        {
+            lock (m_regions)
+            {
+                m_regions.Remove(scene);
+            }
+        }
+
         public void Close()
         {
             m_regions.Clear();
@@ -79,12 +115,8 @@ namespace OpenSim.Region.CoreModules.World.Serialiser
             get { return "ExportSerialisationModule"; }
         }
 
-        public bool IsSharedModule
-        {
-            get { return true; }
-        }
-
         #endregion
+
 
         #region IRegionSerialiser Members
 
@@ -128,7 +160,7 @@ namespace OpenSim.Region.CoreModules.World.Serialiser
             return SceneXmlLoader.DeserializeGroupFromXml2(xmlString);
         }
 
-        public string SaveGroupToXml2(SceneObjectGroup grp)
+        public string SerializeGroupToXml2(SceneObjectGroup grp)
         {
             return SceneXmlLoader.SaveGroupToXml2(grp);
         }

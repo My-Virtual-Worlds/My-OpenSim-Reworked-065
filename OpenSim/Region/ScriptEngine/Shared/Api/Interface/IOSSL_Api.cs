@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -58,9 +58,13 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
         string osSetDynamicTextureURL(string dynamicID, string contentType, string url, string extraParams, int timer);
         string osSetDynamicTextureURLBlend(string dynamicID, string contentType, string url, string extraParams,
                                            int timer, int alpha);
+        string osSetDynamicTextureURLBlendFace(string dynamicID, string contentType, string url, string extraParams,
+                                           bool blend, int disp, int timer, int alpha, int face);
         string osSetDynamicTextureData(string dynamicID, string contentType, string data, string extraParams, int timer);
         string osSetDynamicTextureDataBlend(string dynamicID, string contentType, string data, string extraParams,
                                             int timer, int alpha);
+        string osSetDynamicTextureDataBlendFace(string dynamicID, string contentType, string data, string extraParams,
+                                            bool blend, int disp, int timer, int alpha, int face);
 
         LSL_Float osTerrainGetHeight(int x, int y);
         LSL_Integer osTerrainSetHeight(int x, int y, double val);
@@ -71,14 +75,15 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
         bool osConsoleCommand(string Command);
         void osSetParcelMediaURL(string url);
         void osSetPrimFloatOnWater(int floatYN);
+        void osSetParcelSIPAddress(string SIPAddress);
 
         // Avatar Info Commands
         string osGetAgentIP(string agent);
-        LSL_List osGetAgents(); 
+        LSL_List osGetAgents();
 
         // Teleport commands
         void osTeleportAgent(string agent, string regionName, LSL_Types.Vector3 position, LSL_Types.Vector3 lookat);
-        void osTeleportAgent(string agent, uint regionX, uint regionY, LSL_Types.Vector3 position, LSL_Types.Vector3 lookat);
+        void osTeleportAgent(string agent, int regionX, int regionY, LSL_Types.Vector3 position, LSL_Types.Vector3 lookat);
         void osTeleportAgent(string agent, LSL_Types.Vector3 position, LSL_Types.Vector3 lookat);
 
         // Animation commands
@@ -93,9 +98,13 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
         string osDrawEllipse(string drawList, int width, int height);
         string osDrawRectangle(string drawList, int width, int height);
         string osDrawFilledRectangle(string drawList, int width, int height);
+        string osDrawPolygon(string drawList, LSL_List x, LSL_List y);
+        string osDrawFilledPolygon(string drawList, LSL_List x, LSL_List y);
+        string osSetFontName(string drawList, string fontName);
         string osSetFontSize(string drawList, int fontSize);
         string osSetPenSize(string drawList, int penSize);
         string osSetPenColour(string drawList, string colour);
+        string osSetPenCap(string drawList, string direction, string type);
         string osDrawImage(string drawList, int width, int height, string imageUrl);
         vector osGetDrawStringSize(string contentType, string text, string fontName, int fontSize);
         void osSetStateEvents(int events);
@@ -118,7 +127,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
         string osGetScriptEngineName();
         string osGetSimulatorVersion();
         Hashtable osParseJSON(string JSON);
-        
+
         void osMessageObject(key objectUUID,string message);
 
         void osMakeNotecard(string notecardName, LSL_Types.list contents);
@@ -129,7 +138,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
 
         string osAvatarName2Key(string firstname, string lastname);
         string osKey2Name(string id);
-        
+
         // Grid Info Functions
         string osGetGridNick();
         string osGetGridName();
@@ -138,5 +147,27 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
         LSL_String osFormatString(string str, LSL_List strings);
         LSL_List osMatchString(string src, string pattern, int start);
 
+        // Information about data loaded into the region
+        string osLoadedCreationDate();
+        string osLoadedCreationTime();
+        string osLoadedCreationID();
+
+        LSL_List osGetLinkPrimitiveParams(int linknumber, LSL_List rules);
+
+
+        key osNpcCreate(string user, string name, vector position, key cloneFrom);
+        void osNpcMoveTo(key npc, vector position);
+        void osNpcSay(key npc, string message);
+        void osNpcRemove(key npc);
+
+        key osGetMapTexture();
+        key osGetRegionMapTexture(string regionName);
+        LSL_List osGetRegionStats();
+
+        int osGetSimulatorMemory();
+        void osKickAvatar(string FirstName,string SurName,string alert);
+        void osSetSpeed(string UUID, float SpeedModifier);
+        void osCauseHealing(string avatar, double healing);
+        void osCauseDamage(string avatar, double damage);
     }
 }

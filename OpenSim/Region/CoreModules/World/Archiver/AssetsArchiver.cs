@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -65,7 +65,7 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         /// </summary>
         /// <param name="archive"></param>
         public void WriteAsset(AssetBase asset)
-        {            
+        {
             //WriteMetadata(archive);
             WriteData(asset);
         }
@@ -144,8 +144,18 @@ namespace OpenSim.Region.CoreModules.World.Archiver
 
             m_assetsWritten++;
 
+            //m_log.DebugFormat("[ARCHIVER]: Added asset {0}", m_assetsWritten);
+            
             if (m_assetsWritten % LOG_ASSET_LOAD_NOTIFICATION_INTERVAL == 0)
                 m_log.InfoFormat("[ARCHIVER]: Added {0} assets to archive", m_assetsWritten);
+        }
+
+        /// <summary>
+        /// Only call this if you need to force a close on the underlying writer.
+        /// </summary>
+        public void ForceClose()
+        {
+            m_archiveWriter.Close();
         }
     }
 }

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -37,6 +37,7 @@ using OpenSim.Framework.Communications.Cache;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using BlockingQueue = OpenSim.Framework.BlockingQueue<OpenSim.Region.Framework.Interfaces.ITextureSender>;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Region.CoreModules.Agent.TextureDownload
 {
@@ -60,8 +61,6 @@ namespace OpenSim.Region.CoreModules.Agent.TextureDownload
         private Scene m_scene;
         private List<Scene> m_scenes = new List<Scene>();
 
-        private Thread m_thread;
-
         public TextureDownloadModule()
         {
         }
@@ -70,15 +69,16 @@ namespace OpenSim.Region.CoreModules.Agent.TextureDownload
 
         public void Initialise(Scene scene, IConfigSource config)
         {
+            
             if (m_scene == null)
             {
                 //m_log.Debug("Creating Texture download module");
                 m_scene = scene;
-                m_thread = new Thread(new ThreadStart(ProcessTextureSenders));
-                m_thread.Name = "ProcessTextureSenderThread";
-                m_thread.IsBackground = true;
-                m_thread.Start();
-                ThreadTracker.Add(m_thread);
+                //m_thread = new Thread(new ThreadStart(ProcessTextureSenders));
+                //m_thread.Name = "ProcessTextureSenderThread";
+                //m_thread.IsBackground = true;
+                //m_thread.Start();
+                //ThreadTracker.Add(m_thread);
             }
 
             if (!m_scenes.Contains(scene))
@@ -218,11 +218,16 @@ namespace OpenSim.Region.CoreModules.Agent.TextureDownload
                     if (profile == null) // Deny unknown user
                         return;
 
-                    if (profile.RootFolder == null) // Deny no inventory
+                    IInventoryService invService = scene.InventoryService;
+                    if (invService.GetRootFolder(client.AgentId) == null) // Deny no inventory
                         return;
 
-                    if (profile.UserProfile.GodLevel < 200 && profile.RootFolder.FindAsset(e.RequestedAssetID) == null) // Deny if not owned
-                        return;
+                    // Diva 2009-08-13: this test doesn't make any sense to many devs
+                    //if (profile.UserProfile.GodLevel < 200 && profile.RootFolder.FindAsset(e.RequestedAssetID) == null) // Deny if not owned
+                    //{
+                    //    m_log.WarnFormat("[TEXTURE]: user {0} doesn't have permissions to texture {1}");
+                    //    return;
+                    //}
 
                     m_log.Debug("Texture preview");
                 }

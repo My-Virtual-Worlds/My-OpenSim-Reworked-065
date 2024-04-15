@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -66,7 +66,6 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
 
         private void CreatePointEntity(Scene scene, UUID uuid, Vector3 groupPos)
         {
-            SceneObjectGroup x = new SceneObjectGroup();
             SceneObjectPart y = new SceneObjectPart();
 
             //Initialize part
@@ -82,19 +81,18 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
             y.Scale = new Vector3(0.01f,0.01f,0.01f);
             y.LastOwnerID = UUID.Zero;
             y.GroupPosition = groupPos;
-            y.OffsetPosition = new Vector3(0, 0, 0);
-            y.RotationOffset = new Quaternion(0,0,0,0);
-            y.Velocity = new Vector3(0, 0, 0);
-            y.RotationalVelocity = new Vector3(0, 0, 0);
-            y.AngularVelocity = new Vector3(0, 0, 0);
-            y.Acceleration = new Vector3(0, 0, 0);
+            y.OffsetPosition = Vector3.Zero;
+            y.RotationOffset = Quaternion.Identity;
+            y.Velocity = Vector3.Zero;
+            y.AngularVelocity = Vector3.Zero;
+            y.Acceleration = Vector3.Zero;
 
             y.Flags = 0;
             y.TrimPermissions();
 
             //Initialize group and add part as root part
+            SceneObjectGroup x = new SceneObjectGroup(y);
             x.SetScene(scene);
-            x.SetRootPart(y);
             x.RegionHandle = scene.RegionInfo.RegionHandle;
             x.SetScene(scene);
 

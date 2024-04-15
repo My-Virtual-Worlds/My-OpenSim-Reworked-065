@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -322,7 +322,7 @@ namespace OpenSim.Region.CoreModules
                 m_DayLengthHours  = config.Configs["Sun"].GetDouble("day_length", d_day_length);
 
                 // Horizon shift, this is used to shift the sun's orbit, this affects the day / night ratio
-                // must hard code to ~.5 to match sun position in LL based viewers                
+                // must hard code to ~.5 to match sun position in LL based viewers
                 m_HorizonShift   = config.Configs["Sun"].GetDouble("day_night_offset", d_day_night);
 
                 
@@ -494,7 +494,7 @@ namespace OpenSim.Region.CoreModules
                 receivedEstateToolsSunUpdate = true;
 
                 // Generate shared values
-                GenSunPos();        
+                GenSunPos();
 
                 // When sun settings are updated, we should update all clients with new settings.
                 SunUpdateToAllClients();

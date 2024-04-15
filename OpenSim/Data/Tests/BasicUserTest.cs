@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -71,14 +71,7 @@ namespace OpenSim.Data.Tests
 
         public void SuperInit()
         {
-            try
-            {
-                XmlConfigurator.Configure();
-            }
-            catch (Exception)
-            {
-                // I don't care, just leave log4net off
-            }
+            OpenSim.Tests.Common.TestLogging.LogToConsole();
             random = new Random();
             user1 = UUID.Random();
             user2 = UUID.Random();
@@ -115,13 +108,6 @@ namespace OpenSim.Data.Tests
             Assert.That(db.GetAgentByUUID(agent2), Is.Null);
             Assert.That(db.GetAgentByUUID(agent3), Is.Null);
             Assert.That(db.GetAgentByUUID(UUID.Random()), Is.Null);
-        }
-
-        [Test]
-        public void T999_StillNull()
-        {
-            Assert.That(db.GetUserByUUID(zero), Is.Null);
-            Assert.That(db.GetAgentByUUID(zero), Is.Null);
         }
 
         [Test]
@@ -166,7 +152,7 @@ namespace OpenSim.Data.Tests
             u1.FirstName = "Ugly";
             
             db.UpdateUserProfile(u1);
-            Assert.That("Ugly",Is.EqualTo(u1.FirstName), "Assert.That(\"Ugly\",Is.EqualTo(u1.FirstName))");                   
+            Assert.That("Ugly",Is.EqualTo(u1.FirstName), "Assert.That(\"Ugly\",Is.EqualTo(u1.FirstName))");
         }
 
         [Test]
@@ -184,11 +170,11 @@ namespace OpenSim.Data.Tests
         {
             UserProfileData u0 = NewUser(zero,fname0,lname0); 
             UserProfileData u4 = NewUser(user4,fname2,lname2);
-            db.AddNewUserProfile(u0);
-            db.AddNewUserProfile(u4);
+            db.AddNewUserProfile(u0); //UserID 0 should fail to save.
+            db.AddNewUserProfile(u4); //The first name and last name are already in use (from T010), so this should fail too
             Assert.That(db.GetUserByUUID(zero),Is.Null);
             Assert.That(db.GetUserByUUID(user4),Is.Null);
-        }        
+        }
         
         [Test]
         public void T015_UserPersistency()
@@ -204,8 +190,16 @@ namespace OpenSim.Data.Tests
             UUID webloginkey = UUID.Random();
             uint homeregx = (uint) random.Next();
             uint homeregy = (uint) random.Next();
-            Vector3 homeloc = new Vector3((float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5));
-            Vector3 homelookat = new Vector3((float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5));
+            Vector3 homeloc 
+                = new Vector3(
+                    (float)Math.Round(random.NextDouble(), 5),
+                    (float)Math.Round(random.NextDouble(), 5),
+                    (float)Math.Round(random.NextDouble(), 5));
+            Vector3 homelookat 
+                = new Vector3(
+                    (float)Math.Round(random.NextDouble(), 5),
+                    (float)Math.Round(random.NextDouble(), 5),
+                    (float)Math.Round(random.NextDouble(), 5));
             int created = random.Next();
             int lastlogin = random.Next();
             string userinvuri = RandomName();
@@ -224,7 +218,7 @@ namespace OpenSim.Data.Tests
             
             //HomeRegionX and HomeRegionY must only use 24 bits
             homeregx = ((homeregx << 8) >> 8);
-            homeregy = ((homeregy << 8) >> 8);            
+            homeregy = ((homeregy << 8) >> 8);
 
             u.ID = id;
             u.WebLoginKey = webloginkey;
@@ -273,8 +267,6 @@ namespace OpenSim.Data.Tests
             Assert.That(homelookat,Is.EqualTo(u1a.HomeLookAt), "Assert.That(homelookat,Is.EqualTo(u1a.HomeLookAt))");
             Assert.That(created,Is.EqualTo(u1a.Created), "Assert.That(created,Is.EqualTo(u1a.Created))");
             Assert.That(lastlogin,Is.EqualTo(u1a.LastLogin), "Assert.That(lastlogin,Is.EqualTo(u1a.LastLogin))");
-            // RootInventoryFolderID is not tested because it is saved in SQLite,
-            // but not in MySQL
             Assert.That(userinvuri,Is.EqualTo(u1a.UserInventoryURI), "Assert.That(userinvuri,Is.EqualTo(u1a.UserInventoryURI))");
             Assert.That(userasseturi,Is.EqualTo(u1a.UserAssetURI), "Assert.That(userasseturi,Is.EqualTo(u1a.UserAssetURI))");
             Assert.That(candomask,Is.EqualTo(u1a.CanDoMask), "Assert.That(candomask,Is.EqualTo(u1a.CanDoMask))");
@@ -305,7 +297,7 @@ namespace OpenSim.Data.Tests
             uint homeregx = (uint) random.Next();
             uint homeregy = (uint) random.Next();
             Vector3 homeloc = new Vector3((float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5));
-            Vector3 homelookat = new Vector3((float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5));            
+            Vector3 homelookat = new Vector3((float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5),(float)Math.Round(random.NextDouble(),5));
             int created = random.Next();
             int lastlogin = random.Next();
             string userinvuri = RandomName();
@@ -365,7 +357,7 @@ namespace OpenSim.Data.Tests
             Assert.That(email,Is.EqualTo(u1a.Email), "Assert.That(email,Is.EqualTo(u1a.Email))");
             Assert.That(passhash,Is.EqualTo(u1a.PasswordHash), "Assert.That(passhash,Is.EqualTo(u1a.PasswordHash))");
             Assert.That(passsalt,Is.EqualTo(u1a.PasswordSalt), "Assert.That(passsalt,Is.EqualTo(u1a.PasswordSalt))");
-            Assert.That(homereg,Is.EqualTo(u1a.HomeRegion), "Assert.That(homereg,Is.EqualTo(u1a.HomeRegion))");            
+            Assert.That(homereg,Is.EqualTo(u1a.HomeRegion), "Assert.That(homereg,Is.EqualTo(u1a.HomeRegion))");
             Assert.That(homeregx,Is.EqualTo(u1a.HomeRegionX), "Assert.That(homeregx,Is.EqualTo(u1a.HomeRegionX))");
             Assert.That(homeregy,Is.EqualTo(u1a.HomeRegionY), "Assert.That(homeregy,Is.EqualTo(u1a.HomeRegionY))");
             Assert.That(homereg,Is.EqualTo(u1a.HomeRegion), "Assert.That(homereg,Is.EqualTo(u1a.HomeRegion))");
@@ -373,8 +365,6 @@ namespace OpenSim.Data.Tests
             Assert.That(homelookat,Is.EqualTo(u1a.HomeLookAt), "Assert.That(homelookat,Is.EqualTo(u1a.HomeLookAt))");
             Assert.That(created,Is.EqualTo(u1a.Created), "Assert.That(created,Is.EqualTo(u1a.Created))");
             Assert.That(lastlogin,Is.EqualTo(u1a.LastLogin), "Assert.That(lastlogin,Is.EqualTo(u1a.LastLogin))");
-            // RootInventoryFolderID is not tested because it is saved in SQLite,
-            // but not in MySQL
             Assert.That(userasseturi,Is.EqualTo(u1a.UserAssetURI), "Assert.That(userasseturi,Is.EqualTo(u1a.UserAssetURI))");
             Assert.That(candomask,Is.EqualTo(u1a.CanDoMask), "Assert.That(candomask,Is.EqualTo(u1a.CanDoMask))");
             Assert.That(wantdomask,Is.EqualTo(u1a.WantDoMask), "Assert.That(wantdomask,Is.EqualTo(u1a.WantDoMask))");
@@ -387,6 +377,21 @@ namespace OpenSim.Data.Tests
             Assert.That(godlevel,Is.EqualTo(u1a.GodLevel), "Assert.That(godlevel,Is.EqualTo(u1a.GodLevel))");
             Assert.That(customtype,Is.EqualTo(u1a.CustomType), "Assert.That(customtype,Is.EqualTo(u1a.CustomType))");
             Assert.That(partner,Is.EqualTo(u1a.Partner), "Assert.That(partner,Is.EqualTo(u1a.Partner))");
+        }
+
+        [Test]
+        public void T017_UserUpdateRandomPersistency()
+        {
+            UUID id = user5;
+            UserProfileData u = db.GetUserByUUID(id);
+            new PropertyScrambler<UserProfileData>().DontScramble(x=>x.ID).Scramble(u);
+            
+            db.UpdateUserProfile(u);
+            UserProfileData u1a = db.GetUserByUUID(id);
+            Assert.That(u1a, Constraints.PropertyCompareConstraint(u)
+                .IgnoreProperty(x=>x.HomeRegionX)
+                .IgnoreProperty(x=>x.HomeRegionY)
+                );
         }
         
         [Test]
@@ -416,7 +421,7 @@ namespace OpenSim.Data.Tests
             UserAgentData a2 = db.GetAgentByName(fname2,lname2);
             UserAgentData a3 = db.GetAgentByName(name3);
             Assert.That(user2,Is.EqualTo(a2.ProfileID), "Assert.That(user2,Is.EqualTo(a2.ProfileID))");
-            Assert.That(user3,Is.EqualTo(a3.ProfileID), "Assert.That(user3,Is.EqualTo(a3.ProfileID))");                    
+            Assert.That(user3,Is.EqualTo(a3.ProfileID), "Assert.That(user3,Is.EqualTo(a3.ProfileID))");
         }
         
         [Test]
@@ -491,11 +496,11 @@ namespace OpenSim.Data.Tests
             db.AddNewUserFriend(user1,user3, 2);
             db.AddNewUserFriend(user1,user2, 4); 
             List<FriendListItem> fl1 = db.GetUserFriendList(user1);
-            Assert.That(fl1.Count,Is.EqualTo(2), "Assert.That(fl1.Count,Is.EqualTo(2))");                   
+            Assert.That(fl1.Count,Is.EqualTo(2), "Assert.That(fl1.Count,Is.EqualTo(2))");
             perms.Add(user2,1);
             perms.Add(user3,2);
             for (int i = 0; i < fl1.Count; i++)
-            {   
+            {
                 Assert.That(user1,Is.EqualTo(fl1[i].FriendListOwner), "Assert.That(user1,Is.EqualTo(fl1[i].FriendListOwner))");
                 friends.Add(fl1[i].Friend,1);
                 temp = perms[fl1[i].Friend];
@@ -534,7 +539,7 @@ namespace OpenSim.Data.Tests
             db.UpdateUserFriendPerms(user1, user3, 4);
             
             fl1 = db.GetUserFriendList(user1);
-            Assert.That(fl1[0].FriendPerms,Is.EqualTo(4), "Assert.That(fl1[0].FriendPerms,Is.EqualTo(4))");                  
+            Assert.That(fl1[0].FriendPerms,Is.EqualTo(4), "Assert.That(fl1[0].FriendPerms,Is.EqualTo(4))");
         }
         
         [Test]
@@ -550,7 +555,7 @@ namespace OpenSim.Data.Tests
         [Test]
         public void T041_UserAppearancePersistency()
         {
-            AvatarAppearance appear = new AvatarAppearance();            
+            AvatarAppearance appear = new AvatarAppearance();
             UUID owner = UUID.Random();
             int serial = random.Next();
             byte[] visualp = new byte[218];
@@ -652,6 +657,13 @@ namespace OpenSim.Data.Tests
             Assert.That(avatarheight,Is.EqualTo(app.AvatarHeight), "Assert.That(avatarheight,Is.EqualTo(app.AvatarHeight))");
         }
 
+        [Test]
+        public void T999_StillNull()
+        {
+            Assert.That(db.GetUserByUUID(zero), Is.Null);
+            Assert.That(db.GetAgentByUUID(zero), Is.Null);
+        }
+
         public UserProfileData NewUser(UUID id,string fname,string lname)
         {
             UserProfileData u = new UserProfileData();
@@ -681,7 +693,7 @@ namespace OpenSim.Data.Tests
             int size = random.Next(5,12); 
             char ch ;
             for (int i=0; i<size; i++)
-            {       
+            {
                 ch = Convert.ToChar(Convert.ToInt32(Math.Floor(26 * random.NextDouble() + 65))) ;
                 name.Append(ch);
             }

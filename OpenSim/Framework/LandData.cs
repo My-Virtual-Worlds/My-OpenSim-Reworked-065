@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -27,18 +27,29 @@
 
 using System;
 using System.Collections.Generic;
+using System.Xml;
+using System.Xml.Serialization;
+
 using OpenMetaverse;
 
 namespace OpenSim.Framework
 {
+    /// <summary>
+    /// Details of a Parcel of land
+    /// </summary>
     public class LandData
     {
+        // use only one serializer to give the runtime a chance to
+        // optimize it (it won't do that if you use a new instance
+        // every time)
+        private static XmlSerializer serializer = new XmlSerializer(typeof (LandData));
+        
         private Vector3 _AABBMax = new Vector3();
         private Vector3 _AABBMin = new Vector3();
         private int _area = 0;
         private uint _auctionID = 0; //Unemplemented. If set to 0, not being auctioned
         private UUID _authBuyerID = UUID.Zero; //Unemplemented. Authorized Buyer's UUID
-        private Parcel.ParcelCategory _category = new Parcel.ParcelCategory(); //Unemplemented. Parcel's chosen category
+        private ParcelCategory _category = ParcelCategory.None; //Unemplemented. Parcel's chosen category
         private int _claimDate = 0;
         private int _claimPrice = 0; //Unemplemented
         private UUID _globalID = UUID.Zero;
@@ -49,15 +60,15 @@ namespace OpenSim.Framework
         private string _description = String.Empty;
 
 
-        private uint _flags = (uint) Parcel.ParcelFlags.AllowFly | (uint) Parcel.ParcelFlags.AllowLandmark |
-                                (uint) Parcel.ParcelFlags.AllowAPrimitiveEntry |
-                                (uint) Parcel.ParcelFlags.AllowDeedToGroup | (uint) Parcel.ParcelFlags.AllowTerraform |
-                                (uint) Parcel.ParcelFlags.CreateObjects | (uint) Parcel.ParcelFlags.AllowOtherScripts |
-                                (uint) Parcel.ParcelFlags.SoundLocal;
+        private uint _flags = (uint) ParcelFlags.AllowFly | (uint) ParcelFlags.AllowLandmark |
+                                (uint) ParcelFlags.AllowAPrimitiveEntry |
+                                (uint) ParcelFlags.AllowDeedToGroup | (uint) ParcelFlags.AllowTerraform |
+                                (uint) ParcelFlags.CreateObjects | (uint) ParcelFlags.AllowOtherScripts |
+                                (uint) ParcelFlags.SoundLocal;
 
         private byte _landingType = 0;
         private string _name = "Your Parcel";
-        private Parcel.ParcelStatus _status = Parcel.ParcelStatus.Leased;
+        private ParcelStatus _status = ParcelStatus.Leased;
         private int _localID = 0;
         private byte _mediaAutoScale = 0;
         private UUID _mediaID = UUID.Zero;
@@ -80,6 +91,10 @@ namespace OpenSim.Framework
         private int _dwell = 0;
         private int _otherCleanTime = 0;
 
+        /// <summary>
+        /// Upper corner of the AABB for the parcel
+        /// </summary>
+        [XmlIgnore]
         public Vector3 AABBMax {
             get {
                 return _AABBMax;
@@ -88,7 +103,10 @@ namespace OpenSim.Framework
                 _AABBMax = value;
             }
         }
-
+        /// <summary>
+        /// Lower corner of the AABB for the parcel
+        /// </summary>
+        [XmlIgnore]
         public Vector3 AABBMin {
             get {
                 return _AABBMin;
@@ -98,6 +116,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Area in meters^2 the parcel contains
+        /// </summary>
         public int Area {
             get {
                 return _area;
@@ -107,6 +128,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// ID of auction (3rd Party Integration) when parcel is being auctioned
+        /// </summary>
         public uint AuctionID {
             get {
                 return _auctionID;
@@ -116,6 +140,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// UUID of authorized buyer of parcel.  This is UUID.Zero if anyone can buy it.
+        /// </summary>
         public UUID AuthBuyerID {
             get {
                 return _authBuyerID;
@@ -125,7 +152,10 @@ namespace OpenSim.Framework
             }
         }
 
-        public Parcel.ParcelCategory Category {
+        /// <summary>
+        /// Category of parcel.  Used for classifying the parcel in classified listings
+        /// </summary>
+        public ParcelCategory Category {
             get {
                 return _category;
             }
@@ -134,6 +164,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Date that the current owner purchased or claimed the parcel
+        /// </summary>
         public int ClaimDate {
             get {
                 return _claimDate;
@@ -143,6 +176,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// The last price that the parcel was sold at
+        /// </summary>
         public int ClaimPrice {
             get {
                 return _claimPrice;
@@ -152,6 +188,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Global ID for the parcel.  (3rd Party Integration)
+        /// </summary>
         public UUID GlobalID {
             get {
                 return _globalID;
@@ -161,6 +200,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Unique ID of the Group that owns
+        /// </summary>
         public UUID GroupID {
             get {
                 return _groupID;
@@ -170,6 +212,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Number of SceneObjectPart that are owned by a Group
+        /// </summary>
+        [XmlIgnore]
         public int GroupPrims {
             get {
                 return _groupPrims;
@@ -179,6 +225,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Returns true if the Land Parcel is owned by a group
+        /// </summary>
         public bool IsGroupOwned {
             get {
                 return _isGroupOwned;
@@ -188,6 +237,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// jp2 data for the image representative of the parcel in the parcel dialog
+        /// </summary>
         public byte[] Bitmap {
             get {
                 return _bitmap;
@@ -197,6 +249,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Parcel Description
+        /// </summary>
         public string Description {
             get {
                 return _description;
@@ -206,6 +261,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Parcel settings.  Access flags, Fly, NoPush, Voice, Scripts allowed, etc.  ParcelFlags
+        /// </summary>
         public uint Flags {
             get {
                 return _flags;
@@ -215,6 +273,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Determines if people are able to teleport where they please on the parcel or if they 
+        /// get constrainted to a specific point on teleport within the parcel
+        /// </summary>
         public byte LandingType {
             get {
                 return _landingType;
@@ -224,6 +286,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Parcel Name
+        /// </summary>
         public string Name {
             get {
                 return _name;
@@ -233,7 +298,10 @@ namespace OpenSim.Framework
             }
         }
 
-        public Parcel.ParcelStatus Status {
+        /// <summary>
+        /// Status of Parcel, Leased, Abandoned, For Sale
+        /// </summary>
+        public ParcelStatus Status {
             get {
                 return _status;
             }
@@ -242,6 +310,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Internal ID of the parcel.  Sometimes the client will try to use this value
+        /// </summary>
         public int LocalID {
             get {
                 return _localID;
@@ -251,6 +322,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Determines if we scale the media based on the surface it's on
+        /// </summary>
         public byte MediaAutoScale {
             get {
                 return _mediaAutoScale;
@@ -260,6 +334,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Texture Guid to replace with the output of the media stream
+        /// </summary>
         public UUID MediaID {
             get {
                 return _mediaID;
@@ -269,6 +346,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// URL to the media file to display
+        /// </summary>
         public string MediaURL {
             get {
                 return _mediaURL;
@@ -278,6 +358,35 @@ namespace OpenSim.Framework
             }
         }
 
+        private int[] _mediaSize = new int[2];
+        public int[] MediaSize
+        {
+            get
+            {
+                return _mediaSize;
+            }
+            set
+            {
+                _mediaSize = value;
+            }
+        }
+
+        private string _mediaType = "";
+        public string MediaType
+        {
+            get
+            {
+                return _mediaType;
+            }
+            set
+            {
+                _mediaType = value;
+            }
+        }
+
+        /// <summary>
+        /// URL to the shoutcast music stream to play on the parcel
+        /// </summary>
         public string MusicURL {
             get {
                 return _musicURL;
@@ -287,6 +396,11 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Number of SceneObjectPart that are owned by users who do not own the parcel
+        /// and don't have the 'group.  These are elegable for AutoReturn collection
+        /// </summary>
+        [XmlIgnore]
         public int OtherPrims {
             get {
                 return _otherPrims;
@@ -296,6 +410,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Owner Avatar or Group of the parcel.  Naturally, all land masses must be
+        /// owned by someone
+        /// </summary>
         public UUID OwnerID {
             get {
                 return _ownerID;
@@ -305,6 +423,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Number of SceneObjectPart that are owned by the owner of the parcel
+        /// </summary>
+        [XmlIgnore]
         public int OwnerPrims {
             get {
                 return _ownerPrims;
@@ -314,6 +436,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// List of access data for the parcel.  User data, some bitflags, and a time
+        /// </summary>
         public List<ParcelManager.ParcelAccessEntry> ParcelAccessList {
             get {
                 return _parcelAccessList;
@@ -323,6 +448,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// How long in hours a Pass to the parcel is given
+        /// </summary>
         public float PassHours {
             get {
                 return _passHours;
@@ -332,6 +460,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Price to purchase a Pass to a restricted parcel
+        /// </summary>
         public int PassPrice {
             get {
                 return _passPrice;
@@ -341,6 +472,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// When the parcel is being sold, this is the price to purchase the parcel
+        /// </summary>
         public int SalePrice {
             get {
                 return _salePrice;
@@ -350,6 +484,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Number of SceneObjectPart that are currently selected by avatar
+        /// </summary>
+        [XmlIgnore]
         public int SelectedPrims {
             get {
                 return _selectedPrims;
@@ -359,6 +497,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Number of meters^2 in the Simulator
+        /// </summary>
+        [XmlIgnore]
         public int SimwideArea {
             get {
                 return _simwideArea;
@@ -368,6 +510,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Number of SceneObjectPart in the Simulator
+        /// </summary>
+        [XmlIgnore]
         public int SimwidePrims {
             get {
                 return _simwidePrims;
@@ -377,6 +523,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// ID of the snapshot used in the client parcel dialog of the parcel
+        /// </summary>
         public UUID SnapshotID {
             get {
                 return _snapshotID;
@@ -386,6 +535,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// When teleporting is restricted to a certain point, this is the location 
+        /// that the user will be redirected to
+        /// </summary>
         public Vector3 UserLocation {
             get {
                 return _userLocation;
@@ -395,6 +548,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// When teleporting is restricted to a certain point, this is the rotation 
+        /// that the user will be positioned
+        /// </summary>
         public Vector3 UserLookAt {
             get {
                 return _userLookAt;
@@ -404,6 +561,9 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Deprecated idea.  Number of visitors ~= free money
+        /// </summary>
         public int Dwell {
             get {
                 return _dwell;
@@ -413,6 +573,10 @@ namespace OpenSim.Framework
             }
         }
 
+        /// <summary>
+        /// Number of minutes to return SceneObjectGroup that are owned by someone who doesn't own 
+        /// the parcel and isn't set to the same 'group' as the parcel.
+        /// </summary>
         public int OtherCleanTime {
             get {
                 return _otherCleanTime;
@@ -422,11 +586,16 @@ namespace OpenSim.Framework
             }
         }
 
+
         public LandData()
         {
             _globalID = UUID.Random();
         }
 
+        /// <summary>
+        /// Make a new copy of the land data
+        /// </summary>
+        /// <returns></returns>
         public LandData Copy()
         {
             LandData landData = new LandData();
@@ -479,6 +648,23 @@ namespace OpenSim.Framework
             }
 
             return landData;
+        }
+
+        public void ToXml(XmlWriter xmlWriter)
+        {
+            serializer.Serialize(xmlWriter, this);
+        }
+
+        /// <summary>
+        /// Restore a LandData object from the serialized xml representation.
+        /// </summary>
+        /// <param name="xmlReader"></param>
+        /// <returns></returns>
+        public static LandData FromXml(XmlReader xmlReader)
+        {
+            LandData land = (LandData)serializer.Deserialize(xmlReader);
+
+            return land;
         }
     }
 }

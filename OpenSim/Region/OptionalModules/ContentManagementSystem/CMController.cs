@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -86,7 +86,6 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
         /// </value>
         Hashtable m_sceneList = Hashtable.Synchronized(new Hashtable());
         State m_state = State.NONE;
-        Thread m_thread = null;
         CMView m_view = null;
 
         #endregion Fields
@@ -148,11 +147,7 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
             lock (this)
             {
                 m_estateModule = scene.RequestModuleInterface<IEstateModule>();
-                m_thread = new Thread(MainLoop);
-                m_thread.Name = "Content Management";
-                m_thread.IsBackground = true;
-                m_thread.Start();
-                ThreadTracker.Add(m_thread);
+                Watchdog.StartThread(MainLoop, "Content Management", ThreadPriority.Normal, true);
                 m_state = State.NONE;
             }
         }
@@ -201,6 +196,8 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
                         m_log.Debug("[CONTENT MANAGEMENT] MAIN LOOP -- uuuuuuuuuh, what?");
                         break;
                     }
+
+                    Watchdog.UpdateThread();
                 }
             }
             catch (Exception e)
@@ -208,8 +205,10 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
                 // TODO: Let users in the sim and those entering it and possibly an external watchdog know what has happened
                 m_log.ErrorFormat(
                     "[CONTENT MANAGEMENT]: Content management thread terminating with exception.  PLEASE REBOOT YOUR SIM - CONTENT MANAGEMENT WILL NOT BE AVAILABLE UNTIL YOU DO.  Exception is {0}", 
-                    e);                                   
+                    e);
             }
+
+            Watchdog.RemoveThread();
         }
 
         /// <summary>

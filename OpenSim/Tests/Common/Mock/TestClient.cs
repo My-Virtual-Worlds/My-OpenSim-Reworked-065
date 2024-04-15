@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -36,10 +36,11 @@ using OpenMetaverse.Packets;
 using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
+using OpenSim.Framework.Client;
 
 namespace OpenSim.Tests.Common.Mock
 {
-    public class TestClient : IClientAPI
+    public class TestClient : IClientAPI, IClientCore
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
@@ -105,7 +106,7 @@ namespace OpenSim.Tests.Common.Mock
         public event GodKickUser OnGodKickUser;
         public event ObjectDuplicate OnObjectDuplicate;
         public event GrabObject OnGrabObject;
-        public event ObjectSelect OnDeGrabObject;
+        public event DeGrabObject OnDeGrabObject;
         public event MoveObject OnGrabUpdate;
         public event SpinStart OnSpinStart;
         public event SpinObject OnSpinUpdate;
@@ -119,6 +120,7 @@ namespace OpenSim.Tests.Common.Mock
         public event ObjectExtraParams OnUpdateExtraParams;
         public event RequestObjectPropertiesFamily OnRequestObjectPropertiesFamily;
         public event ObjectSelect OnObjectSelect;
+        public event ObjectRequest OnObjectRequest;
         public event GenericCall7 OnObjectDescription;
         public event GenericCall7 OnObjectName;
         public event GenericCall7 OnObjectClickAction;
@@ -129,6 +131,7 @@ namespace OpenSim.Tests.Common.Mock
         public event UpdateVector OnUpdatePrimSinglePosition;
         public event UpdatePrimRotation OnUpdatePrimGroupRotation;
         public event UpdatePrimSingleRotation OnUpdatePrimSingleRotation;
+        public event UpdatePrimSingleRotationPosition OnUpdatePrimSingleRotationPosition;
         public event UpdatePrimGroupRotation OnUpdatePrimGroupMouseRotation;
         public event UpdateVector OnUpdatePrimScale;
         public event UpdateVector OnUpdatePrimGroupScale;
@@ -188,6 +191,7 @@ namespace OpenSim.Tests.Common.Mock
         public event FriendActionDelegate OnApproveFriendRequest;
         public event FriendActionDelegate OnDenyFriendRequest;
         public event FriendshipTermination OnTerminateFriendship;
+        public event GrantUserFriendRights OnGrantUserRights;
 
         public event EconomyDataRequest OnEconomyDataRequest;
         public event MoneyBalanceRequest OnMoneyBalanceRequest;
@@ -202,6 +206,8 @@ namespace OpenSim.Tests.Common.Mock
         public event ObjectBuy OnObjectBuy;
         public event BuyObjectInventory OnBuyObjectInventory;
         public event AgentSit OnUndo;
+        public event AgentSit OnRedo;
+        public event LandUndo OnLandUndo;
 
         public event ForceReleaseControls OnForceReleaseControls;
 
@@ -283,6 +289,26 @@ namespace OpenSim.Tests.Common.Mock
         public event AvatarInterestUpdate OnAvatarInterestUpdate;
 
         public event PlacesQuery OnPlacesQuery;
+        
+        public event FindAgentUpdate OnFindAgent;
+        public event TrackAgentUpdate OnTrackAgent;
+        public event NewUserReport OnUserReport;
+        public event SaveStateHandler OnSaveState;
+        public event GroupAccountSummaryRequest OnGroupAccountSummaryRequest;
+        public event GroupAccountDetailsRequest OnGroupAccountDetailsRequest;
+        public event GroupAccountTransactionsRequest OnGroupAccountTransactionsRequest;
+        public event FreezeUserUpdate OnParcelFreezeUser;
+        public event EjectUserUpdate OnParcelEjectUser;
+        public event ParcelBuyPass OnParcelBuyPass;
+        public event ParcelGodMark OnParcelGodMark;
+        public event GroupActiveProposalsRequest OnGroupActiveProposalsRequest;
+        public event GroupVoteHistoryRequest OnGroupVoteHistoryRequest;
+        public event SimWideDeletesDelegate OnSimWideDeletes;
+        public event SendPostcard OnSendPostcard;
+        public event MuteListEntryUpdate OnUpdateMuteListEntry;
+        public event MuteListEntryRemove OnRemoveMuteListEntry;
+        public event GodlikeMessage onGodlikeMessage;
+        public event GodUpdateRegionInfoUpdate OnGodUpdateRegionInfoUpdate;
 
 #pragma warning restore 67
 
@@ -296,7 +322,7 @@ namespace OpenSim.Tests.Common.Mock
         /// </value>
         public string CapsSeedUrl;
 
-        private Vector3 startPos = new Vector3(128, 128, 2);
+        private Vector3 startPos = new Vector3(((int)Constants.RegionSize * 0.5f), ((int)Constants.RegionSize * 0.5f), 2);
 
         public virtual Vector3 StartPos
         {
@@ -388,6 +414,11 @@ namespace OpenSim.Tests.Common.Mock
         {
             get { return m_circuitCode; }
             set { m_circuitCode = value; }
+        }
+
+        public IPEndPoint RemoteEndPoint
+        {
+            get { return new IPEndPoint(IPAddress.Loopback, (ushort)m_circuitCode); }
         }
 
         /// <summary>
@@ -584,13 +615,11 @@ namespace OpenSim.Tests.Common.Mock
         {
         }
 
-        public virtual void SendAvatarData(ulong regionHandle, string firstName, string lastName, string grouptitle, UUID avatarID,
-                                           uint avatarLocalID, Vector3 Pos, byte[] textureEntry, uint parentID, Quaternion rotation)
+        public virtual void SendAvatarData(SendAvatarData data)
         {
         }
 
-        public virtual void SendAvatarTerseUpdate(ulong regionHandle, ushort timeDilation, uint localID,
-                                                  Vector3 position, Vector3 velocity, Quaternion rotation, UUID agentid)
+        public virtual void SendAvatarTerseUpdate(SendAvatarTerseData data)
         {
         }
 
@@ -602,31 +631,19 @@ namespace OpenSim.Tests.Common.Mock
         {
         }
 
-        public virtual void SendDialog(string objectname, UUID objectID, UUID ownerID, string msg, UUID textureID, int ch, string[] buttonlabels)
+        public virtual void SendDialog(string objectname, UUID objectID, string ownerFirstName, string ownerLastName, string msg, UUID textureID, int ch, string[] buttonlabels)
         {
         }
 
-        public virtual void SendPrimitiveToClient(ulong regionHandle, ushort timeDilation, uint localID,
-                                                  PrimitiveBaseShape primShape, Vector3 pos, Vector3 vel,
-                                                  Vector3 acc, Quaternion rotation, Vector3 rvel, uint flags,
-                                                  UUID objectID, UUID ownerID, string text, byte[] color,
-                                                  uint parentID,
-                                                  byte[] particleSystem, byte clickAction, byte material)
+        public virtual void SendPrimitiveToClient(SendPrimitiveData data)
         {
         }
-        public virtual void SendPrimitiveToClient(ulong regionHandle, ushort timeDilation, uint localID,
-                                                  PrimitiveBaseShape primShape, Vector3 pos, Vector3 vel,
-                                                  Vector3 acc, Quaternion rotation, Vector3 rvel, uint flags,
-                                                  UUID objectID, UUID ownerID, string text, byte[] color,
-                                                  uint parentID,
-                                                  byte[] particleSystem, byte clickAction, byte material, byte[] textureanimation,
-                                                  bool attachment, uint AttachmentPoint, UUID AssetId, UUID SoundId, double SoundVolume, byte SoundFlags, double SoundRadius)
+
+        public virtual void SendPrimTerseUpdate(SendPrimitiveTerseData data)
         {
         }
-        public virtual void SendPrimTerseUpdate(ulong regionHandle, ushort timeDilation, uint localID,
-                                                Vector3 position, Quaternion rotation, Vector3 velocity,
-                                                Vector3 rotationalvelocity, byte state, UUID AssetId,
-                                                UUID ownerID, int attachPoint)
+
+        public virtual void ReprioritizeUpdates(StateUpdateTypes type, UpdatePriorityHandler handler)
         {
         }
 
@@ -637,6 +654,7 @@ namespace OpenSim.Tests.Common.Mock
         public virtual void SendInventoryFolderDetails(UUID ownerID, UUID folderID,
                                                        List<InventoryItemBase> items,
                                                        List<InventoryFolderBase> folders,
+                                                       int version, 
                                                        bool fetchFolders,
                                                        bool fetchItems)
         {
@@ -862,7 +880,7 @@ namespace OpenSim.Tests.Common.Mock
         {
         }
 
-        public void Close(bool ShutdownCircuit)
+        public void Close()
         {
             m_scene.RemoveClient(AgentId);
         }
@@ -887,6 +905,11 @@ namespace OpenSim.Tests.Common.Mock
         {
         }
 
+        public EndPoint GetClientEP()
+        {
+            return null;
+        }
+
         public ClientInfo GetClientInfo()
         {
             return null;
@@ -903,7 +926,7 @@ namespace OpenSim.Tests.Common.Mock
         {
         }
 
-        public void SendEstateManagersList(UUID invoice, UUID[] EstateManagers, uint estateID)
+        public void SendEstateList(UUID invoice, int code, UUID[] Data, uint estateID)
         {
         }
 
@@ -932,6 +955,10 @@ namespace OpenSim.Tests.Common.Mock
         }
 
         public void SendForceClientSelectObjects(List<uint> objectIDs)
+        {
+        }
+
+        public void SendCameraConstraint(Vector4 ConstraintPlane)
         {
         }
 
@@ -1129,6 +1156,53 @@ namespace OpenSim.Tests.Common.Mock
         }
         
         public void SendPickInfoReply(UUID pickID,UUID creatorID, bool topPick, UUID parcelID, string name, string desc, UUID snapshotID, string user, string originalName, string simName, Vector3 posGlobal, int sortOrder, bool enabled)
+        {
+        }
+
+        public bool TryGet<T>(out T iface)
+        {
+            iface = default(T);
+            return false;
+        }
+
+        public T Get<T>()
+        {
+            return default(T);
+        }
+
+        public void Disconnect(string reason)
+        {
+        }
+
+        public void Disconnect() 
+        {
+        }
+
+        public void SendRebakeAvatarTextures(UUID textureID)
+        {
+        }
+        
+        public void SendAvatarInterestsReply(UUID avatarID, uint wantMask, string wantText, uint skillsMask, string skillsText, string languages)
+        {
+        }
+        
+        public void SendGroupAccountingDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID, int amt)
+        {
+        }
+        
+        public void SendGroupAccountingSummary(IClientAPI sender,UUID groupID, uint moneyAmt, int totalTier, int usedTier)
+        {
+        }
+        
+        public void SendGroupTransactionsSummaryDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID,int amt)
+        {
+        }
+
+        public void SendGroupVoteHistory(UUID groupID, UUID transactionID, GroupVoteHistory[] Votes)
+        {
+        }
+
+        public void SendGroupActiveProposals(UUID groupID, UUID transactionID, GroupActiveProposals[] Proposals)
         {
         }
     }

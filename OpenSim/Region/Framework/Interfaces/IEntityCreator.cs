@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,13 +29,13 @@ using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Region.Framework.Scenes;
 
-namespace OpenSim.Region.Framework.Interfaces    
+namespace OpenSim.Region.Framework.Interfaces
 {
     /// <summary>
     /// Interface to a class that is capable of creating entities
-    /// </summary>        
+    /// </summary>
     public interface IEntityCreator
-    {        
+    {
         /// <summary>
         /// The entities that this class is capable of creating.  These match the PCode format.
         /// </summary>
@@ -51,6 +51,6 @@ namespace OpenSim.Region.Framework.Interfaces
         /// <param name="rot"></param>
         /// <param name="shape"></param>
         /// <returns>The entity created, or null if the creation failed</returns>
-        SceneObjectGroup CreateEntity(UUID ownerID, UUID groupID, Vector3 pos, Quaternion rot, PrimitiveBaseShape shape);       
+        SceneObjectGroup CreateEntity(UUID ownerID, UUID groupID, Vector3 pos, Quaternion rot, PrimitiveBaseShape shape);
     }
 }

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -61,7 +61,7 @@ namespace OpenSim.Region.ClientStack
             get { return m_commsManager; }
             set { m_commsManager = value; }
         }
-        protected CommunicationsManager m_commsManager;        
+        protected CommunicationsManager m_commsManager;
 
         protected StorageManager m_storageManager;
         
@@ -72,15 +72,7 @@ namespace OpenSim.Region.ClientStack
             get { return m_sceneManager; }
         }
         protected SceneManager m_sceneManager = new SceneManager();
-
-        protected IAssetCache m_assetCache;
-
-        public IAssetCache AssetCache
-        {
-            get { return m_assetCache; }
-            set { m_assetCache = value; }
-        }
-        
+       
         protected abstract void Initialize();
         
         /// <summary>
@@ -88,15 +80,15 @@ namespace OpenSim.Region.ClientStack
         /// </summary>
         /// 
         /// <param name="osSceneIdentifier">
-        /// The name of the OpenSim scene this physics scene is serving.  This will be used in log messages.  
+        /// The name of the OpenSim scene this physics scene is serving.  This will be used in log messages.
         /// </param>
-        /// <returns></returns>        
+        /// <returns></returns>
         protected abstract PhysicsScene GetPhysicsScene(string osSceneIdentifier);
         
         protected abstract StorageManager CreateStorageManager();
         protected abstract ClientStackManager CreateClientStackManager();
         protected abstract Scene CreateScene(RegionInfo regionInfo, StorageManager storageManager,
-                                             AgentCircuitManager circuitManager);        
+                                             AgentCircuitManager circuitManager);
 
         protected override void StartupSpecific()
         {
@@ -113,10 +105,10 @@ namespace OpenSim.Region.ClientStack
             
             if (m_networkServersInfo.HttpUsesSSL && (m_networkServersInfo.HttpListenerPort == m_networkServersInfo.httpSSLPort))
             {
-                m_log.Error("[HTTP]: HTTP Server config failed.   HTTP Server and HTTPS server must be on different ports");
+                m_log.Error("[REGION SERVER]: HTTP Server config failed.   HTTP Server and HTTPS server must be on different ports");
             }
 
-            m_log.Info("[REGION]: Starting HTTP server");
+            m_log.InfoFormat("[REGION SERVER]: Starting HTTP server on port {0}", m_httpServerPort);
             m_httpServer.Start();
 
             base.StartupSpecific();
@@ -129,7 +121,7 @@ namespace OpenSim.Region.ClientStack
         /// <param name="meshEngine">The name of the mesh engine to use</param>
         /// <param name="config">The configuration data to pass to the physics and mesh engines</param>
         /// <param name="osSceneIdentifier">
-        /// The name of the OpenSim scene this physics scene is serving.  This will be used in log messages.  
+        /// The name of the OpenSim scene this physics scene is serving.  This will be used in log messages.
         /// </param>
         /// <returns></returns>
         protected PhysicsScene GetPhysicsScene(

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -42,7 +42,7 @@ using OpenSim.Framework.Servers.HttpServer;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using BlockingLLSDQueue = OpenSim.Framework.BlockingQueue<OpenMetaverse.StructuredData.OSD>;
-using Caps=OpenSim.Framework.Communications.Capabilities.Caps;
+using Caps=OpenSim.Framework.Capabilities.Caps;
 
 namespace OpenSim.Region.CoreModules.Framework.EventQueue
 {
@@ -61,7 +61,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
         
         private Dictionary<UUID, int> m_ids = new Dictionary<UUID, int>();
 
-        private Dictionary<UUID, BlockingLLSDQueue> queues = new Dictionary<UUID, BlockingLLSDQueue>();
+        private Dictionary<UUID, Queue<OSD>> queues = new Dictionary<UUID, Queue<OSD>>();
         private Dictionary<UUID, UUID> m_QueueUUIDAvatarMapping = new Dictionary<UUID, UUID>();
         private Dictionary<UUID, UUID> m_AvatarQueueUUIDMapping = new Dictionary<UUID, UUID>();
             
@@ -131,7 +131,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
         /// </summary>
         /// <param name="agentId"></param>
         /// <returns></returns>
-        private BlockingLLSDQueue TryGetQueue(UUID agentId)
+        private Queue<OSD> TryGetQueue(UUID agentId)
         {
             lock (queues)
             {
@@ -141,7 +141,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
                         "[EVENTQUEUE]: Adding new queue for agent {0} in region {1}", 
                         agentId, m_scene.RegionInfo.RegionName);
                     
-                    queues[agentId] = new BlockingLLSDQueue();
+                    queues[agentId] = new Queue<OSD>();
                 }
                 
                 return queues[agentId];
@@ -153,7 +153,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
         /// </summary>
         /// <param name="agentId"></param>
         /// <returns></returns>
-        private BlockingLLSDQueue GetQueue(UUID agentId)
+        private Queue<OSD> GetQueue(UUID agentId)
         {
             lock (queues)
             {
@@ -173,7 +173,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
             //m_log.DebugFormat("[EVENTQUEUE]: Enqueuing event for {0} in region {1}", avatarID, m_scene.RegionInfo.RegionName);
             try
             {
-                BlockingLLSDQueue queue = GetQueue(avatarID);
+                Queue<OSD> queue = GetQueue(avatarID);
                 if (queue != null)
                     queue.Enqueue(ev);
             } 
@@ -203,7 +203,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
             m_log.DebugFormat("[EVENTQUEUE]: Closed client {0} in region {1}", AgentID, m_scene.RegionInfo.RegionName);
 
             int count = 0;
-            while (queues.ContainsKey(AgentID) && queues[AgentID].Count() > 0 && count++ < 5)
+            while (queues.ContainsKey(AgentID) && queues[AgentID].Count > 0 && count++ < 5)
             {
                 Thread.Sleep(1000);
             }
@@ -226,7 +226,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
                 foreach (UUID ky in removeitems)
                 {
                     m_AvatarQueueUUIDMapping.Remove(ky);
-                    m_scene.CommsManager.HttpServer.RemoveHTTPHandler("","/CAPS/EQG/" + ky.ToString() + "/");
+                    MainServer.Instance.RemovePollServiceHTTPHandler("","/CAPS/EQG/" + ky.ToString() + "/");
                 }
 
             }
@@ -315,8 +315,8 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
                                                        }));
             
             // This will persist this beyond the expiry of the caps handlers
-            m_scene.CommsManager.HttpServer.AddHTTPHandler(
-                capsBase + EventQueueGetUUID.ToString() + "/", EventQueuePath2);
+            MainServer.Instance.AddPollServiceHTTPHandler(
+                capsBase + EventQueueGetUUID.ToString() + "/", EventQueuePoll, new PollServiceEventArgs(null, HasEvents, GetEvents, NoEvents, agentID));
 
             Random rnd = new Random(Environment.TickCount);
             lock (m_ids)
@@ -324,6 +324,91 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
                 if (!m_ids.ContainsKey(agentID))
                     m_ids.Add(agentID, rnd.Next(30000000));
             }
+        }
+
+        public bool HasEvents(UUID requestID, UUID agentID)
+        {
+            // Don't use this, because of race conditions at agent closing time
+            //Queue<OSD> queue = TryGetQueue(agentID);
+
+            Queue<OSD> queue = GetQueue(agentID);
+            if (queue != null)
+                lock (queue)
+                {
+                    if (queue.Count > 0)
+                        return true;
+                    else
+                        return false;
+                }
+            return false;
+        }
+
+        public Hashtable GetEvents(UUID requestID, UUID pAgentId, string request)
+        {
+            Queue<OSD> queue = TryGetQueue(pAgentId);
+            OSD element;
+            lock (queue)
+            {
+                if (queue.Count == 0)
+                    return NoEvents(requestID, pAgentId);
+                element = queue.Dequeue(); // 15s timeout
+            }
+
+
+
+            int thisID = 0;
+            lock (m_ids)
+                thisID = m_ids[pAgentId];
+
+            OSDArray array = new OSDArray();
+            if (element == null) // didn't have an event in 15s
+            {
+                // Send it a fake event to keep the client polling!   It doesn't like 502s like the proxys say!
+                array.Add(EventQueueHelper.KeepAliveEvent());
+                m_log.DebugFormat("[EVENTQUEUE]: adding fake event for {0} in region {1}", pAgentId, m_scene.RegionInfo.RegionName);
+            }
+            else
+            {
+                array.Add(element);
+                lock (queue)
+                {
+                    while (queue.Count > 0)
+                    {
+                        array.Add(queue.Dequeue());
+                        thisID++;
+                    }
+                }
+            }
+
+            OSDMap events = new OSDMap();
+            events.Add("events", array);
+
+            events.Add("id", new OSDInteger(thisID));
+            lock (m_ids)
+            {
+                m_ids[pAgentId] = thisID + 1;
+            }
+            Hashtable responsedata = new Hashtable();
+            responsedata["int_response_code"] = 200;
+            responsedata["content_type"] = "application/xml";
+            responsedata["keepalive"] = false;
+            responsedata["reusecontext"] = false;
+            responsedata["str_response_string"] = OSDParser.SerializeLLSDXmlString(events);
+            return responsedata;
+            //m_log.DebugFormat("[EVENTQUEUE]: sending response for {0} in region {1}: {2}", agentID, m_scene.RegionInfo.RegionName, responsedata["str_response_string"]);
+        }
+
+        public Hashtable NoEvents(UUID requestID, UUID agentID)
+        {
+            Hashtable responsedata = new Hashtable();
+            responsedata["int_response_code"] = 502;
+            responsedata["content_type"] = "text/plain";
+            responsedata["keepalive"] = false;
+            responsedata["reusecontext"] = false;
+            responsedata["str_response_string"] = "Upstream error: ";
+            responsedata["error_status_text"] = "Upstream error:";
+            responsedata["http_protocol_version"] = "HTTP/1.0";
+            return responsedata;
         }
 
         public Hashtable ProcessQueue(Hashtable request, UUID agentID, Caps caps)
@@ -341,8 +426,8 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
 //                m_log.DebugFormat(debug + "  ]", agentID, m_scene.RegionInfo.RegionName, System.Threading.Thread.CurrentThread.Name);
 //            }
 
-            BlockingLLSDQueue queue = TryGetQueue(agentID);
-            OSD element = queue.Dequeue(15000); // 15s timeout
+            Queue<OSD> queue = TryGetQueue(agentID);
+            OSD element = queue.Dequeue(); // 15s timeout
 
             Hashtable responsedata = new Hashtable();
             
@@ -369,7 +454,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
                 responsedata["error_status_text"] = "Upstream error:";
                 responsedata["http_protocol_version"] = "HTTP/1.0";
                 return responsedata;
-            }            
+            }
 
             OSDArray array = new OSDArray();
             if (element == null) // didn't have an event in 15s
@@ -381,9 +466,9 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
             else
             {
                 array.Add(element);
-                while (queue.Count() > 0)
+                while (queue.Count > 0)
                 {
-                    array.Add(queue.Dequeue(1));
+                    array.Add(queue.Dequeue());
                     thisID++;
                 }
             }
@@ -404,6 +489,11 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
             //m_log.DebugFormat("[EVENTQUEUE]: sending response for {0} in region {1}: {2}", agentID, m_scene.RegionInfo.RegionName, responsedata["str_response_string"]);
 
             return responsedata;
+        }
+
+        public Hashtable EventQueuePoll(Hashtable request)
+        {
+            return new Hashtable();
         }
 
         public Hashtable EventQueuePath2(Hashtable request)
@@ -483,7 +573,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
                 if (AvatarID != UUID.Zero)
                 {
                     // Repair the CAP!
-                    //OpenSim.Framework.Communications.Capabilities.Caps caps = m_scene.GetCapsHandlerForUser(AvatarID);
+                    //OpenSim.Framework.Capabilities.Caps caps = m_scene.GetCapsHandlerForUser(AvatarID);
                     //string capsBase = "/CAPS/EQG/";
                     //caps.RegisterHandler("EventQueueGet",
                                 //new RestHTTPHandler("POST", capsBase + capUUID.ToString() + "/",
@@ -594,7 +684,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
                                                              timeStamp, offline, parentEstateID, position, ttl, transactionID, 
                                                              fromGroup, binaryBucket);
             Enqueue(item, toAgent);
-            m_log.InfoFormat("########### eq ChatterboxInvitation #############\n{0}", item);
+            //m_log.InfoFormat("########### eq ChatterboxInvitation #############\n{0}", item);
 
         }
 
@@ -604,7 +694,7 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
             OSD item = EventQueueHelper.ChatterBoxSessionAgentListUpdates(sessionID, fromAgent, canVoiceChat,
                                                                           isModerator, textMute);
             Enqueue(item, toAgent);
-            m_log.InfoFormat("########### eq ChatterBoxSessionAgentListUpdates #############\n{0}", item);
+            //m_log.InfoFormat("########### eq ChatterBoxSessionAgentListUpdates #############\n{0}", item);
         }
 
         public void ParcelProperties(ParcelPropertiesPacket parcelPropertiesPacket, UUID avatarID)
@@ -616,6 +706,11 @@ namespace OpenSim.Region.CoreModules.Framework.EventQueue
         public void GroupMembership(AgentGroupDataUpdatePacket groupUpdate, UUID avatarID)
         {
             OSD item = EventQueueHelper.GroupMembership(groupUpdate);
+            Enqueue(item, avatarID);
+        }
+        public void QueryReply(PlacesReplyPacket groupUpdate, UUID avatarID)
+        {
+            OSD item = EventQueueHelper.PlacesQuery(groupUpdate);
             Enqueue(item, avatarID);
         }
     }

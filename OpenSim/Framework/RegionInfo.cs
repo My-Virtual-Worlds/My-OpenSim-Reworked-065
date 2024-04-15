@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -26,169 +26,19 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Xml;
+using System.IO;
 using Nini.Config;
 using OpenMetaverse;
 using OpenMetaverse.StructuredData;
+using OpenSim.Framework.Console;
 
 namespace OpenSim.Framework
 {
-    [Serializable]
-    public class SimpleRegionInfo
-    {
-        // private static readonly log4net.ILog m_log
-        //     = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-
-        /// <summary>
-        /// The port by which http communication occurs with the region (most noticeably, CAPS communication)
-        /// </summary>
-        public uint HttpPort
-        {
-            get { return m_httpPort; }
-            set { m_httpPort = value; }
-        }
-        protected uint m_httpPort;
-
-        /// <summary>
-        /// A well-formed URI for the host region server (namely "http://" + ExternalHostName)
-        /// </summary>
-        public string ServerURI
-        {
-            get { return m_serverURI; }
-            set { m_serverURI = value; }
-        }
-        protected string m_serverURI;
-
-        protected bool Allow_Alternate_Ports;
-        public bool m_allow_alternate_ports;
-        protected string m_externalHostName;
-
-        protected IPEndPoint m_internalEndPoint;
-        protected uint? m_regionLocX;
-        protected uint? m_regionLocY;
-        protected uint m_remotingPort;
-        public UUID RegionID = UUID.Zero;
-        public string RemotingAddress;
-
-        public SimpleRegionInfo()
-        {
-        }
-
-        public SimpleRegionInfo(uint regionLocX, uint regionLocY, IPEndPoint internalEndPoint, string externalUri)
-        {
-            m_regionLocX = regionLocX;
-            m_regionLocY = regionLocY;
-
-            m_internalEndPoint = internalEndPoint;
-            m_externalHostName = externalUri;
-        }
-
-        public SimpleRegionInfo(uint regionLocX, uint regionLocY, string externalUri, uint port)
-        {
-            m_regionLocX = regionLocX;
-            m_regionLocY = regionLocY;
-
-            m_externalHostName = externalUri;
-
-            m_internalEndPoint = new IPEndPoint(IPAddress.Parse("0.0.0.0"), (int) port);
-        }
-
-        public SimpleRegionInfo(RegionInfo ConvertFrom)
-        {
-            m_regionLocX = ConvertFrom.RegionLocX;
-            m_regionLocY = ConvertFrom.RegionLocY;
-            m_internalEndPoint = ConvertFrom.InternalEndPoint;
-            m_externalHostName = ConvertFrom.ExternalHostName;
-            m_remotingPort = ConvertFrom.RemotingPort;
-            m_httpPort = ConvertFrom.HttpPort;
-            m_allow_alternate_ports = ConvertFrom.m_allow_alternate_ports;
-            RemotingAddress = ConvertFrom.RemotingAddress;
-            RegionID = UUID.Zero;
-            ServerURI = ConvertFrom.ServerURI;
-        }
-
-        public uint RemotingPort
-        {
-            get { return m_remotingPort; }
-            set { m_remotingPort = value; }
-        }
-
-        /// <value>
-        /// This accessor can throw all the exceptions that Dns.GetHostAddresses can throw.
-        ///
-        /// XXX Isn't this really doing too much to be a simple getter, rather than an explict method?
-        /// </value>
-        public IPEndPoint ExternalEndPoint
-        {
-            get
-            {
-                // Old one defaults to IPv6
-                //return new IPEndPoint(Dns.GetHostAddresses(m_externalHostName)[0], m_internalEndPoint.Port);
-
-                IPAddress ia = null;
-                // If it is already an IP, don't resolve it - just return directly
-                if (IPAddress.TryParse(m_externalHostName, out ia))
-                    return new IPEndPoint(ia, m_internalEndPoint.Port);
-
-                // Reset for next check
-                ia = null;
-
-                foreach (IPAddress Adr in Dns.GetHostAddresses(m_externalHostName))
-                {
-                    if (ia == null)
-                        ia = Adr;
-
-                    if (Adr.AddressFamily == AddressFamily.InterNetwork)
-                    {
-                        ia = Adr;
-                        break;
-                    }
-                }
-
-                return new IPEndPoint(ia, m_internalEndPoint.Port);
-            }
-
-            set { m_externalHostName = value.ToString(); }
-        }
-
-        public string ExternalHostName
-        {
-            get { return m_externalHostName; }
-            set { m_externalHostName = value; }
-        }
-
-        public IPEndPoint InternalEndPoint
-        {
-            get { return m_internalEndPoint; }
-            set { m_internalEndPoint = value; }
-        }
-
-        public uint RegionLocX
-        {
-            get { return m_regionLocX.Value; }
-            set { m_regionLocX = value; }
-        }
-
-        public uint RegionLocY
-        {
-            get { return m_regionLocY.Value; }
-            set { m_regionLocY = value; }
-        }
-
-        public ulong RegionHandle
-        {
-            get { return Util.UIntsToLong((RegionLocX * (uint) Constants.RegionSize), (RegionLocY * (uint) Constants.RegionSize)); }
-        }
-
-        public int getInternalEndPointPort()
-        {
-            return m_internalEndPoint.Port;
-        }
-    }
-
-    public class RegionInfo : SimpleRegionInfo
+    public class RegionInfo
     {
         // private static readonly log4net.ILog m_log
         //     = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
@@ -198,9 +48,11 @@ namespace OpenSim.Framework
         public string DataStore = String.Empty;
         public string RegionFile = String.Empty;
         public bool isSandbox = false;
+        public bool Persistent = true;
+
         private EstateSettings m_estateSettings;
         private RegionSettings m_regionSettings;
-        //private IConfigSource m_configSource = null;
+        // private IConfigSource m_configSource = null;
 
         public UUID MasterAvatarAssignedUUID = UUID.Zero;
         public string MasterAvatarFirstName = String.Empty;
@@ -209,7 +61,6 @@ namespace OpenSim.Framework
         public UUID originRegionID = UUID.Zero;
         public string proxyUrl = "";
         public int ProxyOffset = 0;
-        public string RegionName = String.Empty;
         public string regionSecret = UUID.Random().ToString();
         
         public string osSecret;
@@ -221,6 +72,21 @@ namespace OpenSim.Framework
         private int m_physPrimMax = 0;
         private bool m_clampPrimSize = false;
         private int m_objectCapacity = 0;
+        private string m_regionType = String.Empty;
+        protected uint m_httpPort;
+        protected string m_serverURI;
+        protected string m_regionName = String.Empty;
+        protected bool Allow_Alternate_Ports;
+        public bool m_allow_alternate_ports;
+        protected string m_externalHostName;
+        protected IPEndPoint m_internalEndPoint;
+        protected uint? m_regionLocX;
+        protected uint? m_regionLocY;
+        protected uint m_remotingPort;
+        public UUID RegionID = UUID.Zero;
+        public string RemotingAddress;
+        public UUID ScopeID = UUID.Zero;
+
 
         // Apparently, we're applying the same estatesettings regardless of whether it's local or remote.
 
@@ -229,59 +95,90 @@ namespace OpenSim.Framework
         // access the same database server. Since estate settings are lodaed
         // from there, that should be sufficient for full remote administration
 
-        public RegionInfo(string description, string filename, bool skipConsoleConfig, IConfigSource configSource)
+        // File based loading
+        //
+        public RegionInfo(string description, string filename, bool skipConsoleConfig, IConfigSource configSource) : this(description, filename, skipConsoleConfig, configSource, String.Empty)
         {
-            //m_configSource = configSource;
+        }
+
+        public RegionInfo(string description, string filename, bool skipConsoleConfig, IConfigSource configSource, string configName)
+        {
+            // m_configSource = configSource;
+
+            if (filename.ToLower().EndsWith(".ini"))
+            {
+                if (!File.Exists(filename)) // New region config request
+                {
+                    IniConfigSource newFile = new IniConfigSource();
+                    ReadNiniConfig(newFile, String.Empty);
+
+                    newFile.Save(filename);
+
+                    RegionFile = filename;
+
+                    return;
+                }
+
+                IniConfigSource source = new IniConfigSource(filename);
+
+                bool saveFile = false;
+                if (source.Configs[configName] == null)
+                    saveFile = true;
+
+                ReadNiniConfig(source, configName);
+
+                if (configName != String.Empty && saveFile)
+                    source.Save(filename);
+
+                RegionFile = filename;
+
+                return;
+            }
+
+            try
+            {
+                // This will throw if it's not legal Nini XML format
+                // and thereby toss it to the legacy loader
+                //
+                IConfigSource xmlsource = new XmlConfigSource(filename);
+
+                ReadNiniConfig(xmlsource, configName);
+
+                RegionFile = filename;
+
+                return;
+            }
+            catch (Exception)
+            {
+            }
+
             configMember =
                 new ConfigurationMember(filename, description, loadConfigurationOptions, handleIncomingConfiguration, !skipConsoleConfig);
             configMember.performConfigurationRetrieve();
             RegionFile = filename;
         }
 
+        // The web loader uses this
+        //
         public RegionInfo(string description, XmlNode xmlNode, bool skipConsoleConfig, IConfigSource configSource)
         {
-            //m_configSource = configSource;
+            // m_configSource = configSource;
             configMember =
                 new ConfigurationMember(xmlNode, description, loadConfigurationOptions, handleIncomingConfiguration, !skipConsoleConfig);
             configMember.performConfigurationRetrieve();
         }
 
-        public RegionInfo(uint regionLocX, uint regionLocY, IPEndPoint internalEndPoint, string externalUri) :
-            base(regionLocX, regionLocY, internalEndPoint, externalUri)
+        public RegionInfo(uint regionLocX, uint regionLocY, IPEndPoint internalEndPoint, string externalUri)
         {
+            m_regionLocX = regionLocX;
+            m_regionLocY = regionLocY;
+
+            m_internalEndPoint = internalEndPoint;
+            m_externalHostName = externalUri;
         }
 
         public RegionInfo()
         {
-        }
-
-        public RegionInfo(SerializableRegionInfo ConvertFrom)
-        {
-            m_regionLocX = ConvertFrom.RegionLocX;
-            m_regionLocY = ConvertFrom.RegionLocY;
-            m_internalEndPoint = ConvertFrom.InternalEndPoint;
-            m_externalHostName = ConvertFrom.ExternalHostName;
-            m_remotingPort = ConvertFrom.RemotingPort;
-            m_allow_alternate_ports = ConvertFrom.m_allow_alternate_ports;
-            RemotingAddress = ConvertFrom.RemotingAddress;
-            RegionID = UUID.Zero;
-            proxyUrl = ConvertFrom.ProxyUrl;
-            originRegionID = ConvertFrom.OriginRegionID;
-            RegionName = ConvertFrom.RegionName;
-            ServerURI = ConvertFrom.ServerURI;
-        }
-
-        public RegionInfo(SimpleRegionInfo ConvertFrom)
-        {
-            m_regionLocX = ConvertFrom.RegionLocX;
-            m_regionLocY = ConvertFrom.RegionLocY;
-            m_internalEndPoint = ConvertFrom.InternalEndPoint;
-            m_externalHostName = ConvertFrom.ExternalHostName;
-            m_remotingPort = ConvertFrom.RemotingPort;
-            m_allow_alternate_ports = ConvertFrom.m_allow_alternate_ports;
-            RemotingAddress = ConvertFrom.RemotingAddress;
-            RegionID = UUID.Zero;
-            ServerURI = ConvertFrom.ServerURI;
         }
 
         public EstateSettings EstateSettings
@@ -339,6 +236,116 @@ namespace OpenSim.Framework
             get { return (byte)Util.ConvertMaturityToAccessLevel((uint)RegionSettings.Maturity); }
         }
 
+        public string RegionType
+        {
+            get { return m_regionType; }
+        }
+
+        /// <summary>
+        /// The port by which http communication occurs with the region (most noticeably, CAPS communication)
+        /// </summary>
+        public uint HttpPort
+        {
+            get { return m_httpPort; }
+            set { m_httpPort = value; }
+        }
+
+        /// <summary>
+        /// A well-formed URI for the host region server (namely "http://" + ExternalHostName)
+        /// </summary>
+        public string ServerURI
+        {
+            get { return m_serverURI; }
+            set { m_serverURI = value; }
+        }
+
+        public string RegionName
+        {
+            get { return m_regionName; }
+            set { m_regionName = value; }
+        }
+
+        public uint RemotingPort
+        {
+            get { return m_remotingPort; }
+            set { m_remotingPort = value; }
+        }
+
+        /// <value>
+        /// This accessor can throw all the exceptions that Dns.GetHostAddresses can throw.
+        ///
+        /// XXX Isn't this really doing too much to be a simple getter, rather than an explict method?
+        /// </value>
+        public IPEndPoint ExternalEndPoint
+        {
+            get
+            {
+                // Old one defaults to IPv6
+                //return new IPEndPoint(Dns.GetHostAddresses(m_externalHostName)[0], m_internalEndPoint.Port);
+
+                IPAddress ia = null;
+                // If it is already an IP, don't resolve it - just return directly
+                if (IPAddress.TryParse(m_externalHostName, out ia))
+                    return new IPEndPoint(ia, m_internalEndPoint.Port);
+
+                // Reset for next check
+                ia = null;
+                try
+                {
+                    foreach (IPAddress Adr in Dns.GetHostAddresses(m_externalHostName))
+                    {
+                        if (ia == null)
+                            ia = Adr;
+
+                        if (Adr.AddressFamily == AddressFamily.InterNetwork)
+                        {
+                            ia = Adr;
+                            break;
+                        }
+                    }
+                }
+                catch (SocketException e)
+                {
+                    throw new Exception(
+                        "Unable to resolve local hostname " + m_externalHostName + " innerException of type '" +
+                        e + "' attached to this exception", e);
+                }
+
+                return new IPEndPoint(ia, m_internalEndPoint.Port);
+            }
+
+            set { m_externalHostName = value.ToString(); }
+        }
+
+        public string ExternalHostName
+        {
+            get { return m_externalHostName; }
+            set { m_externalHostName = value; }
+        }
+
+        public IPEndPoint InternalEndPoint
+        {
+            get { return m_internalEndPoint; }
+            set { m_internalEndPoint = value; }
+        }
+
+        public uint RegionLocX
+        {
+            get { return m_regionLocX.Value; }
+            set { m_regionLocX = value; }
+        }
+
+        public uint RegionLocY
+        {
+            get { return m_regionLocY.Value; }
+            set { m_regionLocY = value; }
+        }
+
+        public ulong RegionHandle
+        {
+            get { return Util.UIntsToLong((RegionLocX * (uint) Constants.RegionSize), (RegionLocY * (uint) Constants.RegionSize)); }
+        }
+
         public void SetEndPoint(string ipaddr, int port)
         {
             IPAddress tmpIP = IPAddress.Parse(ipaddr);
@@ -346,53 +353,244 @@ namespace OpenSim.Framework
             m_internalEndPoint = tmpEPE;
         }
 
-        //not in use, should swap to nini though.
-        public void LoadFromNiniSource(IConfigSource source)
+        private void ReadNiniConfig(IConfigSource source, string name)
         {
-            LoadFromNiniSource(source, "RegionInfo");
+            bool creatingNew = false;
+
+            if (source.Configs.Count == 0)
+            {
+                MainConsole.Instance.Output("=====================================\n");
+                MainConsole.Instance.Output("We are now going to ask a couple of questions about your region.\n");
+                MainConsole.Instance.Output("You can press 'enter' without typing anything to use the default\n");
+                MainConsole.Instance.Output("the default is displayed between [ ] brackets.\n");
+                MainConsole.Instance.Output("=====================================\n");
+
+                if (name == String.Empty)
+                    name = MainConsole.Instance.CmdPrompt("New region name", name);
+                if (name == String.Empty)
+                    throw new Exception("Cannot interactively create region with no name");
+
+                source.AddConfig(name);
+
+                creatingNew = true;
+            }
+
+            if (name == String.Empty)
+                name = source.Configs[0].Name;
+
+            if (source.Configs[name] == null)
+            {
+                source.AddConfig(name);
+
+                creatingNew = true;
+            }
+
+            IConfig config = source.Configs[name];
+
+            // UUID
+            //
+            string regionUUID = config.GetString("RegionUUID", string.Empty);
+
+            if (regionUUID == String.Empty)
+            {
+                UUID newID = UUID.Random();
+
+                regionUUID = MainConsole.Instance.CmdPrompt("Region UUID", newID.ToString());
+                config.Set("RegionUUID", regionUUID);
+            }
+
+            RegionID = new UUID(regionUUID);
+            originRegionID = RegionID; // What IS this?!
+
+            
+            // Region name
+            //
+            RegionName = name;
+
+            
+            // Region location
+            //
+            string location = config.GetString("Location", String.Empty);
+
+            if (location == String.Empty)
+            {
+                location = MainConsole.Instance.CmdPrompt("Region Location", "1000,1000");
+                config.Set("Location", location);
+            }
+
+            string[] locationElements = location.Split(new char[] {','});
+
+            m_regionLocX = Convert.ToUInt32(locationElements[0]);
+            m_regionLocY = Convert.ToUInt32(locationElements[1]);
+
+
+            // Datastore (is this implemented? Omitted from example!)
+            //
+            DataStore = config.GetString("Datastore", String.Empty);
+
+
+            // Internal IP
+            //
+            IPAddress address;
+            
+            if (config.Contains("InternalAddress"))
+            {
+                address = IPAddress.Parse(config.GetString("InternalAddress", String.Empty));
+            }
+            else
+            {
+                address = IPAddress.Parse(MainConsole.Instance.CmdPrompt("Internal IP address", "0.0.0.0"));
+                config.Set("InternalAddress", address.ToString());
+            }
+
+            int port;
+
+            if (config.Contains("InternalPort"))
+            {
+                port = config.GetInt("InternalPort", 9000);
+            }
+            else
+            {
+                port = Convert.ToInt32(MainConsole.Instance.CmdPrompt("Internal port", "9000"));
+                config.Set("InternalPort", port);
+            }
+
+            m_internalEndPoint = new IPEndPoint(address, port);
+
+            if (config.Contains("AllowAlternatePorts"))
+            {
+                m_allow_alternate_ports = config.GetBoolean("AllowAlternatePorts", true);
+            }
+            else
+            {
+                m_allow_alternate_ports = Convert.ToBoolean(MainConsole.Instance.CmdPrompt("Allow alternate ports", "False"));
+
+                config.Set("AllowAlternatePorts", m_allow_alternate_ports.ToString());
+            }
+
+            // External IP
+            //
+            string externalName;
+
+            if (config.Contains("ExternalHostName"))
+            {
+                externalName = config.GetString("ExternalHostName", "SYSTEMIP");
+            }
+            else
+            {
+                externalName = MainConsole.Instance.CmdPrompt("External host name", "SYSTEMIP");
+                config.Set("ExternalHostName", externalName);
+            }
+
+            if (externalName == "SYSTEMIP")
+                m_externalHostName = Util.GetLocalHost().ToString();
+            else
+                m_externalHostName = externalName;
+
+            // Master avatar cruft
+            //
+            string masterAvatarUUID;
+            if (!creatingNew)
+            {
+                masterAvatarUUID = config.GetString("MasterAvatarUUID", UUID.Zero.ToString());
+                MasterAvatarFirstName = config.GetString("MasterAvatarFirstName", String.Empty);
+                MasterAvatarLastName = config.GetString("MasterAvatarLastName", String.Empty);
+                MasterAvatarSandboxPassword = config.GetString("MasterAvatarSandboxPassword", String.Empty);
+            }
+            else
+            {
+                masterAvatarUUID = MainConsole.Instance.CmdPrompt("Master Avatar UUID", UUID.Zero.ToString());
+                if (masterAvatarUUID != UUID.Zero.ToString())
+                {
+                    config.Set("MasterAvatarUUID", masterAvatarUUID);
+                }
+                else
+                {
+                    MasterAvatarFirstName = MainConsole.Instance.CmdPrompt("Master Avatar first name (enter for no master avatar)", String.Empty);
+                    if (MasterAvatarFirstName != String.Empty)
+                    {
+                        MasterAvatarLastName = MainConsole.Instance.CmdPrompt("Master Avatar last name", String.Empty);
+                        MasterAvatarSandboxPassword = MainConsole.Instance.CmdPrompt("Master Avatar sandbox password", String.Empty);
+                        
+                        config.Set("MasterAvatarFirstName", MasterAvatarFirstName);
+                        config.Set("MasterAvatarLastName", MasterAvatarLastName);
+                        config.Set("MasterAvatarSandboxPassword", MasterAvatarSandboxPassword);
+                    }
+                }
+            }
+
+            MasterAvatarAssignedUUID = new UUID(masterAvatarUUID);
+
+            m_regionType = config.GetString("RegionType", String.Empty);
+
+            // Prim stuff
+            //
+            m_nonphysPrimMax = config.GetInt("NonphysicalPrimMax", 256);
+
+            m_physPrimMax = config.GetInt("PhysicalPrimMax", 10);
+
+            m_clampPrimSize = config.GetBoolean("ClampPrimSize", false);
+
+            m_objectCapacity = config.GetInt("MaxPrims", 15000);
+
+
+            // Multi-tenancy
+            //
+            ScopeID = new UUID(config.GetString("ScopeID", UUID.Zero.ToString()));
         }
 
-        //not in use, should swap to nini though.
-        public void LoadFromNiniSource(IConfigSource source, string sectionName)
+        private void WriteNiniConfig(IConfigSource source)
         {
-            string errorMessage = String.Empty;
-            RegionID = new UUID(source.Configs[sectionName].GetString("Region_ID", UUID.Random().ToString()));
-            RegionName = source.Configs[sectionName].GetString("sim_name", "OpenSim Test");
-            m_regionLocX = Convert.ToUInt32(source.Configs[sectionName].GetString("sim_location_x", "1000"));
-            m_regionLocY = Convert.ToUInt32(source.Configs[sectionName].GetString("sim_location_y", "1000"));
-            // this.DataStore = source.Configs[sectionName].GetString("datastore", "OpenSim.db");
+            IConfig config = source.Configs[RegionName];
 
-            string ipAddress = source.Configs[sectionName].GetString("internal_ip_address", "0.0.0.0");
-            IPAddress ipAddressResult;
-            if (IPAddress.TryParse(ipAddress, out ipAddressResult))
-            {
-                m_internalEndPoint = new IPEndPoint(ipAddressResult, 0);
-            }
-            else
-            {
-                errorMessage = "needs an IP Address (IPAddress)";
-            }
-            m_internalEndPoint.Port =
-                source.Configs[sectionName].GetInt("internal_ip_port", (int) ConfigSettings.DefaultRegionHttpPort);
+            if (config != null)
+                source.Configs.Remove(RegionName);
 
-            string externalHost = source.Configs[sectionName].GetString("external_host_name", "127.0.0.1");
-            if (externalHost != "SYSTEMIP")
+            config = source.AddConfig(RegionName);
+
+            config.Set("RegionUUID", RegionID.ToString());
+
+            string location = String.Format("{0},{1}", m_regionLocX, m_regionLocY);
+            config.Set("Location", location);
+
+            if (DataStore != String.Empty)
+                config.Set("Datastore", DataStore);
+
+            config.Set("InternalAddress", m_internalEndPoint.Address.ToString());
+            config.Set("InternalPort", m_internalEndPoint.Port);
+
+            config.Set("AllowAlternatePorts", m_allow_alternate_ports.ToString());
+
+            config.Set("ExternalHostName", m_externalHostName);
+
+            if (MasterAvatarAssignedUUID != UUID.Zero)
             {
-                m_externalHostName = externalHost;
+                config.Set("MasterAvatarUUID", MasterAvatarAssignedUUID.ToString());
             }
-            else
+            else if (MasterAvatarFirstName != String.Empty && MasterAvatarLastName != String.Empty)
             {
-                m_externalHostName = Util.GetLocalHost().ToString();
+                config.Set("MasterAvatarFirstName", MasterAvatarFirstName);
+                config.Set("MasterAvatarLastName", MasterAvatarLastName);
+            }
+            if (MasterAvatarSandboxPassword != String.Empty)
+            {
+                config.Set("MasterAvatarSandboxPassword", MasterAvatarSandboxPassword);
             }
 
-            MasterAvatarFirstName = source.Configs[sectionName].GetString("master_avatar_first", "Test");
-            MasterAvatarLastName = source.Configs[sectionName].GetString("master_avatar_last", "User");
-            MasterAvatarSandboxPassword = source.Configs[sectionName].GetString("master_avatar_pass", "test");
+            if (m_nonphysPrimMax != 0)
+                config.Set("NonphysicalPrimMax", m_nonphysPrimMax);
+            if (m_physPrimMax != 0)
+                config.Set("PhysicalPrimMax", m_physPrimMax);
+            config.Set("ClampPrimSize", m_clampPrimSize.ToString());
 
-            if (errorMessage != String.Empty)
-            {
-                // a error
-            }
+            if (m_objectCapacity != 0)
+                config.Set("MaxPrims", m_objectCapacity);
+
+            if (ScopeID != UUID.Zero)
+                config.Set("ScopeID", ScopeID.ToString());
+
+            if (RegionType != String.Empty)
+                config.Set("RegionType", RegionType);
         }
 
         public bool ignoreIncomingConfiguration(string configuration_key, object configuration_result)
@@ -402,6 +600,23 @@ namespace OpenSim.Framework
 
         public void SaveRegionToFile(string description, string filename)
         {
+            if (filename.ToLower().EndsWith(".ini"))
+            {
+                IniConfigSource source = new IniConfigSource();
+                try
+                {
+                    source = new IniConfigSource(filename); // Load if it exists
+                }
+                catch (Exception)
+                {
+                }
+
+                WriteNiniConfig(source);
+
+                source.Save(filename);
+
+                return;
+            }
             configMember = new ConfigurationMember(filename, description, loadConfigurationOptionsFromMe,
                                                    ignoreIncomingConfiguration, false);
             configMember.performConfigurationRetrieve();
@@ -462,6 +677,12 @@ namespace OpenSim.Framework
             
             configMember.addConfigurationOption("object_capacity", ConfigurationOption.ConfigurationTypes.TYPE_INT32,
                                                 "Max objects this sim will hold", m_objectCapacity.ToString(), true);
+            
+            configMember.addConfigurationOption("scope_id", ConfigurationOption.ConfigurationTypes.TYPE_UUID,
+                                                "Scope ID for this region", ScopeID.ToString(), true);
+
+            configMember.addConfigurationOption("region_type", ConfigurationOption.ConfigurationTypes.TYPE_STRING,
+                                                "Free form string describing the type of region", String.Empty, true);
         }
 
         public void loadConfigurationOptions()
@@ -522,6 +743,12 @@ namespace OpenSim.Framework
             
             configMember.addConfigurationOption("object_capacity", ConfigurationOption.ConfigurationTypes.TYPE_INT32,
                                                 "Max objects this sim will hold", "0", true);
+
+            configMember.addConfigurationOption("scope_id", ConfigurationOption.ConfigurationTypes.TYPE_UUID,
+                                                "Scope ID for this region", UUID.Zero.ToString(), true);
+
+            configMember.addConfigurationOption("region_type", ConfigurationOption.ConfigurationTypes.TYPE_STRING,
+                                                "Region Type", String.Empty, true);
         }
 
         public bool shouldMasterAvatarDetailsBeAsked(string configuration_key)
@@ -599,6 +826,12 @@ namespace OpenSim.Framework
                 case "object_capacity":
                     m_objectCapacity = (int)configuration_result;
                     break;
+                case "scope_id":
+                    ScopeID = (UUID)configuration_result;
+                    break;
+                case "region_type":
+                    m_regionType = (string)configuration_result;
+                    break;
             }
 
             return true;
@@ -606,10 +839,11 @@ namespace OpenSim.Framework
 
         public void SaveLastMapUUID(UUID mapUUID)
         {
-            if (null == configMember) return;
-
             lastMapUUID = mapUUID;
             lastMapRefresh = Util.UnixTimeSinceEpoch().ToString();
+
+            if (configMember == null)
+                return;
 
             configMember.forceSetConfigurationOption("lastmap_uuid", mapUUID.ToString());
             configMember.forceSetConfigurationOption("lastmap_refresh", lastMapRefresh);
@@ -634,6 +868,8 @@ namespace OpenSim.Framework
             args["allow_alt_ports"] = OSD.FromBoolean(m_allow_alternate_ports);
             if ((proxyUrl != null) && !proxyUrl.Equals(""))
                 args["proxy_url"] = OSD.FromString(proxyUrl);
+            if (RegionType != String.Empty)
+                args["region_type"] = OSD.FromString(RegionType);
 
             return args;
         }
@@ -681,12 +917,14 @@ namespace OpenSim.Framework
                 m_allow_alternate_ports = args["allow_alt_ports"].AsBoolean();
             if (args["proxy_url"] != null)
                 proxyUrl = args["proxy_url"].AsString();
+            if (args["region_type"] != null)
+                m_regionType = args["region_type"].AsString();
         }
 
         public static RegionInfo Create(UUID regionID, string regionName, uint regX, uint regY, string externalHostName, uint httpPort, uint simPort, uint remotingPort, string serverURI)
         {
             RegionInfo regionInfo;
-            IPEndPoint neighbourInternalEndPoint = new IPEndPoint(Util.GetHostFromDNS(externalHostName), (int)simPort);                    
+            IPEndPoint neighbourInternalEndPoint = new IPEndPoint(Util.GetHostFromDNS(externalHostName), (int)simPort);
             regionInfo = new RegionInfo(regX, regY, neighbourInternalEndPoint, externalHostName);
             regionInfo.RemotingPort = remotingPort;
             regionInfo.RemotingAddress = externalHostName;
@@ -697,5 +935,27 @@ namespace OpenSim.Framework
             return regionInfo;
         }
 
+        public int getInternalEndPointPort()
+        {
+            return m_internalEndPoint.Port;
+        }
+
+        public Dictionary<string, object> ToKeyValuePairs()
+        {
+            Dictionary<string, object> kvp = new Dictionary<string, object>();
+            kvp["uuid"] = RegionID.ToString();
+            kvp["locX"] = RegionLocX.ToString();
+            kvp["locY"] = RegionLocY.ToString();
+            kvp["external_ip_address"] = ExternalEndPoint.Address.ToString();
+            kvp["external_port"] = ExternalEndPoint.Port.ToString();
+            kvp["external_host_name"] = ExternalHostName;
+            kvp["http_port"] = HttpPort.ToString();
+            kvp["internal_ip_address"] = InternalEndPoint.Address.ToString();
+            kvp["internal_port"] = InternalEndPoint.Port.ToString();
+            kvp["alternate_ports"] = m_allow_alternate_ports.ToString();
+            kvp["server_uri"] = ServerURI;
+
+            return kvp;
+        }
     }
 }

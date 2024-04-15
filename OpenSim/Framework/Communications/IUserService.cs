@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -28,6 +28,7 @@
 using System;
 using System.Collections.Generic;
 using OpenMetaverse;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Framework.Communications
 {
@@ -127,13 +128,30 @@ namespace OpenSim.Framework.Communications
         /// 
         /// <param name="friendlistowner">The agent for whom we're retreiving the friends Data.</param>
         /// <returns>
-        /// A List of FriendListItems that contains info about the user's friends.  
+        /// A List of FriendListItems that contains info about the user's friends.
         /// Always returns a list even if the user has no friends
-        /// </returns>        
+        /// </returns>
         List<FriendListItem> GetUserFriendList(UUID friendlistowner);
 
         // This probably shouldn't be here, it belongs to IAuthentication
         // But since Scenes only have IUserService references, I'm placing it here for now.
         bool VerifySession(UUID userID, UUID sessionID);
+
+        /// <summary>
+        /// Authenticate a user by their password.
+        /// </summary>
+        /// 
+        /// This is used by callers outside the login process that want to
+        /// verify a user who has given their password.
+        ///
+        /// This should probably also be in IAuthentication but is here for the same reasons as VerifySession() is
+        ///
+        /// <param name="userID"></param>
+        /// <param name="password"></param>
+        /// <returns></returns>
+        bool AuthenticateUserByPassword(UUID userID, string password);
+
+        // Temporary Hack until we move everything to the new service model
+        void SetInventoryService(IInventoryService invService);
     }
 }

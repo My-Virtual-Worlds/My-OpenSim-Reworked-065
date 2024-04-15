@@ -1,7 +1,7 @@
 <Nini>
   <Section Name="World Standard Library">
     <Key Name="foldersFile" Value="WorldLibrary/WorldLibraryFolders.xml"/>
-    <Key Name="itemsFile" Value="WOrldLibrary/WorldLibrary.xml"/>
+    <Key Name="itemsFile" Value="WorldLibrary/WorldLibrary.xml"/>
   </Section>
   
 <!-- Additional libraries can be added as shown below.  These folders and items can appear underneath

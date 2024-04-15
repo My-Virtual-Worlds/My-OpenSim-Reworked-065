@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,12 +29,12 @@ using System;
 using OpenMetaverse;
 
 namespace OpenSim.Region.Framework.Interfaces
-{       
+{
     public interface ISoundModule
     {
-        void PlayAttachedSound(UUID soundID, UUID ownerID, UUID objectID, double gain, Vector3 position, byte flags);
+        void PlayAttachedSound(UUID soundID, UUID ownerID, UUID objectID, double gain, Vector3 position, byte flags, float radius);
         
         void TriggerSound(
-            UUID soundId, UUID ownerID, UUID objectID, UUID parentID, double gain, Vector3 position, UInt64 handle);        
+            UUID soundId, UUID ownerID, UUID objectID, UUID parentID, double gain, Vector3 position, UInt64 handle, float radius);
     }
 }

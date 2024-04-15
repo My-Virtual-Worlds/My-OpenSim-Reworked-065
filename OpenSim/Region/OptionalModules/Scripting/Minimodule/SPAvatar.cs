@@ -25,9 +25,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Security;
 using OpenMetaverse;
 using OpenSim.Region.Framework.Scenes;
+using OpenSim.Region.Framework.Interfaces;
 
 namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 {
@@ -35,10 +38,13 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
     {
         private readonly Scene m_rootScene;
         private readonly UUID m_ID;
+        private readonly ISecurityCredential m_security;
+        //private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public SPAvatar(Scene scene, UUID ID)
+        public SPAvatar(Scene scene, UUID ID, ISecurityCredential security)
         {
             m_rootScene = scene;
+            m_security = security;
             m_ID = ID;
         }
 
@@ -50,7 +56,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         public string Name
         {
             get { return GetSP().Name; }
-            set { throw new InvalidOperationException("Avatar Names are a read-only property."); }
+            set { throw new SecurityException("Avatar Names are a read-only property."); }
         }
 
         public UUID GlobalID
@@ -63,5 +69,40 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             get { return GetSP().AbsolutePosition; }
             set { GetSP().TeleportWithMomentum(value); }
         }
+        
+        public bool IsChildAgent
+        {
+            get { return GetSP().IsChildAgent; }
+        }
+        
+        #region IAvatar implementation
+        public IAvatarAttachment[] Attachments
+        {
+            get {
+                List<IAvatarAttachment> attachments = new List<IAvatarAttachment>();
+                
+                Hashtable internalAttachments = GetSP().Appearance.GetAttachments();
+                if (internalAttachments != null)
+                {
+                    foreach (DictionaryEntry element in internalAttachments)
+                    {
+                        Hashtable attachInfo = (Hashtable)element.Value;
+                        attachments.Add(new SPAvatarAttachment(m_rootScene, this, (int) element.Key,
+                                                               new UUID((string) attachInfo["item"]),
+                                                               new UUID((string) attachInfo["asset"]), m_security));
+                    }
+                }
+                
+                return attachments.ToArray();
+            }
+        }
+
+        public void LoadUrl(IObject sender, string message, string url)
+        {
+            IDialogModule dm = m_rootScene.RequestModuleInterface<IDialogModule>();
+            if (dm != null)
+                dm.SendUrlToUser(GetSP().UUID, sender.Name, sender.GlobalID, GetSP().UUID, false, message, url);
+        }
+        #endregion
     }
 }

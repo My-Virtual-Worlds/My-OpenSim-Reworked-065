@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -32,6 +32,7 @@ using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Framework.Communications.Cache;
 using OpenSim.Region.Framework.Scenes;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Region.CoreModules.Agent.AssetTransaction
 {
@@ -177,7 +178,7 @@ namespace OpenSim.Region.CoreModules.Agent.AssetTransaction
                     asset.Type = (sbyte)item.Type;
                     item.AssetID = asset.FullID;
 
-                    Manager.MyScene.CommsManager.AssetCache.AddAsset(asset);
+                    Manager.MyScene.AssetService.Store(asset);
 
                     if (part.Inventory.UpdateInventoryItem(item))
                         part.GetProperties(remoteClient);
@@ -191,42 +192,29 @@ namespace OpenSim.Region.CoreModules.Agent.AssetTransaction
         {
              if (XferUploaders.ContainsKey(transactionID))
             {
-                CachedUserInfo userInfo = Manager.MyScene.CommsManager.UserProfileCacheService.GetUserDetails(
-                        remoteClient.AgentId);
+                UUID assetID = UUID.Combine(transactionID, remoteClient.SecureSessionId);
 
-                if (userInfo != null)
+                AssetBase asset = Manager.MyScene.AssetService.Get(assetID.ToString());
+
+                if (asset == null)
                 {
-                    UUID assetID = UUID.Combine(transactionID, remoteClient.SecureSessionId);
-
-                    AssetBase asset
-                        = Manager.MyScene.CommsManager.AssetCache.GetAsset(
-                            assetID, (item.AssetType == (int)AssetType.Texture ? true : false));
-
-                    if (asset == null)
-                    {
-                        asset = GetTransactionAsset(transactionID);
-                    }
-
-                    if (asset != null && asset.FullID == assetID)
-                    {
-                        // Assets never get updated, new ones get created
-                        asset.FullID = UUID.Random();
-                        asset.Name = item.Name;
-                        asset.Description = item.Description;
-                        asset.Type = (sbyte)item.AssetType;
-                        item.AssetID = asset.FullID;
-
-                        Manager.MyScene.CommsManager.AssetCache.AddAsset(asset);
-                    }
-
-                    userInfo.UpdateItem(item);
+                    asset = GetTransactionAsset(transactionID);
                 }
-                else
+
+                if (asset != null && asset.FullID == assetID)
                 {
-                   m_log.ErrorFormat(
-                        "[ASSET TRANSACTIONS]: Could not find user {0} for inventory item update",
-                       remoteClient.AgentId);
+                    // Assets never get updated, new ones get created
+                    asset.FullID = UUID.Random();
+                    asset.Name = item.Name;
+                    asset.Description = item.Description;
+                    asset.Type = (sbyte)item.AssetType;
+                    item.AssetID = asset.FullID;
+
+                    Manager.MyScene.AssetService.Store(asset);
                 }
+
+                IInventoryService invService = Manager.MyScene.InventoryService;
+                invService.UpdateItem(item);
             }
         }
     }

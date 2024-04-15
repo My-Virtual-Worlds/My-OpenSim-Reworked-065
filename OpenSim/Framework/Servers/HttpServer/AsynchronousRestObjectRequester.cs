@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -28,18 +28,22 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
+using log4net;
 
 namespace OpenSim.Framework.Servers.HttpServer
 {
     public class AsynchronousRestObjectRequester
     {
+        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        
         /// <summary>
         /// Perform an asynchronous REST request.
         /// </summary>
-        /// <param name="verb"></param>
+        /// <param name="verb">GET or POST</param>
         /// <param name="requestUrl"></param>
         /// <param name="obj"></param>
         /// <param name="action"></param>
@@ -52,6 +56,8 @@ namespace OpenSim.Framework.Servers.HttpServer
         public static void MakeRequest<TRequest, TResponse>(string verb,
                 string requestUrl, TRequest obj, Action<TResponse> action)
         {
+//            m_log.DebugFormat("[ASYNC REQUEST]: Starting {0} {1}", verb, requestUrl);
+            
             Type type = typeof (TRequest);
 
             WebRequest request = WebRequest.Create(requestUrl);
@@ -85,41 +91,101 @@ namespace OpenSim.Framework.Servers.HttpServer
                     Stream requestStream = request.EndGetRequestStream(res);
 
                     requestStream.Write(buffer.ToArray(), 0, length);
+                    requestStream.Close();
 
                     request.BeginGetResponse(delegate(IAsyncResult ar)
                     {
                         response = request.EndGetResponse(ar);
-
+                        Stream respStream = null;
                         try
                         {
-                            deserial = (TResponse) deserializer.Deserialize(
-                                    response.GetResponseStream());
+                            respStream = response.GetResponseStream();
+                            deserial = (TResponse)deserializer.Deserialize(
+                                    respStream);
                         }
                         catch (System.InvalidOperationException)
                         {
                         }
+                        finally
+                        {
+                            // Let's not close this
+                            //buffer.Close();
+                            respStream.Close();
+                            response.Close();
+                        }
 
                         action(deserial);
+
                     }, null);
                 }, null);
 
+                
                 return;
             }
 
             request.BeginGetResponse(delegate(IAsyncResult res2)
             {
-                response = request.EndGetResponse(res2);
+                try
+                {
+                    // If the server returns a 404, this appears to trigger a System.Net.WebException even though that isn't
+                    // documented in MSDN
+                    response = request.EndGetResponse(res2);
+
+                    Stream respStream = null;
+                    try
+                    {
+                        respStream = response.GetResponseStream();
+                        deserial = (TResponse)deserializer.Deserialize(respStream);
+                    }
+                    catch (System.InvalidOperationException)
+                    {
+                    }
+                    finally
+                    {
+                        respStream.Close();
+                        response.Close();
+                    }
+                }
+                catch (WebException e)
+                {
+                    if (e.Status == WebExceptionStatus.ProtocolError)
+                    {
+                        if (e.Response is HttpWebResponse)
+                        {
+                            HttpWebResponse httpResponse = (HttpWebResponse)e.Response;
+                        
+                            if (httpResponse.StatusCode != HttpStatusCode.NotFound)
+                            {
+                                // We don't appear to be handling any other status codes, so log these feailures to that
+                                // people don't spend unnecessary hours hunting phantom bugs.
+                                m_log.DebugFormat(
+                                    "[ASYNC REQUEST]: Request {0} {1} failed with unexpected status code {2}", 
+                                    verb, requestUrl, httpResponse.StatusCode);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        m_log.ErrorFormat("[ASYNC REQUEST]: Request {0} {1} failed with status {2} and message {3}", verb, requestUrl, e.Status, e.Message);
+                    }
+                }
+                catch (Exception e)
+                {
+                    m_log.ErrorFormat("[ASYNC REQUEST]: Request {0} {1} failed with exception {2}", verb, requestUrl, e);
+                }
+
+                //  m_log.DebugFormat("[ASYNC REQUEST]: Received {0}", deserial.ToString());
 
                 try
                 {
-                    deserial = (TResponse) deserializer.Deserialize(
-                            response.GetResponseStream());
+                    action(deserial);
                 }
-                catch (System.InvalidOperationException)
+                catch (Exception e)
                 {
+                    m_log.ErrorFormat(
+                        "[ASYNC REQUEST]: Request {0} {1} callback failed with exception {2}", verb, requestUrl, e);
                 }
-
-                action(deserial);
+                    
             }, null);
         }
     }

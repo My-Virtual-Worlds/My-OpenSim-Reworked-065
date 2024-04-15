@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -41,55 +41,28 @@ namespace OpenSim.Region.Communications.Hypergrid
     public class HGCommunicationsStandalone : CommunicationsManager
     {
         public HGCommunicationsStandalone(
-            ConfigSettings configSettings,                          
+            ConfigSettings configSettings,
             NetworkServersInfo serversInfo,
             BaseHttpServer httpServer,
-            IAssetCache assetCache,
-            HGGridServices gridService, 
             LibraryRootFolder libraryRootFolder, 
             bool dumpAssetsToFile)
-            : base(serversInfo, httpServer, assetCache, dumpAssetsToFile, libraryRootFolder)
-        {           
+            : base(serversInfo, libraryRootFolder)
+        {
             LocalUserServices localUserService =
                 new LocalUserServices(
                     serversInfo.DefaultHomeLocX, serversInfo.DefaultHomeLocY, this);
             localUserService.AddPlugin(configSettings.StandaloneUserPlugin, configSettings.StandaloneUserSource); 
-
-            HGInventoryServiceClient inventoryService 
-                = new HGInventoryServiceClient(serversInfo.InventoryURL, null, false);
-            List<IInventoryDataPlugin> plugins 
-                = DataPluginFactory.LoadDataPlugins<IInventoryDataPlugin>(
-                    configSettings.StandaloneInventoryPlugin, 
-                    configSettings.StandaloneInventorySource);
-
-            foreach (IInventoryDataPlugin plugin in plugins)
-            {
-                // Using the OSP wrapper plugin should be made configurable at some point
-                inventoryService.AddPlugin(new OspInventoryWrapperPlugin(plugin, this));
-            }
-            
-            AddInventoryService(inventoryService);
-            m_defaultInventoryHost = inventoryService.Host;
-            m_interServiceInventoryService = inventoryService;
-            inventoryService.UserProfileCache = UserProfileCacheService;
-                        
-            m_assetCache = assetCache;
-            // Let's swap to always be secure access to inventory
-            AddSecureInventoryService((ISecureInventoryService)inventoryService);
-            m_inventoryServices = null;
             
             HGUserServices hgUserService = new HGUserServices(this, localUserService);
             // This plugin arrangement could eventually be configurable rather than hardcoded here.
             hgUserService.AddPlugin(new TemporaryUserProfilePlugin());
-            hgUserService.AddPlugin(new OGS1UserDataPlugin(this));
+            hgUserService.AddPlugin(new HGUserDataPlugin(this, hgUserService));
             
-            m_userService = hgUserService;            
-            m_userAdminService = hgUserService;            
+            m_userService = hgUserService;
+            m_userAdminService = hgUserService;
             m_avatarService = hgUserService;
             m_messageService = hgUserService;
             
-            gridService.UserProfileCache = m_userProfileCacheService;
-            m_gridService = gridService;                        
         }
     }
 }

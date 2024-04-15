@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -28,6 +28,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net;
 using System.Reflection;
 using log4net;
 using Nwc.XmlRpc;
@@ -107,6 +108,9 @@ namespace OpenSim.Grid.UserServer.Modules
             m_httpServer.AddXmlRPCHandler("get_user_by_uuid", XmlRPCGetUserMethodUUID);
             m_httpServer.AddXmlRPCHandler("get_avatar_picker_avatar", XmlRPCGetAvatarPickerAvatar);
 
+            // Used by IAR module to do password checks
+            m_httpServer.AddXmlRPCHandler("authenticate_user_by_password", XmlRPCAuthenticateUserMethodPassword);
+
             m_httpServer.AddXmlRPCHandler("update_user_current_region", XmlRPCAtRegion);
             m_httpServer.AddXmlRPCHandler("logout_of_simulator", XmlRPCLogOffUserMethodUUID);
             m_httpServer.AddXmlRPCHandler("get_agent_by_uuid", XmlRPCGetAgentMethodUUID);
@@ -165,6 +169,7 @@ namespace OpenSim.Grid.UserServer.Modules
             // Account information
             responseData["firstname"] = profile.FirstName;
             responseData["lastname"] = profile.SurName;
+            responseData["email"] = profile.Email;
             responseData["uuid"] = profile.ID.ToString();
             // Server Information
             responseData["server_inventory"] = profile.UserInventoryURI;
@@ -201,7 +206,58 @@ namespace OpenSim.Grid.UserServer.Modules
 
         #region XMLRPC User Methods
 
-        public XmlRpcResponse XmlRPCGetAvatarPickerAvatar(XmlRpcRequest request)
+        /// <summary>
+        /// Authenticate a user using their password
+        /// </summary>
+        /// <param name="request">Must contain values for "user_uuid" and "password" keys</param>
+        /// <param name="remoteClient"></param>
+        /// <returns></returns>
+        public XmlRpcResponse XmlRPCAuthenticateUserMethodPassword(XmlRpcRequest request, IPEndPoint remoteClient)
+        {
+//            m_log.DebugFormat("[USER MANAGER]: Received authenticated user by password request from {0}", remoteClient);
+            
+            Hashtable requestData = (Hashtable)request.Params[0];
+            string userUuidRaw = (string)requestData["user_uuid"];
+            string password = (string)requestData["password"];
+
+            if (null == userUuidRaw)
+                return Util.CreateUnknownUserErrorResponse();
+
+            UUID userUuid;
+            if (!UUID.TryParse(userUuidRaw, out userUuid))
+                return Util.CreateUnknownUserErrorResponse();
+
+            UserProfileData userProfile = m_userDataBaseService.GetUserProfile(userUuid);
+            if (null == userProfile)
+                return Util.CreateUnknownUserErrorResponse();
+
+            string authed;
+            
+            if (null == password)
+            {
+                authed = "FALSE";
+            }
+            else
+            {
+                if (m_userDataBaseService.AuthenticateUserByPassword(userUuid, password))
+                    authed = "TRUE";
+                else
+                    authed = "FALSE";
+            }
+
+//            m_log.DebugFormat(
+//                "[USER MANAGER]: Authentication by password result from {0} for {1} is {2}",
+//                remoteClient, userUuid, authed);
+
+            XmlRpcResponse response = new XmlRpcResponse();
+            Hashtable responseData = new Hashtable();
+            responseData["auth_user"] = authed;
+            response.Value = responseData;
+            
+            return response;
+        }
+
+        public XmlRpcResponse XmlRPCGetAvatarPickerAvatar(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             // XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -218,7 +274,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return AvatarPickerListtoXmlRPCResponse(queryID, returnAvatar);
         }
 
-        public XmlRpcResponse XmlRPCAtRegion(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCAtRegion(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -244,16 +300,16 @@ namespace OpenSim.Grid.UserServer.Modules
                     m_userDataBaseService.CommitAgent(ref userProfile);
                     //setUserProfile(userProfile);
 
-
                     returnstring = "TRUE";
                 }
             }
+                
             responseData.Add("returnString", returnstring);
             response.Value = responseData;
             return response;
         }
 
-        public XmlRpcResponse XmlRPCGetUserMethodName(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCGetUserMethodName(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             // XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -290,7 +346,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return ProfileToXmlRPCResponse(userProfile);
         }
 
-        public XmlRpcResponse XmlRPCGetUserMethodUUID(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCGetUserMethodUUID(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             // XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -323,7 +379,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return ProfileToXmlRPCResponse(userProfile);
         }
 
-        public XmlRpcResponse XmlRPCGetAgentMethodUUID(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCGetAgentMethodUUID(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -372,7 +428,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return response;
         }
 
-        public XmlRpcResponse XmlRpcResponseXmlRPCUpdateUserProfile(XmlRpcRequest request)
+        public XmlRpcResponse XmlRpcResponseXmlRPCUpdateUserProfile(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             m_log.Debug("[UserManager]: Got request to update user profile");
             XmlRpcResponse response = new XmlRpcResponse();
@@ -447,7 +503,7 @@ namespace OpenSim.Grid.UserServer.Modules
             {
                 try
                 {
-                    userProfile.HomeLocationX = (float)Convert.ToDecimal((string)requestData["home_pos_x"]);
+                    userProfile.HomeLocationX = (float)Convert.ToDecimal((string)requestData["home_pos_x"], Culture.NumberFormatInfo);
                 }
                 catch (InvalidCastException)
                 {
@@ -458,7 +514,7 @@ namespace OpenSim.Grid.UserServer.Modules
             {
                 try
                 {
-                    userProfile.HomeLocationY = (float)Convert.ToDecimal((string)requestData["home_pos_y"]);
+                    userProfile.HomeLocationY = (float)Convert.ToDecimal((string)requestData["home_pos_y"], Culture.NumberFormatInfo);
                 }
                 catch (InvalidCastException)
                 {
@@ -469,7 +525,7 @@ namespace OpenSim.Grid.UserServer.Modules
             {
                 try
                 {
-                    userProfile.HomeLocationZ = (float)Convert.ToDecimal((string)requestData["home_pos_z"]);
+                    userProfile.HomeLocationZ = (float)Convert.ToDecimal((string)requestData["home_pos_z"], Culture.NumberFormatInfo);
                 }
                 catch (InvalidCastException)
                 {
@@ -480,7 +536,7 @@ namespace OpenSim.Grid.UserServer.Modules
             {
                 try
                 {
-                    userProfile.HomeLookAtX = (float)Convert.ToDecimal((string)requestData["home_look_x"]);
+                    userProfile.HomeLookAtX = (float)Convert.ToDecimal((string)requestData["home_look_x"], Culture.NumberFormatInfo);
                 }
                 catch (InvalidCastException)
                 {
@@ -491,7 +547,7 @@ namespace OpenSim.Grid.UserServer.Modules
             {
                 try
                 {
-                    userProfile.HomeLookAtY = (float)Convert.ToDecimal((string)requestData["home_look_y"]);
+                    userProfile.HomeLookAtY = (float)Convert.ToDecimal((string)requestData["home_look_y"], Culture.NumberFormatInfo);
                 }
                 catch (InvalidCastException)
                 {
@@ -502,7 +558,7 @@ namespace OpenSim.Grid.UserServer.Modules
             {
                 try
                 {
-                    userProfile.HomeLookAtZ = (float)Convert.ToDecimal((string)requestData["home_look_z"]);
+                    userProfile.HomeLookAtZ = (float)Convert.ToDecimal((string)requestData["home_look_z"], Culture.NumberFormatInfo);
                 }
                 catch (InvalidCastException)
                 {
@@ -565,7 +621,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return response;
         }
 
-        public XmlRpcResponse XmlRPCLogOffUserMethodUUID(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCLogOffUserMethodUUID(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -578,13 +634,13 @@ namespace OpenSim.Grid.UserServer.Modules
                     UUID RegionID = new UUID((string)requestData["region_uuid"]);
                     ulong regionhandle = (ulong)Convert.ToInt64((string)requestData["region_handle"]);
                     Vector3 position = new Vector3(
-                        (float)Convert.ToDecimal((string)requestData["region_pos_x"]),
-                        (float)Convert.ToDecimal((string)requestData["region_pos_y"]),
-                        (float)Convert.ToDecimal((string)requestData["region_pos_z"]));
+                        (float)Convert.ToDecimal((string)requestData["region_pos_x"], Culture.NumberFormatInfo),
+                        (float)Convert.ToDecimal((string)requestData["region_pos_y"], Culture.NumberFormatInfo),
+                        (float)Convert.ToDecimal((string)requestData["region_pos_z"], Culture.NumberFormatInfo));
                     Vector3 lookat = new Vector3(
-                        (float)Convert.ToDecimal((string)requestData["lookat_x"]),
-                        (float)Convert.ToDecimal((string)requestData["lookat_y"]),
-                        (float)Convert.ToDecimal((string)requestData["lookat_z"]));
+                        (float)Convert.ToDecimal((string)requestData["lookat_x"], Culture.NumberFormatInfo),
+                        (float)Convert.ToDecimal((string)requestData["lookat_y"], Culture.NumberFormatInfo),
+                        (float)Convert.ToDecimal((string)requestData["lookat_z"], Culture.NumberFormatInfo));
 
                     handlerLogOffUser = OnLogOffUser;
                     if (handlerLogOffUser != null)

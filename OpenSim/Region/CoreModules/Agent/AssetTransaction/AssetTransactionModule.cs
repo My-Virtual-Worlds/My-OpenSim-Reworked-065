@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -27,6 +27,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using log4net;
 using Nini.Config;
 using OpenMetaverse;
 using OpenSim.Framework;
@@ -37,10 +39,13 @@ namespace OpenSim.Region.CoreModules.Agent.AssetTransaction
 {
     public class AssetTransactionModule : IRegionModule, IAgentAssetTransactions
     {
+//        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        
         private readonly Dictionary<UUID, Scene> RegisteredScenes = new Dictionary<UUID, Scene>();
         private bool m_dumpAssetsToFile = false;
         private Scene m_scene = null;
 
+        [Obsolete]
         public Scene MyScene
         {
             get{ return m_scene;}
@@ -71,23 +76,11 @@ namespace OpenSim.Region.CoreModules.Agent.AssetTransaction
                 scene.EventManager.OnNewClient += NewClient;
             }
 
+            // EVIL HACK!
+            // This needs killing!
+            //
             if (m_scene == null)
-            {
                 m_scene = scene;
-                if (config.Configs["StandAlone"] != null)
-                {
-                    try
-                    {
-                        m_dumpAssetsToFile = config.Configs["StandAlone"].GetBoolean("dump_assets_to_file", false);
-                    }
-                    catch (Exception)
-                    {
-                    }
-                }
-                else
-                {
-                }
-            }
         }
 
         public void PostInitialise()
@@ -237,7 +230,8 @@ namespace OpenSim.Region.CoreModules.Agent.AssetTransaction
         public void HandleUDPUploadRequest(IClientAPI remoteClient, UUID assetID, UUID transaction, sbyte type,
                                            byte[] data, bool storeLocal, bool tempFile)
         {
-            //m_log.Debug("HandleUDPUploadRequest - assetID: " + assetID.ToString() + " transaction: " + transaction.ToString() + " type: " + type.ToString() + " storelocal: " + storeLocal + " tempFile: " + tempFile);
+//            m_log.Debug("HandleUDPUploadRequest - assetID: " + assetID.ToString() + " transaction: " + transaction.ToString() + " type: " + type.ToString() + " storelocal: " + storeLocal + " tempFile: " + tempFile);
+            
             if (((AssetType)type == AssetType.Texture ||
                 (AssetType)type == AssetType.Sound ||
                 (AssetType)type == AssetType.TextureTGA ||
@@ -257,7 +251,6 @@ namespace OpenSim.Region.CoreModules.Agent.AssetTransaction
                 }
             }
 
-            //m_log.Debug("asset upload of " + assetID);
             AgentAssetTransactions transactions = GetUserTransactions(remoteClient.AgentId);
 
             AssetXferUploader uploader = transactions.RequestXferUploader(transaction);

@@ -1,4 +1,4 @@
-<Addin id="OpenSim.Region.OptionalModules" version="0.1">
+<Addin id="OpenSim.Region.OptionalModules" version="0.2">
     <Runtime>
         <Import assembly="OpenSim.Region.OptionalModules.dll"/>
     </Runtime>
@@ -8,7 +8,9 @@
     </Dependencies>
 
     <Extension path = "/OpenSim/RegionModules">
-      <RegionModule id="XmlRpcGroups"          type="OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups.XmlRpcGroupsModule" />
-      <RegionModule id="XmlRpcGroupsMessaging" type="OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups.XmlRpcGroupsMessaging" />
+      <RegionModule id="RegionReady"           type="OpenSim.Region.OptionalModules.Scripting.RegionReady.RegionReadyModule" />
+      <RegionModule id="IRCBridge"             type="OpenSim.Region.OptionalModules.Avatar.Chat.IRCBridgeModule" />
+      <RegionModule id="Concierge"             type="OpenSim.Region.OptionalModules.Avatar.Concierge.ConciergeModule" />
+      <RegionModule id="VivoxVoice"            type="OpenSim.Region.OptionalModules.Avatar.Voice.VivoxVoice.VivoxVoiceModule" />
     </Extension>
 </Addin>

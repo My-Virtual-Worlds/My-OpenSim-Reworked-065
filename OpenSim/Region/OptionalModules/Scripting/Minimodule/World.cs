@@ -26,24 +26,28 @@
  */
 
 using System.Collections.Generic;
+using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
+using OpenSim.Region.OptionalModules.Scripting.Minimodule.WorldX;
 
 namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 {
-    public class World : System.MarshalByRefObject, IWorld 
+    public class World : System.MarshalByRefObject, IWorld, IWorldAudio 
     {
         private readonly Scene m_internalScene;
+        private readonly ISecurityCredential m_security;
         private readonly Heightmap m_heights;
 
         private readonly ObjectAccessor m_objs;
 
-        public World(Scene internalScene)
+        public World(Scene internalScene, ISecurityCredential securityCredential)
         {
+            m_security = securityCredential;
             m_internalScene = internalScene;
             m_heights = new Heightmap(m_internalScene);
-            m_objs = new ObjectAccessor(m_internalScene);
+            m_objs = new ObjectAccessor(m_internalScene, securityCredential);
         }
 
         #region Events
@@ -82,7 +86,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             if (_OnNewUser != null)
             {
                 NewUserEventArgs e = new NewUserEventArgs();
-                e.Avatar = new SPAvatar(m_internalScene, presence.UUID);
+                e.Avatar = new SPAvatar(m_internalScene, presence.UUID, m_security);
                 _OnNewUser(this, e);
             }
         }
@@ -92,6 +96,11 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         #region OnChat
         private event OnChatDelegate _OnChat;
         private bool _OnChatActive;
+
+        public IWorldAudio Audio
+        {
+            get { return this; }
+        }
 
         public event OnChatDelegate OnChat
         {
@@ -137,9 +146,10 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             if (chat.Sender == null && chat.SenderObject != null)
             {
                 ChatEventArgs e = new ChatEventArgs();
-                e.Sender = new SOPObject(m_internalScene, ((SceneObjectPart) chat.SenderObject).LocalId);
+                e.Sender = new SOPObject(m_internalScene, ((SceneObjectPart) chat.SenderObject).LocalId, m_security);
                 e.Text = chat.Message;
-
+                e.Channel = chat.Channel;
+                
                 _OnChat(this, e);
                 return;
             }
@@ -147,9 +157,10 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             if (chat.Sender != null && chat.SenderObject == null)
             {
                 ChatEventArgs e = new ChatEventArgs();
-                e.Sender = new SPAvatar(m_internalScene, chat.SenderUUID);
+                e.Sender = new SPAvatar(m_internalScene, chat.SenderUUID, m_security);
                 e.Text = chat.Message;
-
+                e.Channel = chat.Channel;
+                
                 _OnChat(this, e);
                 return;
             }
@@ -182,7 +193,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 
                 foreach (ILandObject landObject in m_los)
                 {
-                    m_parcels.Add(new LOParcel(m_internalScene, landObject.landData.LocalID));
+                    m_parcels.Add(new LOParcel(m_internalScene, landObject.LandData.LocalID));
                 }
 
                 return m_parcels.ToArray();
@@ -200,7 +211,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
                 for (int i = 0; i < ents.Count; i++)
                 {
                     EntityBase ent = ents[i];
-                    rets[i] = new SPAvatar(m_internalScene, ent.UUID);
+                    rets[i] = new SPAvatar(m_internalScene, ent.UUID, m_security);
                 }
 
                 return rets;
@@ -211,5 +222,29 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             get { return m_heights; }
         }
+
+        #region Implementation of IWorldAudio
+
+        public void PlaySound(UUID audio, Vector3 position, double volume)
+        {
+            ISoundModule soundModule = m_internalScene.RequestModuleInterface<ISoundModule>();
+            if (soundModule != null)
+            {
+                soundModule.TriggerSound(audio, UUID.Zero, UUID.Zero, UUID.Zero, volume, position,
+                                         m_internalScene.RegionInfo.RegionHandle, 0);
+            }
+        }
+
+        public void PlaySound(UUID audio, Vector3 position)
+        {
+            ISoundModule soundModule = m_internalScene.RequestModuleInterface<ISoundModule>();
+            if (soundModule != null)
+            {
+                soundModule.TriggerSound(audio, UUID.Zero, UUID.Zero, UUID.Zero, 1.0, position,
+                                         m_internalScene.RegionInfo.RegionHandle, 0);
+            }
+        }
+
+        #endregion
     }
 }

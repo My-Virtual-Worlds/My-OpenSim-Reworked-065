@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,6 +33,7 @@ using OpenSim.Framework;
 using OpenSim.Framework.Communications.Cache;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Region.CoreModules.Avatar.Gestures
 {
@@ -62,42 +63,34 @@ namespace OpenSim.Region.CoreModules.Avatar.Gestures
         
         public virtual void ActivateGesture(IClientAPI client, UUID assetId, UUID gestureId)
         {
-            CachedUserInfo userInfo = m_scene.CommsManager.UserProfileCacheService.GetUserDetails(client.AgentId);
+            IInventoryService invService = m_scene.InventoryService;
 
-            if (userInfo != null)
+            InventoryItemBase item = new InventoryItemBase(gestureId, client.AgentId);
+            item = invService.GetItem(item);
+            if (item != null)
             {
-                InventoryItemBase item = userInfo.RootFolder.FindItem(gestureId);
-                if (item != null)
-                {
-                    item.Flags = 1;
-                    userInfo.UpdateItem(item);
-                }
-                else 
-                    m_log.ErrorFormat(
-                        "[GESTURES]: Unable to find gesture to activate {0} for {1}", gestureId, client.Name);
+                item.Flags = 1;
+                invService.UpdateItem(item);
             }
             else 
-                m_log.ErrorFormat("[GESTURES]: Unable to find user {0}", client.Name);
+                m_log.WarnFormat(
+                    "[GESTURES]: Unable to find gesture {0} to activate for {1}", gestureId, client.Name);
         }
 
         public virtual void DeactivateGesture(IClientAPI client, UUID gestureId)
         {
-            CachedUserInfo userInfo = m_scene.CommsManager.UserProfileCacheService.GetUserDetails(client.AgentId);
+            IInventoryService invService = m_scene.InventoryService;
 
-            if (userInfo != null)
+            InventoryItemBase item = new InventoryItemBase(gestureId, client.AgentId);
+            item = invService.GetItem(item);
+            if (item != null)
             {
-                InventoryItemBase item = userInfo.RootFolder.FindItem(gestureId);
-                if (item != null)
-                {
-                    item.Flags = 0;
-                    userInfo.UpdateItem(item);
-                }
-                else 
-                    m_log.ErrorFormat(
-                        "[GESTURES]: Unable to find gesture to deactivate {0} for {1}", gestureId, client.Name);
+                item.Flags = 0;
+                invService.UpdateItem(item);
             }
             else 
-                m_log.ErrorFormat("[GESTURES]: Unable to find user {0}", client.Name);
-        }        
+                m_log.ErrorFormat(
+                    "[GESTURES]: Unable to find gesture to deactivate {0} for {1}", gestureId, client.Name);
+        }
     }
 }

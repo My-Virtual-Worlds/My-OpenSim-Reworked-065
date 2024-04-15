@@ -33,7 +33,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using OpenSim.Framework;
 using OpenSim.Framework.Communications.Cache;
-using OpenSim.Framework.Communications.Capabilities;
+using OpenSim.Framework.Capabilities;
 using OpenSim.Framework.Servers;
 
 using OpenMetaverse;
@@ -78,7 +78,7 @@ namespace OpenSim.Framework.Communications.Services
 
             m_interServiceInventoryService = interServiceInventoryService;
             m_regionsConnector = regionsConnector;
-            m_inventoryService = interServiceInventoryService;
+            m_interInventoryService = interServiceInventoryService;
         }
 
         public void SetServersInfo(NetworkServersInfo sinfo)
@@ -86,10 +86,10 @@ namespace OpenSim.Framework.Communications.Services
             m_serversInfo = sinfo;
         }
 
-        public override XmlRpcResponse XmlRpcLoginMethod(XmlRpcRequest request)
+        public override XmlRpcResponse XmlRpcLoginMethod(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             m_log.Info("[HGLOGIN]: HGLogin called " + request.MethodName);
-            XmlRpcResponse response = base.XmlRpcLoginMethod(request);
+            XmlRpcResponse response = base.XmlRpcLoginMethod(request, remoteClient);
             Hashtable responseData = (Hashtable)response.Value;
 
             responseData["grid_service"] = m_serversInfo.GridURL;
@@ -128,11 +128,13 @@ namespace OpenSim.Framework.Communications.Services
                 userProfile.WebLoginKey = token;
                 m_userManager.CommitAgent(ref userProfile);
             }
+            m_log.Warn("[HGLOGIN]: Auth token: " + token);
+
 
             return response;
         }
 
-        public XmlRpcResponse XmlRpcGenerateKeyMethod(XmlRpcRequest request)
+        public XmlRpcResponse XmlRpcGenerateKeyMethod(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             // Verify the key of who's calling
             UUID userID = UUID.Zero;
@@ -157,7 +159,7 @@ namespace OpenSim.Framework.Communications.Services
             return response;
         }
 
-        public XmlRpcResponse XmlRpcVerifyKeyMethod(XmlRpcRequest request)
+        public XmlRpcResponse XmlRpcVerifyKeyMethod(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             bool success = false;
 
@@ -232,7 +234,7 @@ namespace OpenSim.Framework.Communications.Services
                 string s = Util.Md5Hash(password + ":" + profile.PasswordSalt);
 
                 bool loginresult = (profile.PasswordHash.Equals(s.ToString(), StringComparison.InvariantCultureIgnoreCase)
-                            || profile.PasswordHash.Equals(password, StringComparison.InvariantCultureIgnoreCase));
+                            || profile.PasswordHash.Equals(password, StringComparison.InvariantCulture));
                 return loginresult;
             }
         }
@@ -259,7 +261,7 @@ namespace OpenSim.Framework.Communications.Services
         /// <param name="user"></param>
         /// <param name="response"></param>
         /// <returns>true if the region was successfully contacted, false otherwise</returns>
-        protected override bool PrepareLoginToRegion(RegionInfo regionInfo, UserProfileData user, LoginResponse response)
+        protected override bool PrepareLoginToRegion(RegionInfo regionInfo, UserProfileData user, LoginResponse response, IPEndPoint remoteClient)
         {
             IPEndPoint endPoint = regionInfo.ExternalEndPoint;
             response.SimAddress = endPoint.Address.ToString();
@@ -279,11 +281,17 @@ namespace OpenSim.Framework.Communications.Services
 
             if (m_serversInfo.HttpUsesSSL)
             {
-                seedcap = "https://" + m_serversInfo.HttpSSLCN + ":" + regionInfo.HttpPort + capsSeedPath;
+                // For NAT
+                string host = NetworkUtil.GetHostFor(remoteClient.Address, m_serversInfo.HttpSSLCN);
+
+                seedcap = "https://" + host + ":" + m_serversInfo.httpSSLPort + capsSeedPath;
             }
             else
             {
-                seedcap = "http://" + regionInfo.ExternalHostName + ":" + regionInfo.HttpPort + capsSeedPath;
+                // For NAT
+                string host = NetworkUtil.GetHostFor(remoteClient.Address, regionInfo.ExternalHostName);
+
+                seedcap = "http://" + host + ":" + m_serversInfo.HttpListenerPort + capsSeedPath;
             }
 
             response.SeedCapability = seedcap;

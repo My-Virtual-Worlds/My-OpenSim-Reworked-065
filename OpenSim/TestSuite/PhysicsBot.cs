@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -130,9 +130,9 @@ namespace OpenSim.TestSuite
         public void startup()
         {
             client.Settings.LOGIN_SERVER = loginURI;
-            client.Network.OnConnected += new NetworkManager.ConnectedCallback(this.Network_OnConnected);
-            client.Network.OnSimConnected += new NetworkManager.SimConnectedCallback(this.Network_OnConnected);
-            client.Network.OnDisconnected += new NetworkManager.DisconnectedCallback(this.Network_OnDisconnected);
+            client.Network.LoginProgress += this.Network_LoginProgress;
+            client.Network.SimConnected += this.Network_SimConnected;
+            client.Network.Disconnected += this.Network_OnDisconnected;
             if (client.Network.Login(firstname, lastname, password, "pCampBot", "Your name"))
             {
 
@@ -147,7 +147,7 @@ namespace OpenSim.TestSuite
             }
             else
             {
-                MainConsole.Instance.Error(firstname + " " + lastname, "Can't login: " + client.Network.LoginMessage);
+                MainConsole.Instance.Output(firstname + " " + lastname + "Can't login: " + client.Network.LoginMessage);
                 if (OnDisconnected != null)
                 {
                     OnDisconnected(this, EventType.DISCONNECTED);
@@ -155,19 +155,22 @@ namespace OpenSim.TestSuite
             }
         }
 
-        public void Network_OnConnected(object sender)
+        public void Network_LoginProgress(object sender, LoginProgressEventArgs args)
         {
-            if (OnConnected != null)
+            if (args.Status == LoginStatus.Success)
             {
-                OnConnected(this, EventType.CONNECTED);
+                if (OnConnected != null)
+                {
+                    OnConnected(this, EventType.CONNECTED);
+                }
             }
         }
 
-        public void Simulator_Connected(object sender)
+        public void Network_SimConnected(object sender, SimConnectedEventArgs args)
         {
         }
 
-        public void Network_OnDisconnected(NetworkManager.DisconnectType reason, string message)
+        public void Network_OnDisconnected(object sender, DisconnectedEventArgs args)
         {
             if (OnDisconnected != null)
             {

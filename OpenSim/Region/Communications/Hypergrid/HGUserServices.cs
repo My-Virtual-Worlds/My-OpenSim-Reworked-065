@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -35,6 +35,7 @@ using OpenSim.Framework.Communications.Cache;
 using OpenSim.Framework.Communications.Clients;
 using OpenSim.Region.Communications.OGS1;
 using OpenSim.Region.Communications.Local;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Region.Communications.Hypergrid
 {
@@ -63,6 +64,13 @@ namespace OpenSim.Region.Communications.Hypergrid
             m_localUserServices = local;
         }
 
+        public override void SetInventoryService(IInventoryService invService)
+        {
+            base.SetInventoryService(invService);
+            if (m_localUserServices != null)
+                m_localUserServices.SetInventoryService(invService);
+        }
+
         public override UUID AddUser(
             string firstName, string lastName, string password, string email, uint regX, uint regY, UUID uuid)
         {
@@ -79,7 +87,7 @@ namespace OpenSim.Region.Communications.Hypergrid
                 return m_localUserServices.AddUserAgent(agentdata);
 
             return base.AddUserAgent(agentdata);
-        }        
+        }
 
         public override UserAgentData GetAgentByUUID(UUID userId)
         {
@@ -196,6 +204,14 @@ namespace OpenSim.Region.Communications.Hypergrid
             return base.UpdateUserProfile(userProfile);
         }
 
+        public override bool AuthenticateUserByPassword(UUID userID, string password)
+        {
+            if (m_localUserServices != null)
+                return m_localUserServices.AuthenticateUserByPassword(userID, password);
+            else
+                return base.AuthenticateUserByPassword(userID, password);
+        }
+
         #region IUserServices Friend Methods
 
         // NOTE: We're still not dealing with foreign user friends
@@ -303,9 +319,9 @@ namespace OpenSim.Region.Communications.Hypergrid
             return m_commsManager.NetworkServersInfo.UserURL;
         }
 
-        private bool IsForeignUser(UUID userID, out string userServerURL)
+        public bool IsForeignUser(UUID userID, out string userServerURL)
         {
-            userServerURL = string.Empty;
+            userServerURL = m_commsManager.NetworkServersInfo.UserURL;
             CachedUserInfo uinfo = m_commsManager.UserProfileCacheService.GetUserDetails(userID);
             if (uinfo != null)
             {

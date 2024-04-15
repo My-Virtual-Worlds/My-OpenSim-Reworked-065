@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -44,22 +44,28 @@ namespace OpenSim.Region.CoreModules.Asset
                 LogManager.GetLogger(
                 MethodBase.GetCurrentMethod().DeclaringType);
 
-        private bool m_Enabled = false;
-        private Cache m_Cache = new Cache(CacheMedium.Memory,
-                                          CacheStrategy.Aggressive,
-                                          CacheFlags.AllowUpdate);
+        private bool m_Enabled;
+        private Cache m_Cache;
 
         public string Name
         {
             get { return "CoreAssetCache"; }
         }
 
+        public Type ReplaceableInterface 
+        {
+            get { return null; }
+        }
+
         public void Initialise(IConfigSource source)
         {
             IConfig moduleConfig = source.Configs["Modules"];
+
             if (moduleConfig != null)
             {
-                string name = moduleConfig.GetString("AssetCaching", "CoreAssetCache");
+                string name = moduleConfig.GetString("AssetCaching");
+                //m_log.DebugFormat("[XXX] name = {0} (this module's name: {1}", name, Name);
+
                 if (name == Name)
                 {
                     IConfig assetConfig = source.Configs["AssetCache"];
@@ -69,6 +75,7 @@ namespace OpenSim.Region.CoreModules.Asset
                         return;
                     }
 
+                    m_Cache = new Cache(CacheMedium.Memory, CacheStrategy.Aggressive, CacheFlags.AllowUpdate);
                     m_Enabled = true;
 
                     m_log.Info("[ASSET CACHE]: Core asset cache enabled");
@@ -106,7 +113,8 @@ namespace OpenSim.Region.CoreModules.Asset
 
         public void Cache(AssetBase asset)
         {
-            m_Cache.Store(asset.ID, asset);
+            if (asset != null)
+                m_Cache.Store(asset.ID, asset);
         }
 
         public AssetBase Get(string id)

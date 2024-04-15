@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -50,8 +50,8 @@ namespace OpenSim.Region.OptionalModules.Avatar.Chat
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         // Local constants
- 
-        private static readonly Vector3 CenterOfRegion = new Vector3(128, 128, 20);
+
+        private static readonly Vector3 CenterOfRegion = new Vector3(((int)Constants.RegionSize * 0.5f), ((int)Constants.RegionSize * 0.5f), 20);
         private static readonly char[]  CS_SPACE = { ' ' };
 
         private const  int  WD_INTERVAL = 1000;     // base watchdog interval
@@ -360,7 +360,6 @@ namespace OpenSim.Region.OptionalModules.Avatar.Chat
                     m_listener.Name = "IRCConnectorListenerThread";
                     m_listener.IsBackground = true;
                     m_listener.Start();
-                    ThreadTracker.Add(m_listener);
 
                     // This is the message order recommended by RFC 2812
                     if (m_password != null)

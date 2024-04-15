@@ -34,11 +34,12 @@ using System.Text.RegularExpressions;
 using log4net;
 using Nini.Config;
 using OpenMetaverse;
+using Nwc.XmlRpc;
 using OpenSim.Framework;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Communications.Services;
 using OpenSim.Framework.Communications.Cache;
-using OpenSim.Framework.Communications.Capabilities;
+using OpenSim.Framework.Capabilities;
 using OpenSim.Framework.Servers.HttpServer;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Region.Framework.Interfaces;
@@ -54,21 +55,6 @@ namespace OpenSim.Region.CoreModules.Hypergrid
 
         protected bool m_enabled = false; // Module is only enabled if running in standalone mode
 
-        public bool RegionLoginsEnabled
-        {
-            get
-            {
-                if (m_firstScene != null)
-                {
-                    return m_firstScene.CommsManager.GridService.RegionLoginsEnabled;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-        }
-       
         protected HGLoginAuthService m_loginService;
 
         #region IRegionModule Members
@@ -100,7 +86,7 @@ namespace OpenSim.Region.CoreModules.Hypergrid
                     //TODO: fix casting.
                     LibraryRootFolder rootFolder = m_firstScene.CommsManager.UserProfileCacheService.LibraryRoot as LibraryRootFolder;
                    
-                    IHttpServer httpServer = m_firstScene.CommsManager.HttpServer;
+                    IHttpServer httpServer = MainServer.Instance;
 
                     //TODO: fix the casting of the user service, maybe by registering the userManagerBase with scenes, or refactoring so we just need a IUserService reference
                     m_loginService 
@@ -114,9 +100,9 @@ namespace OpenSim.Region.CoreModules.Hypergrid
                             this);
 
                     httpServer.AddXmlRPCHandler("hg_login", m_loginService.XmlRpcLoginMethod);
-                    httpServer.AddXmlRPCHandler("hg_new_auth_key", m_loginService.XmlRpcGenerateKeyMethod);
-                    httpServer.AddXmlRPCHandler("hg_verify_auth_key", m_loginService.XmlRpcVerifyKeyMethod);
                     httpServer.AddXmlRPCHandler("check_auth_session", m_loginService.XmlRPCCheckAuthSession, false);
+                    httpServer.AddXmlRPCHandler("get_avatar_appearance", XmlRPCGetAvatarAppearance);
+                    httpServer.AddXmlRPCHandler("update_avatar_appearance", XmlRPCUpdateAvatarAppearance);
 
                 }
             }
@@ -192,6 +178,10 @@ namespace OpenSim.Region.CoreModules.Hypergrid
             {
                 return scene.RegionInfo;
             }
+            else if (m_scenes.Count > 0)
+            {
+                return m_scenes[0].RegionInfo;
+            }
             return null;
         }
 
@@ -247,7 +237,7 @@ namespace OpenSim.Region.CoreModules.Hypergrid
             {
                 foreach (Scene nextScene in m_scenes)
                 {
-                    if (nextScene.RegionInfo.RegionName == regionName)
+                    if (nextScene.RegionInfo.RegionName.Equals(regionName, StringComparison.InvariantCultureIgnoreCase))
                     {
                         scene = nextScene;
                         return true;
@@ -258,5 +248,64 @@ namespace OpenSim.Region.CoreModules.Hypergrid
             scene = null;
             return false;
         }
+
+        public XmlRpcResponse XmlRPCGetAvatarAppearance(XmlRpcRequest request, IPEndPoint remoteClient)
+        {
+            XmlRpcResponse response = new XmlRpcResponse();
+            Hashtable requestData = (Hashtable)request.Params[0];
+            AvatarAppearance appearance;
+            Hashtable responseData;
+            if (requestData.Contains("owner"))
+            {
+                appearance = m_firstScene.CommsManager.AvatarService.GetUserAppearance(new UUID((string)requestData["owner"]));
+                if (appearance == null)
+                {
+                    responseData = new Hashtable();
+                    responseData["error_type"] = "no appearance";
+                    responseData["error_desc"] = "There was no appearance found for this avatar";
+                }
+                else
+                {
+                    responseData = appearance.ToHashTable();
+                }
+            }
+            else
+            {
+                responseData = new Hashtable();
+                responseData["error_type"] = "unknown_avatar";
+                responseData["error_desc"] = "The avatar appearance requested is not in the database";
+            }
+
+            response.Value = responseData;
+            return response;
+        }
+
+        public XmlRpcResponse XmlRPCUpdateAvatarAppearance(XmlRpcRequest request, IPEndPoint remoteClient)
+        {
+            XmlRpcResponse response = new XmlRpcResponse();
+            Hashtable requestData = (Hashtable)request.Params[0];
+            Hashtable responseData;
+            if (requestData.Contains("owner"))
+            {
+                AvatarAppearance appearance = new AvatarAppearance(requestData);
+                
+                // TODO: Sometime in the future we may have a database layer that is capable of updating appearance when
+                // the TextureEntry is null. When that happens, this check can be removed
+                if (appearance.Texture != null)
+                    m_firstScene.CommsManager.AvatarService.UpdateUserAppearance(new UUID((string)requestData["owner"]), appearance);
+
+                responseData = new Hashtable();
+                responseData["returnString"] = "TRUE";
+            }
+            else
+            {
+                responseData = new Hashtable();
+                responseData["error_type"] = "unknown_avatar";
+                responseData["error_desc"] = "The avatar appearance requested is not in the database";
+            }
+            response.Value = responseData;
+            return response;
+        }
     }
+
 }

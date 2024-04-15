@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -26,6 +26,7 @@
  */
 
 using System;
+using System.Collections;
 using System.Globalization;
 using System.Reflection;
 using log4net;
@@ -41,6 +42,8 @@ namespace OpenSim.Region.CoreModules.Avatar.Profiles
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private Scene m_scene;
+        private IProfileModule m_profileModule = null;
+        private bool m_enabled = true;
 
         public AvatarProfilesModule()
         {
@@ -50,12 +53,25 @@ namespace OpenSim.Region.CoreModules.Avatar.Profiles
 
         public void Initialise(Scene scene, IConfigSource config)
         {
+            IConfig profileConfig = config.Configs["Profile"];
+            if (profileConfig != null)
+            {
+                if (profileConfig.GetString("Module", Name) != Name)
+                {
+                    m_enabled = false;
+                    return;
+                }
+            }
+
             m_scene = scene;
             m_scene.EventManager.OnNewClient += NewClient;
         }
 
         public void PostInitialise()
         {
+            if (!m_enabled)
+                return;
+            m_profileModule = m_scene.RequestModuleInterface<IProfileModule>();
         }
 
         public void Close()
@@ -108,10 +124,16 @@ namespace OpenSim.Region.CoreModules.Avatar.Profiles
                     charterMember = Utils.StringToBytes(profile.CustomType);
                 }
 
+                if (m_profileModule != null)
+                {
+                    Hashtable profileData = m_profileModule.GetProfileData(remoteClient.AgentId);
+                    if (profileData["ProfileUrl"] != null)
+                        profile.ProfileUrl = profileData["ProfileUrl"].ToString();
+                }
                 remoteClient.SendAvatarProperties(profile.ID, profile.AboutText,
                                                   Util.ToDateTime(profile.Created).ToString("M/d/yyyy", CultureInfo.InvariantCulture),
                                                   charterMember, profile.FirstLifeAboutText, (uint)(profile.UserFlags & 0xff),
-                                                  profile.FirstLifeImage, profile.Image, String.Empty, profile.Partner);
+                                                  profile.FirstLifeImage, profile.Image, profile.ProfileUrl, profile.Partner);
             }
             else
             {
@@ -130,6 +152,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Profiles
                 Profile.FirstLifeImage = newProfile.FirstLifeImage;
                 Profile.AboutText = newProfile.AboutText;
                 Profile.FirstLifeAboutText = newProfile.FirstLifeAboutText;
+                Profile.ProfileUrl = newProfile.ProfileUrl;
             }
             else
             {

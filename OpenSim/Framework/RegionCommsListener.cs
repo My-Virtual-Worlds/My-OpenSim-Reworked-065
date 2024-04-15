@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -43,18 +43,15 @@ namespace OpenSim.Framework
         private ChildAgentUpdate handlerChildAgentUpdate = null; // OnChildAgentUpdate;
         private CloseAgentConnection handlerCloseAgentConnection = null; // OnCloseAgentConnection;
         private GenericCall2 handlerExpectChildAgent = null; // OnExpectChildAgent;
-        private ExpectPrimDelegate handlerExpectPrim = null; // OnExpectPrim;
         private ExpectUserDelegate handlerExpectUser = null; // OnExpectUser
         private UpdateNeighbours handlerNeighboursUpdate = null; // OnNeighboursUpdate;
         private PrimCrossing handlerPrimCrossingIntoRegion = null; // OnPrimCrossingIntoRegion;
-        private RegionUp handlerRegionUp = null; // OnRegionUp;
         private LogOffUser handlerLogOffUser = null;
         private GetLandData handlerGetLandData = null;
 
         #region IRegionCommsListener Members
 
         public event ExpectUserDelegate OnExpectUser;
-        public event ExpectPrimDelegate OnExpectPrim;
         public event GenericCall2 OnExpectChildAgent;
         public event AgentCrossing OnAvatarCrossingIntoRegion;
         public event PrimCrossing OnPrimCrossingIntoRegion;
@@ -62,7 +59,6 @@ namespace OpenSim.Framework
         public event AcknowledgeAgentCross OnAcknowledgeAgentCrossed;
         public event AcknowledgePrimCross OnAcknowledgePrimCrossed;
         public event CloseAgentConnection OnCloseAgentConnection;
-        public event RegionUp OnRegionUp;
         public event ChildAgentUpdate OnChildAgentUpdate;
         public event LogOffUser OnLogOffUser;
         public event GetLandData OnGetLandData;
@@ -97,28 +93,6 @@ namespace OpenSim.Framework
 
         }
 
-        public virtual bool TriggerExpectPrim(UUID primID, string objData, int XMLMethod)
-        {
-            handlerExpectPrim = OnExpectPrim;
-            if (handlerExpectPrim != null)
-            {
-                handlerExpectPrim(primID, objData, XMLMethod);
-                return true;
-            }
-            return false;
-        }
-
-        public virtual bool TriggerRegionUp(RegionInfo region)
-        {
-            handlerRegionUp = OnRegionUp;
-            if (handlerRegionUp != null)
-            {
-                handlerRegionUp(region);
-                return true;
-            }
-            return false;
-        }
-
         public virtual bool TriggerChildAgentUpdate(ChildAgentDataUpdate cAgentData)
         {
             handlerChildAgentUpdate = OnChildAgentUpdate;
@@ -136,18 +110,6 @@ namespace OpenSim.Framework
             if (handlerAvatarCrossingIntoRegion != null)
             {
                 handlerAvatarCrossingIntoRegion(agentID, position, isFlying);
-                return true;
-            }
-            return false;
-        }
-
-        public virtual bool TriggerExpectPrimCrossing(UUID primID, Vector3 position,
-                                                      bool isPhysical)
-        {
-            handlerPrimCrossingIntoRegion = OnPrimCrossingIntoRegion;
-            if (handlerPrimCrossingIntoRegion != null)
-            {
-                handlerPrimCrossingIntoRegion(primID, position, isPhysical);
                 return true;
             }
             return false;

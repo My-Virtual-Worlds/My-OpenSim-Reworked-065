@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -69,7 +69,6 @@ namespace OpenSim.ApplicationPlugins.CreateCommsManager
 
         protected CommunicationsManager m_commsManager;
         protected GridInfoService m_gridInfoService;
-        protected IHyperlink HGServices = null;
 
         protected IRegionCreator m_regionCreator;
 
@@ -83,6 +82,7 @@ namespace OpenSim.ApplicationPlugins.CreateCommsManager
         {
             m_openSim = openSim;
             m_httpServer = openSim.HttpServer;
+            MainServer.Instance = m_httpServer;
 
             InitialiseCommsManager(openSim);
             if (m_commsManager != null)
@@ -143,7 +143,6 @@ namespace OpenSim.ApplicationPlugins.CreateCommsManager
                 // We are in grid mode
                 InitialiseHGGridServices(libraryRootFolder);
             }
-            HGCommands.HGServices = HGServices;
         }
 
         protected void InitialiseStandardServices(LibraryRootFolder libraryRootFolder)
@@ -168,8 +167,8 @@ namespace OpenSim.ApplicationPlugins.CreateCommsManager
         {
             m_commsManager
                 = new CommunicationsLocal(
-                    m_openSim.ConfigurationSettings, m_openSim.NetServersInfo, m_httpServer, m_openSim.AssetCache,
-                    libraryRootFolder, m_openSim.ConfigurationSettings.DumpAssetsToFile);
+                    m_openSim.ConfigurationSettings, m_openSim.NetServersInfo,
+                    libraryRootFolder);
 
             CreateGridInfoService();
         }
@@ -177,28 +176,21 @@ namespace OpenSim.ApplicationPlugins.CreateCommsManager
         protected virtual void InitialiseGridServices(LibraryRootFolder libraryRootFolder)
         {
             m_commsManager
-                = new CommunicationsOGS1(m_openSim.NetServersInfo, m_httpServer, m_openSim.AssetCache, libraryRootFolder);
+                = new CommunicationsOGS1(m_openSim.NetServersInfo, libraryRootFolder);
 
             m_httpServer.AddStreamHandler(new OpenSim.SimStatusHandler());
             m_httpServer.AddStreamHandler(new OpenSim.XSimStatusHandler(m_openSim));
-            if (m_openSim.userStatsURI != String.Empty )
+            if (m_openSim.userStatsURI != String.Empty)
                 m_httpServer.AddStreamHandler(new OpenSim.UXSimStatusHandler(m_openSim));
         }
 
         protected virtual void InitialiseHGStandaloneServices(LibraryRootFolder libraryRootFolder)
-        {    
-            HGGridServicesStandalone gridService 
-                = new HGGridServicesStandalone(
-                    m_openSim.NetServersInfo, m_httpServer, m_openSim.AssetCache, m_openSim.SceneManager);                         
-
+        {
             m_commsManager 
                 = new HGCommunicationsStandalone(
-                    m_openSim.ConfigurationSettings, m_openSim.NetServersInfo, m_httpServer, m_openSim.AssetCache,
-                    gridService, 
-                    libraryRootFolder, m_openSim.ConfigurationSettings.DumpAssetsToFile);                        
+                    m_openSim.ConfigurationSettings, m_openSim.NetServersInfo, m_httpServer, 
+                    libraryRootFolder, false);
             
-            HGServices = gridService;
-
             CreateGridInfoService();
         }
 
@@ -206,14 +198,12 @@ namespace OpenSim.ApplicationPlugins.CreateCommsManager
         {
             m_commsManager 
                 = new HGCommunicationsGridMode(
-                    m_openSim.NetServersInfo, m_httpServer, 
-                    m_openSim.AssetCache, m_openSim.SceneManager, libraryRootFolder);
-
-            HGServices = ((HGCommunicationsGridMode) m_commsManager).HGServices;
+                    m_openSim.NetServersInfo,
+                    m_openSim.SceneManager, libraryRootFolder);
 
             m_httpServer.AddStreamHandler(new OpenSim.SimStatusHandler());
             m_httpServer.AddStreamHandler(new OpenSim.XSimStatusHandler(m_openSim));
-            if (m_openSim.userStatsURI != String.Empty )
+            if (m_openSim.userStatsURI != String.Empty)
                 m_httpServer.AddStreamHandler(new OpenSim.UXSimStatusHandler(m_openSim));
         }
 

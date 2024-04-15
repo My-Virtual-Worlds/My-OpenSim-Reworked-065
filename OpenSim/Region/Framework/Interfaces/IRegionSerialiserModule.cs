@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -103,13 +103,13 @@ namespace OpenSim.Region.Framework.Interfaces
         /// <param name="max"></param>
         void SavePrimListToXml2(List<EntityBase> entityList, TextWriter stream, Vector3 min, Vector3 max);
         
-        void SaveNamedPrimsToXml2(Scene scene, string primName, string fileName);        
-
+        void SaveNamedPrimsToXml2(Scene scene, string primName, string fileName);
+            
         /// <summary>
         /// Deserializes a scene object from its xml2 representation.  This does not load the object into the scene.
         /// </summary>
         /// <param name="xmlString"></param>
-        /// <returns>The scene object created.  null if the scene object already existed</returns>
+        /// <returns>The scene object created</returns>
         SceneObjectGroup DeserializeGroupFromXml2(string xmlString);
 
         /// <summary>
@@ -117,6 +117,6 @@ namespace OpenSim.Region.Framework.Interfaces
         /// </summary>
         /// <param name="grp"></param>
         /// <returns></returns>
-        string SaveGroupToXml2(SceneObjectGroup grp);
+        string SerializeGroupToXml2(SceneObjectGroup grp);
     }
 }

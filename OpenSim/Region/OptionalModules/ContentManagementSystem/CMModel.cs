@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -102,7 +102,7 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
             {
                 if (m_MetaEntityCollection.Auras.ContainsKey(((SceneObjectPart)missingPart).UUID))
                     continue;
-                newList.Add(m_MetaEntityCollection.CreateAuraForNewlyCreatedEntity((SceneObjectPart)missingPart));                
+                newList.Add(m_MetaEntityCollection.CreateAuraForNewlyCreatedEntity((SceneObjectPart)missingPart));
             }
             m_log.Info("Number of missing objects found: " + newList.Count);
             return newList;
@@ -115,7 +115,7 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
         {
             m_log.Debug("[CONTENT MANAG] saving " + scene.RegionInfo.RegionName + " with log message: " + logMessage + " length of message: " + logMessage.Length);
             m_database.SaveRegion(scene.RegionInfo.RegionID, scene.RegionInfo.RegionName, logMessage);
-            m_log.Debug("[CONTENT MANAG] the region name we are dealing with heeeeeeeere: " + scene.RegionInfo.RegionName );
+            m_log.Debug("[CONTENT MANAG] the region name we are dealing with heeeeeeeere: " + scene.RegionInfo.RegionName);
         }
 
         public void DeleteAllMetaObjects()

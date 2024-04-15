@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -28,19 +28,24 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using log4net;
 using Nwc.XmlRpc;
 using OpenMetaverse;
+using Nini.Config;
 using OpenSim.Data;
 using OpenSim.Framework;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Communications.Services;
 using OpenSim.Framework.Communications.Cache;
-using OpenSim.Framework.Communications.Capabilities;
+using OpenSim.Framework.Capabilities;
 using OpenSim.Framework.Servers;
 using OpenSim.Framework.Servers.HttpServer;
+using OpenSim.Services.Interfaces;
+using OpenSim.Services.Connectors;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 namespace OpenSim.Grid.UserServer.Modules
 {
@@ -50,7 +55,7 @@ namespace OpenSim.Grid.UserServer.Modules
 
     /// <summary>
     /// Login service used in grid mode.
-    /// </summary>     
+    /// </summary>
     public class UserLoginService : LoginService
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
@@ -61,6 +66,8 @@ namespace OpenSim.Grid.UserServer.Modules
 
         public UserConfig m_config;
         private readonly IRegionProfileRouter m_regionProfileService;
+
+        private IGridService m_GridService;
 
         protected BaseHttpServer m_httpServer;
 
@@ -73,8 +80,10 @@ namespace OpenSim.Grid.UserServer.Modules
             m_config = config;
             m_defaultHomeX = m_config.DefaultX;
             m_defaultHomeY = m_config.DefaultY;
-            m_inventoryService = inventoryService;
+            m_interInventoryService = inventoryService;
             m_regionProfileService = regionProfileService;
+
+            m_GridService = new GridServicesConnector(config.GridServerURL.ToString());
         }
 
         public void RegisterHandlers(BaseHttpServer httpServer, bool registerLLSDHandler, bool registerOpenIDHandlers)
@@ -202,52 +211,43 @@ namespace OpenSim.Grid.UserServer.Modules
 
         protected override RegionInfo RequestClosestRegion(string region)
         {
-            RegionProfileData profileData = m_regionProfileService.RequestSimProfileData(region,
-                                                                                         m_config.GridServerURL, m_config.GridSendKey, m_config.GridRecvKey);
-
-            if (profileData != null)
-            {
-                return profileData.ToRegionInfo();
-            }
-            else
-            {
-                return null;
-            }
+            return GridRegionToRegionInfo(m_GridService.GetRegionByName(UUID.Zero, region));
         }
 
         protected override RegionInfo GetRegionInfo(ulong homeRegionHandle)
         {
-            RegionProfileData profileData = m_regionProfileService.RequestSimProfileData(homeRegionHandle,
-                                                                                         m_config.GridServerURL, m_config.GridSendKey,
-                                                                                         m_config.GridRecvKey);
-            if (profileData != null)
-            {
-                return profileData.ToRegionInfo();
-            }
-            else
-            {
-                return null;
-            }
+            uint x = 0, y = 0;
+            Utils.LongToUInts(homeRegionHandle, out x, out y);
+            return GridRegionToRegionInfo(m_GridService.GetRegionByPosition(UUID.Zero, (int)x, (int)y));
         }
 
         protected override RegionInfo GetRegionInfo(UUID homeRegionId)
         {
-            RegionProfileData profileData = m_regionProfileService.RequestSimProfileData(homeRegionId,
-                                                                                         m_config.GridServerURL, m_config.GridSendKey,
-                                                                                         m_config.GridRecvKey);
-            if (profileData != null)
-            {
-                return profileData.ToRegionInfo();
-            }
-            else
-            {
-                return null;
-            }
+            return GridRegionToRegionInfo(m_GridService.GetRegionByUUID(UUID.Zero, homeRegionId));
         }
 
-        protected override bool PrepareLoginToRegion(RegionInfo regionInfo, UserProfileData user, LoginResponse response)
+        private RegionInfo GridRegionToRegionInfo(GridRegion gregion)
         {
-            return PrepareLoginToRegion(RegionProfileData.FromRegionInfo(regionInfo), user, response);
+            if (gregion == null)
+                return null;
+
+            RegionInfo rinfo = new RegionInfo();
+            rinfo.ExternalHostName = gregion.ExternalHostName;
+            rinfo.HttpPort = gregion.HttpPort;
+            rinfo.InternalEndPoint = gregion.InternalEndPoint;
+            rinfo.RegionID = gregion.RegionID;
+            rinfo.RegionLocX = (uint)(gregion.RegionLocX / Constants.RegionSize);
+            rinfo.RegionLocY = (uint)(gregion.RegionLocY / Constants.RegionSize);
+            rinfo.RegionName = gregion.RegionName;
+            rinfo.ScopeID = gregion.ScopeID;
+            rinfo.ServerURI = gregion.ServerURI;
+
+            return rinfo;
+        }
+
+        protected override bool PrepareLoginToRegion(RegionInfo regionInfo, UserProfileData user, LoginResponse response, IPEndPoint remoteClient)
+        {
+            return PrepareLoginToRegion(RegionProfileData.FromRegionInfo(regionInfo), user, response, remoteClient);
         }
 
         /// <summary>
@@ -258,7 +258,7 @@ namespace OpenSim.Grid.UserServer.Modules
         /// <param name="user"></param>
         /// <param name="response"></param>
         /// <returns>true if the region was successfully contacted, false otherwise</returns>
-        private bool PrepareLoginToRegion(RegionProfileData regionInfo, UserProfileData user, LoginResponse response)
+        private bool PrepareLoginToRegion(RegionProfileData regionInfo, UserProfileData user, LoginResponse response, IPEndPoint remoteClient)
         {
             try
             {
@@ -269,10 +269,19 @@ namespace OpenSim.Grid.UserServer.Modules
 
                 string capsPath = CapsUtil.GetRandomCapsObjectPath();
 
+                // Adam's working code commented for now -- Diva 5/25/2009
+                //// For NAT
+                ////string host = NetworkUtil.GetHostFor(remoteClient.Address, regionInfo.ServerIP);
+                //string host = response.SimAddress;
+                //// TODO: This doesnt support SSL. -Adam
+                //string serverURI = "http://" + host + ":" + regionInfo.ServerPort;
+
+                //response.SeedCapability = serverURI + CapsUtil.GetCapsSeedPath(capsPath);
+
                 // Take off trailing / so that the caps path isn't //CAPS/someUUID
-                if (regionInfo.httpServerURI.EndsWith("/"))
-                    regionInfo.httpServerURI = regionInfo.httpServerURI.Substring(0, regionInfo.httpServerURI.Length - 1);
-                response.SeedCapability = regionInfo.httpServerURI + CapsUtil.GetCapsSeedPath(capsPath);
+                string uri = regionInfo.httpServerURI.Trim(new char[] { '/' });
+                response.SeedCapability = uri + CapsUtil.GetCapsSeedPath(capsPath);
+
 
                 // Notify the target of an incoming user
                 m_log.InfoFormat(
@@ -308,6 +317,7 @@ namespace OpenSim.Grid.UserServer.Modules
                 {
                     m_log.DebugFormat("[LOGIN]: Appearance not for {0} {1}. Creating default.", user.FirstName, user.SurName);
                     appearance = new AvatarAppearance(user.ID);
+                    loginParams["appearance"] = appearance.ToHashTable();
                 }
 
                 ArrayList SendParams = new ArrayList();
@@ -368,7 +378,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return true;
         }
 
-        public XmlRpcResponse XmlRPCSetLoginParams(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCSetLoginParams(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -36,6 +36,7 @@ using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
 {
@@ -56,7 +57,10 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
             if (cnf != null && cnf.GetString(
                     "MessageTransferModule", "MessageTransferModule") !=
                     "MessageTransferModule")
+            {
+                m_log.Debug("[MESSAGE TRANSFER]: Disabled by configuration");
                 return;
+            }
 
             cnf = config.Configs["Startup"];
             if (cnf != null)
@@ -68,10 +72,11 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
             {
                 if (m_Scenes.Count == 0)
                 {
-                    scene.CommsManager.HttpServer.AddXmlRPCHandler(
+                    MainServer.Instance.AddXmlRPCHandler(
                         "grid_instant_message", processXMLRPCGridInstantMessage);
                 }
 
+                m_log.Debug("[MESSAGE TRANSFER]: Message transfer module active");
                 scene.RegisterModuleInterface<IMessageTransferModule>(this);
                 m_Scenes.Add(scene);
             }
@@ -180,7 +185,7 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
         /// <param name="request">XMLRPC parameters
         /// </param>
         /// <returns>Nothing much</returns>
-        protected virtual XmlRpcResponse processXMLRPCGridInstantMessage(XmlRpcRequest request)
+        protected virtual XmlRpcResponse processXMLRPCGridInstantMessage(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             bool successful = false;
             
@@ -493,7 +498,10 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
             {
                 if (upd.AgentOnline)
                 {
-                    RegionInfo reginfo = m_Scenes[0].SceneGridService.RequestNeighbouringRegionInfo(upd.Handle);
+                    uint x = 0, y = 0;
+                    Utils.LongToUInts(upd.Handle, out x, out y);
+                    GridRegion reginfo = m_Scenes[0].GridService.GetRegionByPosition(m_Scenes[0].RegionInfo.ScopeID,
+                        (int)x, (int)y);
                     if (reginfo != null)
                     {
                         Hashtable msgdata = ConvertGridInstantMessageToXMLRPC(im);
@@ -555,7 +563,7 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
         /// <param name="reginfo">RegionInfo we pull the data out of to send the request to</param>
         /// <param name="xmlrpcdata">The Instant Message data Hashtable</param>
         /// <returns>Bool if the message was successfully delivered at the other side.</returns>
-        protected virtual bool doIMSending(RegionInfo reginfo, Hashtable xmlrpcdata)
+        protected virtual bool doIMSending(GridRegion reginfo, Hashtable xmlrpcdata)
         {
 
             ArrayList SendParams = new ArrayList();

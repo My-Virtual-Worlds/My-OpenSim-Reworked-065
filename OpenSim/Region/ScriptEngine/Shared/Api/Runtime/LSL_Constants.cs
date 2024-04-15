@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -32,7 +32,7 @@ using LSLInteger = OpenSim.Region.ScriptEngine.Shared.LSL_Types.LSLInteger;
 
 namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
 {
-    public partial class ScriptBaseClass : MarshalByRefObject
+    public partial class ScriptBaseClass
     {
         // LSL CONSTANTS
         public static readonly LSLInteger TRUE = new LSLInteger(1);
@@ -160,6 +160,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public const int VEHICLE_BANKING_MIX = 39;
         public const int VEHICLE_BANKING_TIMESCALE = 40;
         public const int VEHICLE_REFERENCE_FRAME = 44;
+        public const int VEHICLE_RANGE_BLOCK = 45;
+        public const int VEHICLE_ROLL_FRAME = 46;
         public const int VEHICLE_FLAG_NO_DEFLECTION_UP = 1;
         public const int VEHICLE_FLAG_LIMIT_ROLL_ONLY = 2;
         public const int VEHICLE_FLAG_HOVER_WATER_ONLY = 4;
@@ -170,6 +172,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public const int VEHICLE_FLAG_MOUSELOOK_STEER = 128;
         public const int VEHICLE_FLAG_MOUSELOOK_BANK = 256;
         public const int VEHICLE_FLAG_CAMERA_DECOUPLED = 512;
+        public const int VEHICLE_FLAG_NO_X = 1024;
+        public const int VEHICLE_FLAG_NO_Y = 2048;
+        public const int VEHICLE_FLAG_NO_Z = 4096;
+        public const int VEHICLE_FLAG_LOCK_HOVER_HEIGHT = 8192;
+        public const int VEHICLE_FLAG_NO_DEFLECTION = 16392;
+        public const int VEHICLE_FLAG_LOCK_ROTATION = 32784;
 
         public const int INVENTORY_ALL = -1;
         public const int INVENTORY_NONE = -1;
@@ -305,6 +313,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public const int PRIM_CAST_SHADOWS = 24; // Not implemented, here for completeness sake
         public const int PRIM_POINT_LIGHT = 23; // Huh?
         public const int PRIM_GLOW = 25;
+        public const int PRIM_TEXT = 26;
         public const int PRIM_TEXGEN_DEFAULT = 0;
         public const int PRIM_TEXGEN_PLANAR = 1;
 
@@ -515,6 +524,29 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public const string TEXTURE_PLYWOOD = "89556747-24cb-43ed-920b-47caed15465f";
         public const string TEXTURE_TRANSPARENT = "8dcd4a48-2d37-4909-9f78-f7a9eb4ef903";
         public const string TEXTURE_MEDIA = "8b5fec65-8d8d-9dc5-cda8-8fdf2716e361";
+        
+        // Constants for osGetRegionStats
+        public const int STATS_TIME_DILATION = 0;
+        public const int STATS_SIM_FPS = 1;
+        public const int STATS_PHYSICS_FPS = 2;
+        public const int STATS_AGENT_UPDATES = 3;
+        public const int STATS_ROOT_AGENTS = 4;
+        public const int STATS_CHILD_AGENTS = 5;
+        public const int STATS_TOTAL_PRIMS = 6;
+        public const int STATS_ACTIVE_PRIMS = 7;
+        public const int STATS_FRAME_MS = 8;
+        public const int STATS_NET_MS = 9;
+        public const int STATS_PHYSICS_MS = 10;
+        public const int STATS_IMAGE_MS = 11;
+        public const int STATS_OTHER_MS = 12;
+        public const int STATS_IN_PACKETS_PER_SECOND = 13;
+        public const int STATS_OUT_PACKETS_PER_SECOND = 14;
+        public const int STATS_UNACKED_BYTES = 15;
+        public const int STATS_AGENT_MS = 16;
+        public const int STATS_PENDING_DOWNLOADS = 17;
+        public const int STATS_PENDING_UPLOADS = 18;
+        public const int STATS_ACTIVE_SCRIPTS = 19;
+        public const int STATS_SCRIPT_LPS = 20;
 
     }
 }

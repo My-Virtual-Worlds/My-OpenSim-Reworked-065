@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -90,7 +90,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.CodeTools
             m_warnings.Clear();
             ResetCounters();
             Parser p = new LSLSyntax(new yyLSLSyntax(), new ErrorHandler(true));
-            // Obviously this needs to be in a try/except block.
+
             LSL2CSCodeTransformer codeTransformer;
             try
             {
@@ -111,7 +111,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.CodeTools
                 if (emessage.StartsWith(slinfo+": "))
                     emessage = emessage.Substring(slinfo.Length+2);
 
-                message = String.Format("Line ({0},{1}) {2}",
+                message = String.Format("({0},{1}) {2}",
                         e.slInfo.lineNumber - 2,
                         e.slInfo.charPosition - 1, emessage);
 
@@ -446,8 +446,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.CodeTools
                 // Jump label prints its own colon, we don't need a semicolon.
                 printSemicolon = !(s.kids.Top is JumpLabel);
 
-                foreach (SYMBOL kid in s.kids)
-                    retstr += GenerateNode(kid);
+                // If we encounter a lone Ident, we skip it, since that's a C#
+                // (MONO) error.
+                if (!(s.kids.Top is IdentExpression && 1 == s.kids.Count))
+                    foreach (SYMBOL kid in s.kids)
+                        retstr += GenerateNode(kid);
             }
 
             if (printSemicolon)
@@ -671,16 +674,22 @@ namespace OpenSim.Region.ScriptEngine.Shared.CodeTools
 
             retstr += GenerateIndented("for (", fl);
 
-            // for ( x = 0 ; x < 10 ; x++ )
-            //       ^^^^^^^
-            retstr += GenerateForLoopStatement((ForLoopStatement) fl.kids.Pop());
+            // It's possible that we don't have an assignment, in which case
+            // the child will be null and we only print the semicolon.
+            // for (x = 0; x < 10; x++)
+            //      ^^^^^
+            ForLoopStatement s = (ForLoopStatement) fl.kids.Pop();
+            if (null != s)
+            {
+                retstr += GenerateForLoopStatement(s);
+            }
             retstr += Generate("; ");
-            // for ( x = 0 ; x < 10 ; x++ )
-            //               ^^^^^^^^
+            // for (x = 0; x < 10; x++)
+            //             ^^^^^^
             retstr += GenerateNode((SYMBOL) fl.kids.Pop());
             retstr += Generate("; ");
-            // for ( x = 0 ; x < 10 ; x++ )
-            //                        ^^^^^
+            // for (x = 0; x < 10; x++)
+            //                     ^^^
             retstr += GenerateForLoopStatement((ForLoopStatement) fl.kids.Pop());
             retstr += GenerateLine(")");
 
@@ -705,8 +714,34 @@ namespace OpenSim.Region.ScriptEngine.Shared.CodeTools
 
             int comma = fls.kids.Count - 1;  // tells us whether to print a comma
 
-            foreach (SYMBOL s in fls.kids)
+            // It's possible that all we have is an empty Ident, for example:
+            //
+            //     for (x; x < 10; x++) { ... }
+            //
+            // Which is illegal in C# (MONO). We'll skip it.
+            if (fls.kids.Top is IdentExpression && 1 == fls.kids.Count)
+                return retstr;
+
+            for (int i = 0; i < fls.kids.Count; i++)
             {
+                SYMBOL s = (SYMBOL)fls.kids[i];
+                
+                // Statements surrounded by parentheses in for loops
+                //
+                // e.g.  for ((i = 0), (j = 7); (i < 10); (++i))
+                //
+                // are legal in LSL but not in C# so we need to discard the parentheses
+                //
+                // The following, however, does not appear to be legal in LLS
+                //
+                // for ((i = 0, j = 7); (i < 10); (++i))
+                //
+                // As of Friday 20th November 2009, the Linden Lab simulators appear simply never to compile or run this
+                // script but with no debug or warnings at all!  Therefore, we won't deal with this yet (which looks
+                // like it would be considerably more complicated to handle).
+                while (s is ParenthesisExpression)
+                    s = (SYMBOL)s.kids.Pop();
+                    
                 retstr += GenerateNode(s);
                 if (0 < comma--)
                     retstr += Generate(", ");

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,6 +29,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using log4net;
 using OpenMetaverse;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Framework.Communications.Cache
 {
@@ -59,12 +60,14 @@ namespace OpenSim.Framework.Communications.Cache
         /// User profiles indexed by name
         /// </summary>
         private readonly Dictionary<string, CachedUserInfo> m_userProfilesByName 
-            = new Dictionary<string, CachedUserInfo>();        
+            = new Dictionary<string, CachedUserInfo>();
         
         /// <summary>
         /// The root library folder.
         /// </summary>
         public readonly InventoryFolderImpl LibraryRoot;
+
+        private IInventoryService m_InventoryService;
 
         /// <summary>
         /// Constructor
@@ -75,6 +78,11 @@ namespace OpenSim.Framework.Communications.Cache
         {
             m_commsManager = commsManager;
             LibraryRoot = libraryRootFolder;
+        }
+
+        public void SetInventoryService(IInventoryService invService)
+        {
+            m_InventoryService = invService;
         }
 
         /// <summary>
@@ -115,35 +123,43 @@ namespace OpenSim.Framework.Communications.Cache
         /// <summary>
         /// Get details of the given user.
         /// </summary>
-        /// If the user isn't in cache then the user is requested from the profile service.  
+        /// If the user isn't in cache then the user is requested from the profile service.
         /// <param name="userID"></param>
-        /// <returns>null if no user details are found</returns>        
+        /// <returns>null if no user details are found</returns>
         public CachedUserInfo GetUserDetails(string fname, string lname)
         {
             lock (m_userProfilesByName)
-            {    
+            {
                 CachedUserInfo userInfo;
                 
-                if (m_userProfilesByName.TryGetValue(string.Format(NAME_FORMAT, fname, lname), out userInfo))                    
+                if (m_userProfilesByName.TryGetValue(string.Format(NAME_FORMAT, fname, lname), out userInfo))
                 {
                     return userInfo;
-                }                
+                }
                 else
-                {                
+                {
                     UserProfileData userProfile = m_commsManager.UserService.GetUserProfile(fname, lname);
-                
+
                     if (userProfile != null)
-                        return AddToCaches(userProfile);             
+                    {
+
+                        if ((userProfile.UserAssetURI == null || userProfile.UserAssetURI == "") && m_commsManager.NetworkServersInfo != null)
+                            userProfile.UserAssetURI = m_commsManager.NetworkServersInfo.AssetURL;
+                        if ((userProfile.UserInventoryURI == null || userProfile.UserInventoryURI == "") && m_commsManager.NetworkServersInfo != null)
+                            userProfile.UserInventoryURI = m_commsManager.NetworkServersInfo.InventoryURL;
+
+                        return AddToCaches(userProfile);
+                    }
                     else
                         return null;
-                }               
+                }
             }
         }
         
         /// <summary>
         /// Get details of the given user.
         /// </summary>
-        /// If the user isn't in cache then the user is requested from the profile service.  
+        /// If the user isn't in cache then the user is requested from the profile service.
         /// <param name="userID"></param>
         /// <returns>null if no user details are found</returns>
         public CachedUserInfo GetUserDetails(UUID userID)
@@ -161,7 +177,15 @@ namespace OpenSim.Framework.Communications.Cache
                 {
                     UserProfileData userProfile = m_commsManager.UserService.GetUserProfile(userID);
                     if (userProfile != null)
+                    {
+
+                        if ((userProfile.UserAssetURI == null || userProfile.UserAssetURI == "") && m_commsManager.NetworkServersInfo != null)
+                            userProfile.UserAssetURI = m_commsManager.NetworkServersInfo.AssetURL;
+                        if ((userProfile.UserInventoryURI == null || userProfile.UserInventoryURI == "") && m_commsManager.NetworkServersInfo != null)
+                            userProfile.UserInventoryURI = m_commsManager.NetworkServersInfo.InventoryURL;
+
                         return AddToCaches(userProfile);
+                    }
                     else
                         return null;
                 }
@@ -176,21 +200,21 @@ namespace OpenSim.Framework.Communications.Cache
         // Commented out for now.  The implementation needs to be improved by protecting against race conditions,
         // probably by making sure that the update doesn't use the UserCacheInfo.UserProfile directly (possibly via
         // returning a read only class from the cache).
-//        public bool UpdateProfile(UserProfileData userProfile)
-//        {            
+//        public bool StoreProfile(UserProfileData userProfile)
+//        {
 //            lock (m_userProfilesById)
-//            {            
+//            {
 //                CachedUserInfo userInfo = GetUserDetails(userProfile.ID);
-//                
+//
 //                if (userInfo != null)
 //                {
-//                    userInfo.m_userProfile = userProfile;                   
+//                    userInfo.m_userProfile = userProfile;
 //                    m_commsManager.UserService.UpdateUserProfile(userProfile);
-//                    
+//
 //                    return true;
 //                }
 //            }
-//            
+//
 //            return false;
 //        }
         
@@ -200,7 +224,7 @@ namespace OpenSim.Framework.Communications.Cache
         /// <param name="userProfile"></param>
         protected CachedUserInfo AddToCaches(UserProfileData userProfile)
         {
-            CachedUserInfo createdUserInfo = new CachedUserInfo(m_commsManager, userProfile);
+            CachedUserInfo createdUserInfo = new CachedUserInfo(m_InventoryService, userProfile);
             
             lock (m_userProfilesById)
             {
@@ -212,7 +236,7 @@ namespace OpenSim.Framework.Communications.Cache
                 }
             }
             
-            return createdUserInfo;            
+            return createdUserInfo;
         }
         
         /// <summary>
@@ -226,7 +250,7 @@ namespace OpenSim.Framework.Communications.Cache
             {
                 if (m_userProfilesById.ContainsKey(userId))
                 {
-                    CachedUserInfo userInfo = m_userProfilesById[userId];                    
+                    CachedUserInfo userInfo = m_userProfilesById[userId];
                     m_userProfilesById.Remove(userId);
                     
                     lock (m_userProfilesByName)
@@ -236,7 +260,7 @@ namespace OpenSim.Framework.Communications.Cache
                     
                     return true;
                 }
-            }        
+            }
             
             return false;
         }

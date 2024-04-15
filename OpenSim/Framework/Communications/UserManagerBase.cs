@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -37,13 +37,15 @@ using OpenMetaverse.StructuredData;
 using OpenSim.Data;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Statistics;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Framework.Communications
 {
     /// <summary>
     /// Base class for user management (create, read, etc)
     /// </summary>
-    public abstract class UserManagerBase : IUserService, IUserAdminService, IAvatarService, IMessagingService, IAuthentication
+    public abstract class UserManagerBase 
+        : IUserService, IUserAdminService, IAvatarService, IMessagingService, IAuthentication
     {
         private static readonly ILog m_log
             = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
@@ -54,6 +56,7 @@ namespace OpenSim.Framework.Communications
         private List<IUserDataPlugin> m_plugins = new List<IUserDataPlugin>();
 
         protected CommunicationsManager m_commsManager;
+        protected IInventoryService m_InventoryService;
 
         /// <summary>
         /// Constructor
@@ -62,6 +65,11 @@ namespace OpenSim.Framework.Communications
         public UserManagerBase(CommunicationsManager commsManager)
         {
             m_commsManager = commsManager;
+        }
+
+        public virtual void SetInventoryService(IInventoryService invService)
+        {
+            m_InventoryService = invService;
         }
 
         /// <summary>
@@ -642,15 +650,17 @@ namespace OpenSim.Framework.Communications
         public virtual UUID AddUser(
             string firstName, string lastName, string password, string email, uint regX, uint regY, UUID SetUUID)
         {
-            string md5PasswdHash = Util.Md5Hash(Util.Md5Hash(password) + ":" + String.Empty);
 
             UserProfileData user = new UserProfileData();
+
+            user.PasswordSalt = Util.Md5Hash(UUID.Random().ToString());
+            string md5PasswdHash = Util.Md5Hash(Util.Md5Hash(password) + ":" + user.PasswordSalt);
+
             user.HomeLocation = new Vector3(128, 128, 100);
             user.ID = SetUUID;
             user.FirstName = firstName;
             user.SurName = lastName;
             user.PasswordHash = md5PasswdHash;
-            user.PasswordSalt = String.Empty;
             user.Created = Util.UnixTimeSinceEpoch();
             user.HomeLookAt = new Vector3(100, 100, 100);
             user.HomeRegionX = regX;
@@ -676,7 +686,24 @@ namespace OpenSim.Framework.Communications
             }
             else
             {
-                m_commsManager.InterServiceInventoryService.CreateNewUserInventory(userProf.ID);
+                //
+                // WARNING: This is a horrible hack
+                // The purpose here is to avoid touching the user server at this point.
+                // There are dragons there that I can't deal with right now.
+                // diva 06/09/09
+                //
+                if (m_InventoryService != null)
+                {
+                    // local service (standalone)
+                    m_log.Debug("[USERSTORAGE]: using IInventoryService to create user's inventory");
+                    m_InventoryService.CreateUserInventory(userProf.ID);
+                }
+                else if (m_commsManager.InterServiceInventoryService != null)
+                {
+                    // used by the user server
+                    m_log.Debug("[USERSTORAGE]: using m_commsManager.InterServiceInventoryService to create user's inventory");
+                    m_commsManager.InterServiceInventoryService.CreateNewUserInventory(userProf.ID);
+                }
 
                 return userProf.ID;
             }
@@ -758,7 +785,8 @@ namespace OpenSim.Framework.Communications
                 }
                 catch (Exception e)
                 {
-                    m_log.ErrorFormat("[USERSTORAGE]: Unable to find user appearance {0} via {1} ({2})", user.ToString(), plugin.Name, e.ToString());
+                    m_log.ErrorFormat(
+                        "[USERSTORAGE]: Unable to find user appearance {0} via {1} ({2})", user, plugin.Name, e);
                 }
             }
             
@@ -864,7 +892,10 @@ namespace OpenSim.Framework.Communications
 
             if (userProfile != null && userProfile.CurrentAgent != null)
             {
-                m_log.DebugFormat("[USER AUTH]: Verifying session {0} for {1}; current  session {2}", sessionID, userID, userProfile.CurrentAgent.SessionID);
+                m_log.DebugFormat(
+                    "[USER AUTH]: Verifying session {0} for {1}; current  session {2}", 
+                    sessionID, userID, userProfile.CurrentAgent.SessionID);
+                
                 if (userProfile.CurrentAgent.SessionID == sessionID)
                 {
                     return true;
@@ -872,6 +903,26 @@ namespace OpenSim.Framework.Communications
             }
             
             return false;
+        }
+
+        public virtual bool AuthenticateUserByPassword(UUID userID, string password)
+        {
+//            m_log.DebugFormat("[USER AUTH]: Authenticating user {0} given password {1}", userID, password);
+            
+            UserProfileData userProfile = GetUserProfile(userID);
+
+            if (null == userProfile)
+                return false;
+      
+            string md5PasswordHash = Util.Md5Hash(Util.Md5Hash(password) + ":" + userProfile.PasswordSalt);
+
+//            m_log.DebugFormat(
+//                "[USER AUTH]: Submitted hash {0}, stored hash {1}", md5PasswordHash, userProfile.PasswordHash);
+    
+            if (md5PasswordHash == userProfile.PasswordHash)
+                return true;
+            else
+                return false;
         }
 
         #endregion

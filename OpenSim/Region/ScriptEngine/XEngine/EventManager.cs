@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -53,15 +53,22 @@ namespace OpenSim.Region.ScriptEngine.XEngine
             myScriptEngine = _ScriptEngine;
 
             m_log.Info("[XEngine] Hooking up to server events");
+            myScriptEngine.World.EventManager.OnAttach += attach;
             myScriptEngine.World.EventManager.OnObjectGrab += touch_start;
+            myScriptEngine.World.EventManager.OnObjectGrabbing += touch;
             myScriptEngine.World.EventManager.OnObjectDeGrab += touch_end;
             myScriptEngine.World.EventManager.OnScriptChangedEvent += changed;
             myScriptEngine.World.EventManager.OnScriptAtTargetEvent += at_target;
             myScriptEngine.World.EventManager.OnScriptNotAtTargetEvent += not_at_target;
+            myScriptEngine.World.EventManager.OnScriptAtRotTargetEvent += at_rot_target;
+            myScriptEngine.World.EventManager.OnScriptNotAtRotTargetEvent += not_at_rot_target;
             myScriptEngine.World.EventManager.OnScriptControlEvent += control;
             myScriptEngine.World.EventManager.OnScriptColliderStart += collision_start;
             myScriptEngine.World.EventManager.OnScriptColliding += collision;
             myScriptEngine.World.EventManager.OnScriptCollidingEnd += collision_end;
+            myScriptEngine.World.EventManager.OnScriptLandColliderStart += land_collision_start;
+            myScriptEngine.World.EventManager.OnScriptLandColliding += land_collision;
+            myScriptEngine.World.EventManager.OnScriptLandColliderEnd += land_collision_end;
             IMoneyModule money=myScriptEngine.World.RequestModuleInterface<IMoneyModule>();
             if (money != null)
             {
@@ -69,6 +76,13 @@ namespace OpenSim.Region.ScriptEngine.XEngine
             }
         }
 
+        /// <summary>
+        /// When an object gets paid by an avatar and generates the paid event, 
+        /// this will pipe it to the script engine
+        /// </summary>
+        /// <param name="objectID">Object ID that got paid</param>
+        /// <param name="agentID">Agent Id that did the paying</param>
+        /// <param name="amount">Amount paid</param>
         private void HandleObjectPaid(UUID objectID, UUID agentID,
                 int amount)
         {
@@ -92,6 +106,15 @@ namespace OpenSim.Region.ScriptEngine.XEngine
             }
         }
 
+        /// <summary>
+        /// Handles piping the proper stuff to The script engine for touching
+        /// Including DetectedParams
+        /// </summary>
+        /// <param name="localID"></param>
+        /// <param name="originalID"></param>
+        /// <param name="offsetPos"></param>
+        /// <param name="remoteClient"></param>
+        /// <param name="surfaceArgs"></param>
         public void touch_start(uint localID, uint originalID, Vector3 offsetPos,
                 IClientAPI remoteClient, SurfaceTouchEventArgs surfaceArgs)
         {
@@ -126,7 +149,7 @@ namespace OpenSim.Region.ScriptEngine.XEngine
         }
 
         public void touch(uint localID, uint originalID, Vector3 offsetPos,
-                IClientAPI remoteClient)
+                IClientAPI remoteClient, SurfaceTouchEventArgs surfaceArgs)
         {
             // Add to queue for all scripts in ObjectID object
             DetectParams[] det = new DetectParams[1];
@@ -150,13 +173,18 @@ namespace OpenSim.Region.ScriptEngine.XEngine
                 SceneObjectPart originalPart = myScriptEngine.World.GetSceneObjectPart(originalID);
                 det[0].LinkNum = originalPart.LinkNum;
             }
+            if (surfaceArgs != null)
+            {
+                det[0].SurfaceTouchArgs = surfaceArgs;
+            }
 
             myScriptEngine.PostObjectEvent(localID, new EventParams(
                     "touch", new Object[] { new LSL_Types.LSLInteger(1) },
                     det));
         }
 
-        public void touch_end(uint localID, uint originalID, IClientAPI remoteClient)
+        public void touch_end(uint localID, uint originalID, IClientAPI remoteClient,
+                              SurfaceTouchEventArgs surfaceArgs)
         {
             // Add to queue for all scripts in ObjectID object
             DetectParams[] det = new DetectParams[1];
@@ -176,6 +204,11 @@ namespace OpenSim.Region.ScriptEngine.XEngine
             {
                 SceneObjectPart originalPart = myScriptEngine.World.GetSceneObjectPart(originalID);
                 det[0].LinkNum = originalPart.LinkNum;
+            }
+
+            if (surfaceArgs != null)
+            {
+                det[0].SurfaceTouchArgs = surfaceArgs;
             }
 
             myScriptEngine.PostObjectEvent(localID, new EventParams(
@@ -262,29 +295,63 @@ namespace OpenSim.Region.ScriptEngine.XEngine
                         det.ToArray()));
         }
 
-        public void land_collision_start(uint localID, UUID itemID)
-        {
-            myScriptEngine.PostObjectEvent(localID, new EventParams(
-                    "land_collision_start",
-                    new object[0],
-                    new DetectParams[0]));
+        public void land_collision_start(uint localID, ColliderArgs col)
+         {
+            List<DetectParams> det = new List<DetectParams>();
+
+            foreach (DetectedObject detobj in col.Colliders)
+            {
+                DetectParams d = new DetectParams();
+                d.Position = new LSL_Types.Vector3(detobj.posVector.X,
+                    detobj.posVector.Y,
+                    detobj.posVector.Z);
+                d.Populate(myScriptEngine.World);
+                det.Add(d);
+                myScriptEngine.PostObjectEvent(localID, new EventParams(
+                        "land_collision_start",
+                        new Object[] { new LSL_Types.Vector3(d.Position) },
+                        det.ToArray()));
+            }
+
         }
 
-        public void land_collision(uint localID, UUID itemID)
+        public void land_collision(uint localID, ColliderArgs col)
         {
-            myScriptEngine.PostObjectEvent(localID, new EventParams(
-                    "land_collision",
-                    new object[0],
-                    new DetectParams[0]));
+            List<DetectParams> det = new List<DetectParams>();
+
+            foreach (DetectedObject detobj in col.Colliders)
+            {
+                DetectParams d = new DetectParams();
+                d.Position = new LSL_Types.Vector3(detobj.posVector.X,
+                    detobj.posVector.Y,
+                    detobj.posVector.Z);
+                d.Populate(myScriptEngine.World);
+                det.Add(d);
+                myScriptEngine.PostObjectEvent(localID, new EventParams(
+                        "land_collision",
+                        new Object[] { new LSL_Types.Vector3(d.Position) },
+                        det.ToArray()));
+            }
         }
 
-        public void land_collision_end(uint localID, UUID itemID)
+        public void land_collision_end(uint localID, ColliderArgs col)
         {
-            myScriptEngine.PostObjectEvent(localID, new EventParams(
-                    "land_collision_end",
-                    new object[0],
-                    new DetectParams[0]));
-        }
+            List<DetectParams> det = new List<DetectParams>();
+
+            foreach (DetectedObject detobj in col.Colliders)
+            {
+                DetectParams d = new DetectParams();
+                d.Position = new LSL_Types.Vector3(detobj.posVector.X,
+                    detobj.posVector.Y,
+                    detobj.posVector.Z);
+                d.Populate(myScriptEngine.World);
+                det.Add(d);
+                myScriptEngine.PostObjectEvent(localID, new EventParams(
+                        "land_collision_end",
+                        new Object[] { new LSL_Types.Vector3(d.Position) },
+                        det.ToArray()));
+            }
+         }
 
         // timer: not handled here
         // listen: not handled here
@@ -330,14 +397,18 @@ namespace OpenSim.Region.ScriptEngine.XEngine
                     new DetectParams[0]));
         }
 
-        public void at_rot_target(uint localID, UUID itemID)
+        public void at_rot_target(uint localID, uint handle, Quaternion targetrot,
+                Quaternion atrot)
         {
             myScriptEngine.PostObjectEvent(localID, new EventParams(
-                    "at_rot_target",new object[0],
+                    "at_rot_target", new object[] {
+                    new LSL_Types.LSLInteger(handle),
+                    new LSL_Types.Quaternion(targetrot.X,targetrot.Y,targetrot.Z,targetrot.W),
+                    new LSL_Types.Quaternion(atrot.X,atrot.Y,atrot.Z,atrot.W) },
                     new DetectParams[0]));
         }
 
-        public void not_at_rot_target(uint localID, UUID itemID)
+        public void not_at_rot_target(uint localID)
         {
             myScriptEngine.PostObjectEvent(localID, new EventParams(
                     "not_at_rot_target",new object[0],

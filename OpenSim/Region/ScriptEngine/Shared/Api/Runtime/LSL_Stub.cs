@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -674,6 +674,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             return m_LSL_Functions.llGetPrimitiveParams(rules);
         }
 
+        public LSL_List llGetLinkPrimitiveParams(int linknum, LSL_List rules)
+        {
+            return m_LSL_Functions.llGetLinkPrimitiveParams(linknum, rules);
+        }
+
         public LSL_Integer llGetRegionAgentCount()
         {
             return m_LSL_Functions.llGetRegionAgentCount();
@@ -864,9 +869,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             return m_LSL_Functions.llHTTPRequest(url, parameters, body);
         }
 
-        public void llHTTPResponse(string url, int status, string body)
+        public void llHTTPResponse(LSL_Key id, int status, string body)
         {
-            m_LSL_Functions.llHTTPResponse(url, status, body);
+            m_LSL_Functions.llHTTPResponse(id, status, body);
         }
 
         public LSL_String llInsertString(string dst, int position, string src)
@@ -887,6 +892,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public LSL_String llKey2Name(string id)
         {
             return m_LSL_Functions.llKey2Name(id);
+        }
+
+        public void llLinkParticleSystem(int linknum, LSL_List rules)
+        {
+            m_LSL_Functions.llLinkParticleSystem(linknum, rules);
         }
 
         public LSL_String llList2CSV(LSL_List src)
@@ -1468,6 +1478,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             m_LSL_Functions.llSetLinkTexture(linknumber, texture, face);
         }
 
+        public void llSetLinkTextureAnim(int linknum, int mode, int face, int sizex, int sizey, double start, double length, double rate)
+        {
+            m_LSL_Functions.llSetLinkTextureAnim(linknum, mode, face, sizex, sizey, start, length, rate);
+        }
+
         public void llSetLocalRot(LSL_Rotation rot)
         {
             m_LSL_Functions.llSetLocalRot(rot);
@@ -1506,6 +1521,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public void llSetPrimitiveParams(LSL_List rules)
         {
             m_LSL_Functions.llSetPrimitiveParams(rules);
+        }
+
+        public void llSetLinkPrimitiveParamsFast(int linknum, LSL_List rules)
+        {
+            m_LSL_Functions.llSetLinkPrimitiveParamsFast(linknum, rules);
         }
 
         public void llSetPrimURL(string url)

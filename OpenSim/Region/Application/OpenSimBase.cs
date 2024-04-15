@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -51,7 +51,7 @@ using OpenSim.Region.Physics.Manager;
 namespace OpenSim
 {
     /// <summary>
-    /// Common OpenSim simulator code
+    /// Common OpenSimulator simulator code
     /// </summary>
     public class OpenSimBase : RegionApplicationBase
     {
@@ -70,15 +70,10 @@ namespace OpenSim
 
         protected bool m_autoCreateClientStack = true;
 
-        /// <summary>
+        /// <value>
         /// The file used to load and save prim backup xml if no filename has been specified
-        /// </summary>
+        /// </value>
         protected const string DEFAULT_PRIM_BACKUP_FILENAME = "prim-backup.xml";
-
-        /// <summary>
-        /// The file used to load and save an opensim archive if no filename has been specified
-        /// </summary>
-        protected const string DEFAULT_OAR_BACKUP_FILENAME = "region.oar";
 
         public ConfigSettings ConfigurationSettings
         {
@@ -97,8 +92,8 @@ namespace OpenSim
         protected List<IApplicationPlugin> m_plugins = new List<IApplicationPlugin>();
 
         /// <value>
-        /// The config information passed into the OpenSim region server.
-        /// </value>        
+        /// The config information passed into the OpenSimulator region server.
+        /// </value>
         public OpenSimConfigSource ConfigSource
         {
             get { return m_config; }
@@ -162,11 +157,11 @@ namespace OpenSim
 
         protected virtual void LoadPlugins()
         {
-            PluginLoader<IApplicationPlugin> loader =
-                new PluginLoader<IApplicationPlugin>(new ApplicationPluginInitialiser(this));
-
-            loader.Load("/OpenSim/Startup");
-            m_plugins = loader.Plugins;
+            using (PluginLoader<IApplicationPlugin> loader = new PluginLoader<IApplicationPlugin>(new ApplicationPluginInitialiser(this)))
+            {
+                loader.Load("/OpenSim/Startup");
+                m_plugins = loader.Plugins;
+            }
         }
 
         protected override List<string> GetHelpTopics()
@@ -193,7 +188,6 @@ namespace OpenSim
                     CreatePIDFile(pidFile);
                 
                 userStatsURI = startupConfig.GetString("Stats_URI", String.Empty);
-
             }
 
             base.StartupSpecific();
@@ -207,12 +201,6 @@ namespace OpenSim
             foreach (IApplicationPlugin plugin in m_plugins)
             {
                 plugin.PostInitialise();
-            }
-
-            // Only enable logins to the regions once we have completely finished starting up (apart from scripts)
-            if ((m_commsManager != null) && (m_commsManager.GridService != null))
-            {
-                m_commsManager.GridService.RegionLoginsEnabled = true;
             }
 
             AddPluginCommands();
@@ -273,7 +261,7 @@ namespace OpenSim
             //
             ICommander moduleCommander = SceneManager.CurrentOrFirstScene.GetCommander(cmd[1]);
             if (moduleCommander != null)
-                m_console.Notice(moduleCommander.Help);
+                m_console.Output(moduleCommander.Help);
         }
 
         protected override void Initialize()
@@ -281,194 +269,7 @@ namespace OpenSim
             // Called from base.StartUp()
 
             m_httpServerPort = m_networkServersInfo.HttpListenerPort;
-            InitialiseAssetCache();
             m_sceneManager.OnRestartSim += handleRestartRegion;
-        }
-
-        /// <summary>
-        /// Initialises the asset cache. This supports legacy configuration values
-        /// to ensure consistent operation, but values outside of that namespace
-        /// are handled by the more generic resolution mechanism provided by 
-        /// the ResolveAssetServer virtual method. If extended resolution fails, 
-        /// then the normal default action is taken.
-        /// Creation of the AssetCache is handled by ResolveAssetCache. This
-        /// function accepts a reference to the instantiated AssetServer and
-        /// returns an IAssetCache implementation, if possible. This is a virtual
-        /// method.
-        /// </summary>
-        protected virtual void InitialiseAssetCache()
-        {
-            LegacyAssetClientPluginInitialiser linit = null;
-            CryptoAssetClientPluginInitialiser cinit = null;
-            AssetClientPluginInitialiser init = null;
-
-            IAssetServer assetServer = null;
-            string mode = m_configSettings.AssetStorage;
-
-            if (mode == null | mode == String.Empty)
-                mode = "default";
-
-            // If "default" is specified, then the value is adjusted
-            // according to whether or not the server is running in
-            // standalone mode.
-            if (mode.ToLower() == "default")
-            {
-                if (m_configSettings.Standalone == false)
-                    mode = "grid";
-                else
-                    mode = "local";
-            }
-
-            switch (mode.ToLower())
-            {
-                    // If grid is specified then the grid server is chose regardless 
-                    // of whether the server is standalone.
-                case "grid":
-                    linit = new LegacyAssetClientPluginInitialiser(m_configSettings, m_networkServersInfo.AssetURL);
-                    assetServer = loadAssetServer("Grid", linit);
-                    break;
-
-                    // If cryptogrid is specified then the cryptogrid server is chose regardless 
-                    // of whether the server is standalone.
-                case "cryptogrid":
-                    cinit = new CryptoAssetClientPluginInitialiser(m_configSettings, m_networkServersInfo.AssetURL,
-                                                                   Environment.CurrentDirectory, true);
-                    assetServer = loadAssetServer("Crypto", cinit);
-                    break;
-
-                    // If cryptogrid_eou is specified then the cryptogrid_eou server is chose regardless 
-                    // of whether the server is standalone.
-                case "cryptogrid_eou":
-                    cinit = new CryptoAssetClientPluginInitialiser(m_configSettings, m_networkServersInfo.AssetURL,
-                                                                   Environment.CurrentDirectory, false);
-                    assetServer = loadAssetServer("Crypto", cinit);
-                    break;
-
-                    // If file is specified then the file server is chose regardless 
-                    // of whether the server is standalone.
-                case "file":
-                    linit = new LegacyAssetClientPluginInitialiser(m_configSettings, m_networkServersInfo.AssetURL);
-                    assetServer = loadAssetServer("File", linit);
-                    break;
-
-                    // If local is specified then we're going to use the local SQL server
-                    // implementation. We drop through, because that will be the fallback
-                    // for the following default clause too.
-                case "local":
-                    break;
-
-                    // If the asset_database value is none of the previously mentioned strings, then we
-                    // try to load a turnkey plugin that matches this value. If not we drop through to 
-                    // a local default.
-                default:
-                    try
-                    {
-                        init = new AssetClientPluginInitialiser(m_configSettings);
-                        assetServer = loadAssetServer(m_configSettings.AssetStorage, init);
-                        break;
-                    }
-                    catch
-                    {
-                    }
-                    m_log.Info("[OPENSIMBASE]: Default assetserver will be used");                
-                    break;
-            }
-
-            // Open the local SQL-based database asset server
-            if (assetServer == null)
-            {
-                init = new AssetClientPluginInitialiser(m_configSettings);
-                SQLAssetServer sqlAssetServer = (SQLAssetServer) loadAssetServer("SQL", init);
-                sqlAssetServer.LoadDefaultAssets(m_configSettings.AssetSetsXMLFile);
-                assetServer = sqlAssetServer;
-            }
-
-            // Initialize the asset cache, passing a reference to the selected
-            // asset server interface.
-            m_assetCache = ResolveAssetCache(assetServer);
-            
-            assetServer.Start();
-        }
-
-        // This method loads the identified asset server, passing an approrpiately
-        // initialized Initialise wrapper. There should to be exactly one match,
-        // if not, then the first match is used.
-        private IAssetServer loadAssetServer(string id, PluginInitialiserBase pi)
-        {
-            if (id != null && id != String.Empty)
-            {
-                m_log.DebugFormat("[OPENSIMBASE] Attempting to load asset server id={0}", id);
-
-                try
-                {
-                    PluginLoader<IAssetServer> loader = new PluginLoader<IAssetServer>(pi);
-                    loader.AddFilter(PLUGIN_ASSET_SERVER_CLIENT, new PluginProviderFilter(id));
-                    loader.Load(PLUGIN_ASSET_SERVER_CLIENT);
-
-                    if (loader.Plugins.Count > 0)
-                    {
-                        m_log.DebugFormat("[OPENSIMBASE] Asset server {0} loaded", id);
-                        return (IAssetServer) loader.Plugins[0];
-                    }
-                }
-                catch (Exception e)
-                {
-                    m_log.DebugFormat("[OPENSIMBASE] Asset server {0} not loaded ({1})", id, e.Message);
-                }
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// Attempt to instantiate an IAssetCache implementation, using the
-        /// provided IAssetServer reference.
-        /// An asset cache implementation must provide a constructor that
-        /// accepts two parameters;
-        ///   [1] A ConfigSettings reference.
-        ///   [2] An IAssetServer reference.
-        /// The AssetCache value is obtained from the 
-        /// [StartUp]/AssetCache value in the configuration file.
-        /// </summary>
-        protected virtual IAssetCache ResolveAssetCache(IAssetServer assetServer)
-        {
-            IAssetCache assetCache = null;
-            if (m_configSettings.AssetCache != null && m_configSettings.AssetCache != String.Empty)
-            {
-                m_log.DebugFormat("[OPENSIMBASE]: Attempting to load asset cache id = {0}", m_configSettings.AssetCache);
-                
-                try
-                {
-                    PluginInitialiserBase init = new AssetCachePluginInitialiser(m_configSettings, assetServer);
-                    PluginLoader<IAssetCache> loader = new PluginLoader<IAssetCache>(init);
-                    loader.AddFilter(PLUGIN_ASSET_CACHE, new PluginProviderFilter(m_configSettings.AssetCache));
-
-                    loader.Load(PLUGIN_ASSET_CACHE);
-                    if (loader.Plugins.Count > 0)
-                        assetCache = (IAssetCache) loader.Plugins[0];
-                }
-                catch (Exception e)
-                {
-                    m_log.Error("[OPENSIMBASE]: ResolveAssetCache failed");
-                    m_log.Error(e);
-                }
-            }
-
-            // If everything else fails, we force load the built-in asset cache
-            return (IAssetCache) ((assetCache != null) ? assetCache : new AssetCache(assetServer));
-        }
-
-        public void ProcessLogin(bool LoginEnabled)
-        {
-            if (LoginEnabled)
-            {
-                m_log.Info("[LOGIN]: Login is now enabled.");
-                m_commsManager.GridService.RegionLoginsEnabled = true;
-            }
-            else
-            {
-                m_log.Info("[LOGIN]: Login is now disabled.");
-                m_commsManager.GridService.RegionLoginsEnabled = false;
-            }
         }
 
         /// <summary>
@@ -546,25 +347,23 @@ namespace OpenSim
 
             scene.SetModuleInterfaces();
 
-            // Prims have to be loaded after module configuration since some modules may be invoked during the load            
+            // Prims have to be loaded after module configuration since some modules may be invoked during the load
             scene.LoadPrimsFromStorage(regionInfo.originRegionID);
-
-            scene.StartTimer();
-            
-            // TODO : Try setting resource for region xstats here on scene            
-            scene.CommsManager.HttpServer.AddStreamHandler( new Region.Framework.Scenes.RegionStatsHandler(regionInfo)); 
             
             // moved these here as the terrain texture has to be created after the modules are initialized
             // and has to happen before the region is registered with the grid.
             scene.CreateTerrainTexture(false);
-
+            
+            // TODO : Try setting resource for region xstats here on scene
+            MainServer.Instance.AddStreamHandler(new Region.Framework.Scenes.RegionStatsHandler(regionInfo)); 
+            
             try
             {
                 scene.RegisterRegionWithGrid();
             }
             catch (Exception e)
             {
-                m_log.ErrorFormat("[STARTUP]: Registration of region with grid failed, aborting startup - {0}", e);
+                m_log.ErrorFormat("[STARTUP]: Registration of region with grid failed, aborting startup - {0}", e.StackTrace);
 
                 // Carrying on now causes a lot of confusion down the
                 // line - we need to get the user's attention
@@ -596,6 +395,9 @@ namespace OpenSim
             scene.EventManager.OnShutdown += delegate() { ShutdownRegion(scene); };
 
             mscene = scene;
+
+            scene.StartTimer();
+
             return clientServer;
         }
 
@@ -621,14 +423,41 @@ namespace OpenSim
 
             scene.DeleteAllSceneObjects();
             m_sceneManager.CloseScene(scene);
-
+            ShutdownClientServer(scene.RegionInfo);
+            
             if (!cleanup)
                 return;
 
             if (!String.IsNullOrEmpty(scene.RegionInfo.RegionFile))
             {
-                File.Delete(scene.RegionInfo.RegionFile);
-                m_log.InfoFormat("[OPENSIM]: deleting region file \"{0}\"", scene.RegionInfo.RegionFile);
+                if (scene.RegionInfo.RegionFile.ToLower().EndsWith(".xml"))
+                {
+                    File.Delete(scene.RegionInfo.RegionFile);
+                    m_log.InfoFormat("[OPENSIM]: deleting region file \"{0}\"", scene.RegionInfo.RegionFile);
+                }
+                if (scene.RegionInfo.RegionFile.ToLower().EndsWith(".ini"))
+                {
+                    try
+                    {
+                        IniConfigSource source = new IniConfigSource(scene.RegionInfo.RegionFile);
+                        if (source.Configs[scene.RegionInfo.RegionName] != null)
+                        {
+                            source.Configs.Remove(scene.RegionInfo.RegionName);
+
+                            if (source.Configs.Count == 0)
+                            {
+                                File.Delete(scene.RegionInfo.RegionFile);
+                            }
+                            else
+                            {
+                                source.Save(scene.RegionInfo.RegionFile);
+                            }
+                        }
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
             }
         }
 
@@ -640,11 +469,42 @@ namespace OpenSim
         }
 
         /// <summary>
+        /// Remove a region from the simulator without deleting it permanently.
+        /// </summary>
+        /// <param name="scene"></param>
+        /// <returns></returns>
+        public void CloseRegion(Scene scene)
+        {
+            // only need to check this if we are not at the
+            // root level
+            if ((m_sceneManager.CurrentScene != null) &&
+                (m_sceneManager.CurrentScene.RegionInfo.RegionID == scene.RegionInfo.RegionID))
+            {
+                m_sceneManager.TrySetCurrentScene("..");
+            }
+
+            m_sceneManager.CloseScene(scene);
+            ShutdownClientServer(scene.RegionInfo);
+        }
+        
+        /// <summary>
+        /// Remove a region from the simulator without deleting it permanently.
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
+        public void CloseRegion(string name)
+        {
+            Scene target;
+            if (m_sceneManager.TryGetScene(name, out target))
+                CloseRegion(target);
+        }
+        
+        /// <summary>
         /// Create a scene and its initial base structures.
         /// </summary>
         /// <param name="regionInfo"></param>
         /// <param name="clientServer"> </param>
-        /// <returns></returns>        
+        /// <returns></returns>
         protected Scene SetupScene(RegionInfo regionInfo, out IClientNetworkServer clientServer)
         {
             return SetupScene(regionInfo, 0, null, out clientServer);
@@ -673,7 +533,7 @@ namespace OpenSim
                 clientServer
                     = m_clientStackManager.CreateServer(
                         listenIP, ref port, proxyOffset, regionInfo.m_allow_alternate_ports, configSource,
-                        m_assetCache, circuitManager);
+                        circuitManager);
             }
             else
             {
@@ -755,21 +615,20 @@ namespace OpenSim
 
             return new Scene(
                 regionInfo, circuitManager, m_commsManager, sceneGridService,
-                storageManager, m_moduleLoader, m_configSettings.DumpAssetsToFile, m_configSettings.PhysicalPrim,
+                storageManager, m_moduleLoader, false, m_configSettings.PhysicalPrim,
                 m_configSettings.See_into_region_from_neighbor, m_config.Source, m_version);
         }
-
-        public void handleRestartRegion(RegionInfo whichRegion)
+        
+        protected void ShutdownClientServer(RegionInfo whichRegion)
         {
-            m_log.Info("[OPENSIM]: Got restart signal from SceneManager");
-
-            // Shutting down the client server
+            // Close and remove the clientserver for a region
             bool foundClientServer = false;
             int clientServerElement = 0;
+            Location location = new Location(whichRegion.RegionHandle);
 
             for (int i = 0; i < m_clientServers.Count; i++)
             {
-                if (m_clientServers[i].HandlesRegion(new Location(whichRegion.RegionHandle)))
+                if (m_clientServers[i].HandlesRegion(location))
                 {
                     clientServerElement = i;
                     foundClientServer = true;
@@ -779,9 +638,16 @@ namespace OpenSim
 
             if (foundClientServer)
             {
-                m_clientServers[clientServerElement].Server.Close();
+                m_clientServers[clientServerElement].NetworkStop();
                 m_clientServers.RemoveAt(clientServerElement);
             }
+        }
+        
+        public void handleRestartRegion(RegionInfo whichRegion)
+        {
+            m_log.Info("[OPENSIM]: Got restart signal from SceneManager");
+
+            ShutdownClientServer(whichRegion);
             IScene scene;
             CreateRegion(whichRegion, true, out scene);
         }
@@ -803,7 +669,7 @@ namespace OpenSim
             public byte[] Handle(string path, Stream request,
                                  OSHttpRequest httpRequest, OSHttpResponse httpResponse)
             {
-                return Encoding.UTF8.GetBytes("OK");
+                return Util.UTF8.GetBytes("OK");
             }
 
             public string ContentType
@@ -840,7 +706,7 @@ namespace OpenSim
             public byte[] Handle(string path, Stream request,
                                  OSHttpRequest httpRequest, OSHttpResponse httpResponse)
             {
-                return Encoding.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
+                return Util.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
             }
 
             public string ContentType
@@ -854,8 +720,8 @@ namespace OpenSim
             }
 
             public string Path
-            {   
-                // This is for the OpenSim instance and is the osSecret hashed
+            {
+                // This is for the OpenSimulator instance and is the osSecret hashed
                 get { return "/" + osXStatsURI + "/"; }
             }
         }
@@ -881,7 +747,7 @@ namespace OpenSim
             public byte[] Handle(string path, Stream request,
                                  OSHttpRequest httpRequest, OSHttpResponse httpResponse)
             {
-                return Encoding.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
+                return Util.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
             }
 
             public string ContentType
@@ -895,8 +761,8 @@ namespace OpenSim
             }
 
             public string Path
-            {   
-                // This is for the OpenSim instance and is the user provided URI 
+            {
+                // This is for the OpenSimulator instance and is the user provided URI 
                 get { return "/" + osUXStatsURI + "/"; }
             }
         }

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -34,11 +34,14 @@ using OpenMetaverse;
 using OpenMetaverse.StructuredData;
 using log4net;
 using OpenSim.Framework;
+using OpenSim.Framework.Client;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Communications.Cache;
-using OpenSim.Framework.Communications.Capabilities;
+using OpenSim.Framework.Capabilities;
 using OpenSim.Region.Framework.Interfaces;
+using OpenSim.Services.Interfaces;
 using OSD = OpenMetaverse.StructuredData.OSD;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 namespace OpenSim.Region.Framework.Scenes
 {
@@ -46,6 +49,9 @@ namespace OpenSim.Region.Framework.Scenes
 
     public delegate void RemoveKnownRegionsFromAvatarList(UUID avatarID, List<ulong> regionlst);
 
+    /// <summary>
+    /// Class that Region communications runs through
+    /// </summary>
     public class SceneCommunicationService //one instance per region
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
@@ -53,28 +59,58 @@ namespace OpenSim.Region.Framework.Scenes
         protected CommunicationsManager m_commsProvider;
         protected IInterregionCommsOut m_interregionCommsOut;
         protected RegionInfo m_regionInfo;
+        protected Scene m_scene;
 
         protected RegionCommsListener regionCommsHost;
 
         protected List<UUID> m_agentsInTransit;
 
+        /// <summary>
+        /// An agent is crossing into this region
+        /// </summary>
         public event AgentCrossing OnAvatarCrossingIntoRegion;
+
+        /// <summary>
+        /// A user will arrive shortly, set up appropriate credentials so it can connect
+        /// </summary>
         public event ExpectUserDelegate OnExpectUser;
-        public event ExpectPrimDelegate OnExpectPrim;
+
+        /// <summary>
+        /// A Prim will arrive shortly
+        /// </summary>
         public event CloseAgentConnection OnCloseAgentConnection;
+
+        /// <summary>
+        /// A new prim has arrived
+        /// </summary>
         public event PrimCrossing OnPrimCrossingIntoRegion;
-        public event RegionUp OnRegionUp;
+
+        ///// <summary>
+        ///// A New Region is up and available
+        ///// </summary>
+        //public event RegionUp OnRegionUp;
+
+        /// <summary>
+        /// We have a child agent for this avatar and we're getting a status update about it
+        /// </summary>
         public event ChildAgentUpdate OnChildAgentUpdate;
         //public event RemoveKnownRegionsFromAvatarList OnRemoveKnownRegionFromAvatar;
+
+        /// <summary>
+        /// Time to log one of our users off.   Grid Service sends this mostly
+        /// </summary>
         public event LogOffUser OnLogOffUser;
+
+        /// <summary>
+        /// A region wants land data from us!
+        /// </summary>
         public event GetLandData OnGetLandData;
 
         private AgentCrossing handlerAvatarCrossingIntoRegion = null; // OnAvatarCrossingIntoRegion;
         private ExpectUserDelegate handlerExpectUser = null; // OnExpectUser;
-        private ExpectPrimDelegate handlerExpectPrim = null; // OnExpectPrim;
         private CloseAgentConnection handlerCloseAgentConnection = null; // OnCloseAgentConnection;
         private PrimCrossing handlerPrimCrossingIntoRegion = null; // OnPrimCrossingIntoRegion;
-        private RegionUp handlerRegionUp = null; // OnRegionUp;
+        //private RegionUp handlerRegionUp = null; // OnRegionUp;
         private ChildAgentUpdate handlerChildAgentUpdate = null; // OnChildAgentUpdate;
         //private RemoveKnownRegionsFromAvatarList handlerRemoveKnownRegionFromAvatar = null; // OnRemoveKnownRegionFromAvatar;
         private LogOffUser handlerLogOffUser = null;
@@ -88,6 +124,13 @@ namespace OpenSim.Region.Framework.Scenes
             m_agentsInTransit = new List<UUID>();
         }
 
+        public void SetScene(Scene s)
+        {
+            m_scene = s;
+            m_regionInfo = s.RegionInfo;
+            m_interregionCommsOut = m_scene.RequestModuleInterface<IInterregionCommsOut>();
+        }
+
         /// <summary>
         /// Register a region with the grid
         /// </summary>
@@ -95,72 +138,22 @@ namespace OpenSim.Region.Framework.Scenes
         /// <exception cref="System.Exception">Thrown if region registration fails.</exception>
         public void RegisterRegion(IInterregionCommsOut comms_out, RegionInfo regionInfos)
         {
-            m_interregionCommsOut = comms_out;
-
-            m_regionInfo = regionInfos;
-            m_commsProvider.GridService.gdebugRegionName = regionInfos.RegionName;
-            regionCommsHost = m_commsProvider.GridService.RegisterRegion(m_regionInfo);
-
-            if (regionCommsHost != null)
-            {
-                //m_log.Info("[INTER]: " + debugRegionName + ": SceneCommunicationService: registered with gridservice and got" + regionCommsHost.ToString());
-
-                regionCommsHost.debugRegionName = regionInfos.RegionName;
-                regionCommsHost.OnExpectPrim += IncomingPrimCrossing;
-                regionCommsHost.OnExpectUser += NewUserConnection;
-                regionCommsHost.OnAvatarCrossingIntoRegion += AgentCrossing;
-                regionCommsHost.OnCloseAgentConnection += CloseConnection;
-                regionCommsHost.OnRegionUp += newRegionUp;
-                regionCommsHost.OnChildAgentUpdate += ChildAgentUpdate;
-                regionCommsHost.OnLogOffUser += GridLogOffUser;
-                regionCommsHost.OnGetLandData += FetchLandData;
-            }
-            else
-            {
-                //m_log.Info("[INTER]: " + debugRegionName + ": SceneCommunicationService: registered with gridservice and got null");
-            }
         }
 
-        public RegionInfo RequestClosestRegion(string name)
-        {
-            return m_commsProvider.GridService.RequestClosestRegion(name);
-        }
-
+        /// <summary>
+        /// This region is shutting down, de-register all events!
+        /// De-Register region from Grid!
+        /// </summary>
         public void Close()
         {
-            if (regionCommsHost != null)
-            {
-                regionCommsHost.OnLogOffUser -= GridLogOffUser;
-                regionCommsHost.OnChildAgentUpdate -= ChildAgentUpdate;
-                regionCommsHost.OnRegionUp -= newRegionUp;
-                regionCommsHost.OnExpectUser -= NewUserConnection;
-                regionCommsHost.OnExpectPrim -= IncomingPrimCrossing;
-                regionCommsHost.OnAvatarCrossingIntoRegion -= AgentCrossing;
-                regionCommsHost.OnCloseAgentConnection -= CloseConnection;
-                regionCommsHost.OnGetLandData -= FetchLandData;
-                
-                try
-                {
-                    m_commsProvider.GridService.DeregisterRegion(m_regionInfo);
-                }
-                catch (Exception e)
-                {
-                    m_log.ErrorFormat(
-                        "[GRID]: Deregistration of region {0} from the grid failed - {1}.  Continuing", 
-                        m_regionInfo.RegionName, e);
-                }
-                
-                regionCommsHost = null;
-            }
         }
 
         #region CommsManager Event handlers
 
         /// <summary>
-        ///
+        /// A New User will arrive shortly, Informs the scene that there's a new user on the way
         /// </summary>
-        /// <param name="regionHandle"></param>
-        /// <param name="agent"></param>
+        /// <param name="agent">Data we need to ensure that the agent can connect</param>
         ///
         protected void NewUserConnection(AgentCircuitData agent)
         {
@@ -172,6 +165,12 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
+        /// <summary>
+        /// The Grid has requested us to log-off the user
+        /// </summary>
+        /// <param name="AgentID">Unique ID of agent to log-off</param>
+        /// <param name="RegionSecret">The secret string that the region establishes with the grid when registering</param>
+        /// <param name="message">The message to send to the user that tells them why they were logged off</param>
         protected void GridLogOffUser(UUID AgentID, UUID RegionSecret, string message)
         {
             handlerLogOffUser = OnLogOffUser;
@@ -181,26 +180,20 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
-        protected bool newRegionUp(RegionInfo region)
-        {
-            handlerRegionUp = OnRegionUp;
-            if (handlerRegionUp != null)
-            {
-                //m_log.Info("[INTER]: " + debugRegionName + ": SceneCommunicationService: newRegionUp Fired for User:" + region.RegionName);
-                handlerRegionUp(region);
-            }
-            return true;
-        }
-
+        /// <summary>
+        /// Inform the scene that we've got an update about a child agent that we have
+        /// </summary>
+        /// <param name="cAgentData"></param>
+        /// <returns></returns>
         protected bool ChildAgentUpdate(ChildAgentDataUpdate cAgentData)
         {
             handlerChildAgentUpdate = OnChildAgentUpdate;
             if (handlerChildAgentUpdate != null)
                 handlerChildAgentUpdate(cAgentData);
 
-
             return true;
         }
+
 
         protected void AgentCrossing(UUID agentID, Vector3 position, bool isFlying)
         {
@@ -209,20 +202,6 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 handlerAvatarCrossingIntoRegion(agentID, position, isFlying);
             }
-        }
-
-        protected bool IncomingPrimCrossing(UUID primID, String objXMLData, int XMLMethod)
-        {
-            handlerExpectPrim = OnExpectPrim;
-            if (handlerExpectPrim != null)
-            {
-                return handlerExpectPrim(primID, objXMLData, XMLMethod);
-            }
-            else
-            {
-                return false;
-            }
-
         }
 
         protected void PrimCrossing(UUID primID, Vector3 position, bool isPhysical)
@@ -262,7 +241,7 @@ namespace OpenSim.Region.Framework.Scenes
         #region Inform Client of Neighbours
 
         private delegate void InformClientOfNeighbourDelegate(
-            ScenePresence avatar, AgentCircuitData a, SimpleRegionInfo reg, IPEndPoint endPoint, bool newAgent);
+            ScenePresence avatar, AgentCircuitData a, GridRegion reg, IPEndPoint endPoint, bool newAgent);
 
         private void InformClientOfNeighbourCompleted(IAsyncResult iar)
         {
@@ -280,7 +259,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// <param name="a"></param>
         /// <param name="regionHandle"></param>
         /// <param name="endPoint"></param>
-        private void InformClientOfNeighbourAsync(ScenePresence avatar, AgentCircuitData a, SimpleRegionInfo reg,
+        private void InformClientOfNeighbourAsync(ScenePresence avatar, AgentCircuitData a, GridRegion reg,
                                                   IPEndPoint endPoint, bool newAgent)
         {
             // Let's wait just a little to give time to originating regions to catch up with closing child agents
@@ -298,17 +277,25 @@ namespace OpenSim.Region.Framework.Scenes
 
             string reason = String.Empty;
 
-            //bool regionAccepted = m_commsProvider.InterRegion.InformRegionOfChildAgent(reg.RegionHandle, a);
-            bool regionAccepted = m_interregionCommsOut.SendCreateChildAgent(reg.RegionHandle, a, out reason);
+           
+            bool regionAccepted = m_interregionCommsOut.SendCreateChildAgent(reg.RegionHandle, a, 0, out reason);
 
             if (regionAccepted && newAgent)
             {
                 IEventQueue eq = avatar.Scene.RequestModuleInterface<IEventQueue>();
                 if (eq != null)
                 {
+                    #region IP Translation for NAT
+                    IClientIPEndpoint ipepClient;
+                    if (avatar.ClientView.TryGet(out ipepClient))
+                    {
+                        endPoint.Address = NetworkUtil.GetIPFor(ipepClient.EndPoint, endPoint.Address);
+                    }
+                    #endregion
+
                     eq.EnableSimulator(reg.RegionHandle, endPoint, avatar.UUID);
                     eq.EstablishAgentCommunication(avatar.UUID, endPoint, capsPath);
-                    m_log.DebugFormat("[CAPS]: Sending new CAPS seed url {0} to client {1} in region {2}", 
+                    m_log.DebugFormat("[CAPS]: Sending new CAPS seed url {0} to client {1} in region {2}",
                                       capsPath, avatar.UUID, avatar.Scene.RegionInfo.RegionName);
                 }
                 else
@@ -318,17 +305,50 @@ namespace OpenSim.Region.Framework.Scenes
                 }
 
                 m_log.Info("[INTERGRID]: Completed inform client about neighbour " + endPoint.ToString());
+                
             }
+            
         }
 
-        public void RequestNeighbors(RegionInfo region)
+        public List<GridRegion> RequestNeighbours(Scene pScene, uint pRegionLocX, uint pRegionLocY)
         {
-            // List<SimpleRegionInfo> neighbours =
-            m_commsProvider.GridService.RequestNeighbours(m_regionInfo.RegionLocX, m_regionInfo.RegionLocY);
-            //IPEndPoint blah = new IPEndPoint();
+            Border[] northBorders = pScene.NorthBorders.ToArray();
+            Border[] southBorders = pScene.SouthBorders.ToArray();
+            Border[] eastBorders = pScene.EastBorders.ToArray();
+            Border[] westBorders = pScene.WestBorders.ToArray();
 
-            //blah.Address = region.RemotingAddress;
-            //blah.Port = region.RemotingPort;
+            // Legacy one region.  Provided for simplicity while testing the all inclusive method in the else statement.
+            if (northBorders.Length <= 1 && southBorders.Length <= 1 && eastBorders.Length <= 1 && westBorders.Length <= 1)
+            {
+                return m_scene.GridService.GetNeighbours(m_regionInfo.ScopeID, m_regionInfo.RegionID);
+            }
+            else
+            {
+                Vector2 extent = Vector2.Zero;
+                for (int i = 0; i < eastBorders.Length; i++)
+                {
+                    extent.X = (eastBorders[i].BorderLine.Z > extent.X) ? eastBorders[i].BorderLine.Z : extent.X;
+                }
+                for (int i = 0; i < northBorders.Length; i++)
+                {
+                    extent.Y = (northBorders[i].BorderLine.Z > extent.Y) ? northBorders[i].BorderLine.Z : extent.Y;
+                }
+
+                // Loss of fraction on purpose
+                extent.X = ((int)extent.X / (int)Constants.RegionSize) + 1;
+                extent.Y = ((int)extent.Y / (int)Constants.RegionSize) + 1;
+
+                int startX = (int)(pRegionLocX - 1) * (int)Constants.RegionSize;
+                int startY = (int)(pRegionLocY - 1) * (int)Constants.RegionSize;
+
+                int endX = ((int)pRegionLocX + (int)extent.X) * (int)Constants.RegionSize;
+                int endY = ((int)pRegionLocY + (int)extent.Y) * (int)Constants.RegionSize;
+
+                List<GridRegion> neighbours = m_scene.GridService.GetRegionRange(m_regionInfo.ScopeID, startX, endX, startY, endY);
+                neighbours.RemoveAll(delegate(GridRegion r) { return r.RegionID == m_regionInfo.RegionID; });
+
+                return neighbours;
+            }
         }
 
         /// <summary>
@@ -337,28 +357,33 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         public void EnableNeighbourChildAgents(ScenePresence avatar, List<RegionInfo> lstneighbours)
         {
-            List<SimpleRegionInfo> neighbours = new List<SimpleRegionInfo>();
+            List<GridRegion> neighbours = new List<GridRegion>();
 
-            //m_commsProvider.GridService.RequestNeighbours(m_regionInfo.RegionLocX, m_regionInfo.RegionLocY);
-            for (int i = 0; i < lstneighbours.Count; i++)
+            if (m_regionInfo != null)
             {
-                // We don't want to keep sending to regions that consistently fail on comms.
-                if (!(lstneighbours[i].commFailTF))
-                {
-                    neighbours.Add(new SimpleRegionInfo(lstneighbours[i]));
-                }
+                neighbours = RequestNeighbours(avatar.Scene,m_regionInfo.RegionLocX, m_regionInfo.RegionLocY);
             }
-            // we're going to be using the above code once neighbour cache is correct.  Currently it doesn't appear to be
-            // So we're temporarily going back to the old method of grabbing it from the Grid Server Every time :/
-            neighbours =
-                m_commsProvider.GridService.RequestNeighbours(m_regionInfo.RegionLocX, m_regionInfo.RegionLocY);
+            else
+            {
+                m_log.Debug("[ENABLENEIGHBOURCHILDAGENTS]: m_regionInfo was null in EnableNeighbourChildAgents, is this a NPC?");
+            }
 
             /// We need to find the difference between the new regions where there are no child agents
             /// and the regions where there are already child agents. We only send notification to the former.
             List<ulong> neighbourHandles = NeighbourHandles(neighbours); // on this region
             neighbourHandles.Add(avatar.Scene.RegionInfo.RegionHandle);  // add this region too
-            List<ulong> previousRegionNeighbourHandles 
-                = new List<ulong>(avatar.Scene.CapsModule.GetChildrenSeeds(avatar.UUID).Keys);
+            List<ulong> previousRegionNeighbourHandles ;
+
+            if (avatar.Scene.CapsModule != null)
+            {
+                previousRegionNeighbourHandles =
+                    new List<ulong>(avatar.Scene.CapsModule.GetChildrenSeeds(avatar.UUID).Keys);
+            }
+            else
+            {
+                previousRegionNeighbourHandles = new List<ulong>();
+            }
+
             List<ulong> newRegions = NewNeighbours(neighbourHandles, previousRegionNeighbourHandles);
             List<ulong> oldRegions = OldNeighbours(neighbourHandles, previousRegionNeighbourHandles);
            
@@ -371,8 +396,12 @@ namespace OpenSim.Region.Framework.Scenes
             avatar.DropOldNeighbours(oldRegions);
 
             /// Collect as many seeds as possible
-            Dictionary<ulong, string> seeds 
-                = new Dictionary<ulong, string>(avatar.Scene.CapsModule.GetChildrenSeeds(avatar.UUID));
+            Dictionary<ulong, string> seeds;
+            if (avatar.Scene.CapsModule != null)
+                seeds
+                    = new Dictionary<ulong, string>(avatar.Scene.CapsModule.GetChildrenSeeds(avatar.UUID));
+            else
+                seeds = new Dictionary<ulong, string>();
             
             //m_log.Debug(" !!! No. of seeds: " + seeds.Count);
             if (!seeds.ContainsKey(avatar.Scene.RegionInfo.RegionHandle))
@@ -380,8 +409,8 @@ namespace OpenSim.Region.Framework.Scenes
 
             /// Create the necessary child agents
             List<AgentCircuitData> cagents = new List<AgentCircuitData>();
-            foreach (SimpleRegionInfo neighbour in neighbours)
-            {
+            foreach (GridRegion neighbour in neighbours)
+                {
                 if (neighbour.RegionHandle != avatar.Scene.RegionInfo.RegionHandle)
                 {
 
@@ -409,15 +438,19 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 a.ChildrenCapSeeds = new Dictionary<ulong, string>(seeds);
             }
-            // These two are the same thing!
-            avatar.Scene.CapsModule.SetChildrenSeed(avatar.UUID, seeds);
+
+            if (avatar.Scene.CapsModule != null)
+            {
+                // These two are the same thing!
+                avatar.Scene.CapsModule.SetChildrenSeed(avatar.UUID, seeds);
+            }
             avatar.KnownRegions = seeds;
             //avatar.Scene.DumpChildrenSeeds(avatar.UUID);
             //avatar.DumpKnownRegions();
 
             bool newAgent = false;
             int count = 0;
-            foreach (SimpleRegionInfo neighbour in neighbours)
+            foreach (GridRegion neighbour in neighbours)
             {
                 // Don't do it if there's already an agent in that region
                 if (newRegions.Contains(neighbour.RegionHandle))
@@ -433,6 +466,16 @@ namespace OpenSim.Region.Framework.Scenes
                         d.BeginInvoke(avatar, cagents[count], neighbour, neighbour.ExternalEndPoint, newAgent,
                                       InformClientOfNeighbourCompleted,
                                       d);
+                    }
+                    
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        m_log.ErrorFormat(
+                           "[REGIONINFO]: Neighbour Regions response included the current region in the neighbor list.  The following region will not display to the client: {0} for region {1} ({2}, {3}).",
+                           neighbour.ExternalHostName,
+                           neighbour.RegionHandle,
+                           neighbour.RegionLocX,
+                           neighbour.RegionLocY);
                     }
                     catch (Exception e)
                     {
@@ -460,7 +503,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// This informs a single neighboring region about agent "avatar".
         /// Calls an asynchronous method to do so..  so it doesn't lag the sim.
         /// </summary>
-        public void InformNeighborChildAgent(ScenePresence avatar, SimpleRegionInfo region)
+        public void InformNeighborChildAgent(ScenePresence avatar, GridRegion region)
         {
             AgentCircuitData agent = avatar.ControllingClient.RequestClientInfo();
             agent.BaseFolder = UUID.Zero;
@@ -476,7 +519,7 @@ namespace OpenSim.Region.Framework.Scenes
 
         #endregion
 
-        public delegate void InformNeighbourThatRegionUpDelegate(RegionInfo region, ulong regionhandle);
+        public delegate void InformNeighbourThatRegionUpDelegate(INeighbourService nService, RegionInfo region, ulong regionhandle);
 
         private void InformNeighborsThatRegionisUpCompleted(IAsyncResult iar)
         {
@@ -489,57 +532,50 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         /// <param name="region"></param>
         /// <param name="regionhandle"></param>
-        private void InformNeighboursThatRegionIsUpAsync(RegionInfo region, ulong regionhandle)
+        private void InformNeighboursThatRegionIsUpAsync(INeighbourService neighbourService, RegionInfo region, ulong regionhandle)
         {
-            m_log.Info("[INTERGRID]: Starting to inform neighbors that I'm here");
-            //RegionUpData regiondata = new RegionUpData(region.RegionLocX, region.RegionLocY, region.ExternalHostName, region.InternalEndPoint.Port);
+            uint x = 0, y = 0;
+            Utils.LongToUInts(regionhandle, out x, out y);
 
-            //bool regionAccepted =
-            //    m_commsProvider.InterRegion.RegionUp(new SerializableRegionInfo(region), regionhandle);
+            GridRegion neighbour = null;
+            if (neighbourService != null)
+                neighbour = neighbourService.HelloNeighbour(regionhandle, region);
+            else
+                m_log.DebugFormat("[SCS]: No neighbour service provided for informing neigbhours of this region");
 
-            bool regionAccepted = m_interregionCommsOut.SendHelloNeighbour(regionhandle, region);
-
-            if (regionAccepted)
+            if (neighbour != null)
             {
-                m_log.Info("[INTERGRID]: Completed informing neighbors that I'm here");
-                handlerRegionUp = OnRegionUp;
-
-                // yes, we're notifying ourselves.
-                if (handlerRegionUp != null)
-                    handlerRegionUp(region);
+                m_log.DebugFormat("[INTERGRID]: Successfully informed neighbour {0}-{1} that I'm here", x / Constants.RegionSize, y / Constants.RegionSize);
+                m_scene.EventManager.TriggerOnRegionUp(neighbour);
             }
             else
             {
-                m_log.Warn("[INTERGRID]: Failed to inform neighbors that I'm here.");
+                m_log.WarnFormat("[INTERGRID]: Failed to inform neighbour {0}-{1} that I'm here.", x / Constants.RegionSize, y / Constants.RegionSize);
             }
         }
 
-        /// <summary>
-        /// Called by scene when region is initialized (not always when it's listening for agents)
-        /// This is an inter-region message that informs the surrounding neighbors that the sim is up.
-        /// </summary>
-        public void InformNeighborsThatRegionisUp(RegionInfo region)
+
+        public void InformNeighborsThatRegionisUp(INeighbourService neighbourService, RegionInfo region)
         {
             //m_log.Info("[INTER]: " + debugRegionName + ": SceneCommunicationService: Sending InterRegion Notification that region is up " + region.RegionName);
 
-            
-            List<SimpleRegionInfo> neighbours = new List<SimpleRegionInfo>();
-            // This stays uncached because we don't already know about our neighbors at this point.
-            neighbours = m_commsProvider.GridService.RequestNeighbours(m_regionInfo.RegionLocX, m_regionInfo.RegionLocY);
-            if (neighbours != null)
+            for (int x = (int)region.RegionLocX - 1; x <= region.RegionLocX + 1; x++)
             {
-                for (int i = 0; i < neighbours.Count; i++)
+                for (int y = (int)region.RegionLocY - 1; y <= region.RegionLocY + 1; y++)
                 {
-                    InformNeighbourThatRegionUpDelegate d = InformNeighboursThatRegionIsUpAsync;
+                    if (!((x == region.RegionLocX) && (y == region.RegionLocY))) // skip this region
+                    {
+                        ulong handle = Utils.UIntsToLong((uint)x * Constants.RegionSize, (uint)y * Constants.RegionSize);
+                        InformNeighbourThatRegionUpDelegate d = InformNeighboursThatRegionIsUpAsync;
 
-                    d.BeginInvoke(region, neighbours[i].RegionHandle,
-                                  InformNeighborsThatRegionisUpCompleted,
-                                  d);
+                        d.BeginInvoke(neighbourService, region, handle,
+                                      InformNeighborsThatRegionisUpCompleted,
+                                      d);
+                    }
                 }
             }
-
-            //bool val = m_commsProvider.InterRegion.RegionUp(new SerializableRegionInfo(region));
         }
+
 
         public delegate void SendChildAgentDataUpdateDelegate(AgentPosition cAgentData, ulong regionHandle);
 
@@ -636,41 +672,6 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
-        /// <summary>
-        /// Helper function to request neighbors from grid-comms
-        /// </summary>
-        /// <param name="regionHandle"></param>
-        /// <returns></returns>
-        public virtual RegionInfo RequestNeighbouringRegionInfo(ulong regionHandle)
-        {
-            //m_log.Info("[INTER]: " + debugRegionName + ": SceneCommunicationService: Sending Grid Services Request about neighbor " + regionHandle.ToString());
-            return m_commsProvider.GridService.RequestNeighbourInfo(regionHandle);
-        }
-
-        /// <summary>
-        /// Helper function to request neighbors from grid-comms
-        /// </summary>
-        /// <param name="regionID"></param>
-        /// <returns></returns>
-        public virtual RegionInfo RequestNeighbouringRegionInfo(UUID regionID)
-        {
-            //m_log.Info("[INTER]: " + debugRegionName + ": SceneCommunicationService: Sending Grid Services Request about neighbor " + regionID);
-            return m_commsProvider.GridService.RequestNeighbourInfo(regionID);
-        }
-
-        /// <summary>
-        /// Requests map blocks in area of minX, maxX, minY, MaxY in world cordinates
-        /// </summary>
-        /// <param name="minX"></param>
-        /// <param name="minY"></param>
-        /// <param name="maxX"></param>
-        /// <param name="maxY"></param>
-        public virtual void RequestMapBlocks(IClientAPI remoteClient, int minX, int minY, int maxX, int maxY)
-        {
-            List<MapBlockData> mapBlocks;
-            mapBlocks = m_commsProvider.GridService.RequestNeighbourMapBlocks(minX - 4, minY - 4, minX + 4, minY + 4);
-            remoteClient.SendMapBlock(mapBlocks, 0);
-        }
 
         /// <summary>
         /// Try to teleport an agent to a new region.
@@ -691,16 +692,16 @@ namespace OpenSim.Region.Framework.Scenes
             IEventQueue eq = avatar.Scene.RequestModuleInterface<IEventQueue>();
 
             // Reset animations; the viewer does that in teleports.
-            avatar.ResetAnimations();
+            avatar.Animator.ResetAnimations();
 
             if (regionHandle == m_regionInfo.RegionHandle)
             {
                 m_log.DebugFormat(
-                    "[SCENE COMMUNICATION SERVICE]: RequestTeleportToLocation {0} within {1}", 
+                    "[SCENE COMMUNICATION SERVICE]: RequestTeleportToLocation {0} within {1}",
                     position, m_regionInfo.RegionName);
-                
+
                 // Teleport within the same region
-                if (position.X < 0 || position.X > Constants.RegionSize || position.Y < 0 || position.Y > Constants.RegionSize || position.Z < 0)
+                if (IsOutsideRegion(avatar.Scene, position) || position.Z < 0)
                 {
                     Vector3 emergencyPos = new Vector3(128, 128, 128);
 
@@ -709,10 +710,17 @@ namespace OpenSim.Region.Framework.Scenes
                         position, avatar.Name, avatar.UUID, emergencyPos);
                     position = emergencyPos;
                 }
-                
+
                 // TODO: Get proper AVG Height
                 float localAVHeight = 1.56f;
-                float posZLimit = (float)avatar.Scene.Heightmap[(int)position.X, (int)position.Y];
+                float posZLimit = 22;
+
+                // TODO: Check other Scene HeightField
+                if (position.X > 0 && position.X <= (int)Constants.RegionSize && position.Y > 0 && position.Y <=(int)Constants.RegionSize)
+                {
+                    posZLimit = (float) avatar.Scene.Heightmap[(int) position.X, (int) position.Y];
+                }
+
                 float newPosZ = posZLimit + localAVHeight;
                 if (posZLimit >= (position.Z - (localAVHeight / 2)) && !(Single.IsInfinity(newPosZ) || Single.IsNaN(newPosZ)))
                 {
@@ -728,7 +736,10 @@ namespace OpenSim.Region.Framework.Scenes
             }
             else
             {
-                RegionInfo reg = RequestNeighbouringRegionInfo(regionHandle);
+                uint x = 0, y = 0;
+                Utils.LongToUInts(regionHandle, out x, out y);
+                GridRegion reg = m_scene.GridService.GetRegionByPosition(m_scene.RegionInfo.ScopeID, (int)x, (int)y);
+
                 if (reg != null)
                 {
                     m_log.DebugFormat(
@@ -791,7 +802,7 @@ namespace OpenSim.Region.Framework.Scenes
 
                         // Let's create an agent there if one doesn't exist yet. 
                         //if (!m_commsProvider.InterRegion.InformRegionOfChildAgent(reg.RegionHandle, agentCircuit))
-                        if (!m_interregionCommsOut.SendCreateChildAgent(reg.RegionHandle, agentCircuit, out reason))
+                        if (!m_interregionCommsOut.SendCreateChildAgent(reg.RegionHandle, agentCircuit, teleportFlags, out reason))
                         {
                             avatar.ControllingClient.SendTeleportFailed(String.Format("Destination is not accepting teleports: {0}",
                                                                                       reason));
@@ -803,15 +814,38 @@ namespace OpenSim.Region.Framework.Scenes
 
                         if (Util.IsOutsideView(oldRegionX, newRegionX, oldRegionY, newRegionY))
                         {
-                            capsPath 
-                                = "http://" 
-                                    + reg.ExternalHostName 
-                                    + ":" 
-                                    + reg.HttpPort 
-                                    + CapsUtil.GetCapsSeedPath(agentCircuit.CapsPath);
+                            #region IP Translation for NAT
+                            IClientIPEndpoint ipepClient;
+                            if (avatar.ClientView.TryGet(out ipepClient))
+                            {
+                                capsPath
+                                    = "http://"
+                                      + NetworkUtil.GetHostFor(ipepClient.EndPoint, reg.ExternalHostName)
+                                      + ":"
+                                      + reg.HttpPort
+                                      + CapsUtil.GetCapsSeedPath(agentCircuit.CapsPath);
+                            }
+                            else
+                            {
+                                capsPath
+                                    = "http://"
+                                      + reg.ExternalHostName
+                                      + ":"
+                                      + reg.HttpPort
+                                      + CapsUtil.GetCapsSeedPath(agentCircuit.CapsPath);
+                            }
+                            #endregion
 
                             if (eq != null)
                             {
+                                #region IP Translation for NAT
+                                // Uses ipepClient above
+                                if (avatar.ClientView.TryGet(out ipepClient))
+                                {
+                                    endPoint.Address = NetworkUtil.GetIPFor(ipepClient.EndPoint, endPoint.Address);
+                                }
+                                #endregion
+
                                 eq.EnableSimulator(reg.RegionHandle, endPoint, avatar.UUID);
 
                                 // ES makes the client send a UseCircuitCode message to the destination, 
@@ -865,7 +899,7 @@ namespace OpenSim.Region.Framework.Scenes
                         if (eq != null)
                         {
                             eq.TeleportFinishEvent(reg.RegionHandle, 13, endPoint,
-                                                   4, teleportFlags, capsPath, avatar.UUID);
+                                                   0, teleportFlags, capsPath, avatar.UUID);
                         }
                         else
                         {
@@ -954,13 +988,28 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
+        protected bool IsOutsideRegion(Scene s, Vector3 pos)
+        {
+            
+            if (s.TestBorderCross(pos,Cardinals.N))
+                return true;
+            if (s.TestBorderCross(pos, Cardinals.S))
+                return true;
+            if (s.TestBorderCross(pos, Cardinals.E))
+                return true;
+            if (s.TestBorderCross(pos, Cardinals.W))
+                return true;
+
+            return false;
+        }
+
         public bool WaitForCallback(UUID id)
         {
-            int count = 20;
+            int count = 200;
             while (m_agentsInTransit.Contains(id) && count-- > 0)
             {
                 //m_log.Debug("  >>> Waiting... " + count);
-                Thread.Sleep(1000);
+                Thread.Sleep(100);
             }
 
             if (count > 0)
@@ -997,10 +1046,10 @@ namespace OpenSim.Region.Framework.Scenes
             return false;
         }
 
-        private List<ulong> NeighbourHandles(List<SimpleRegionInfo> neighbours)
+        private List<ulong> NeighbourHandles(List<GridRegion> neighbours)
         {
             List<ulong> handles = new List<ulong>();
-            foreach (SimpleRegionInfo reg in neighbours)
+            foreach (GridRegion reg in neighbours)
             {
                 handles.Add(reg.RegionHandle);
             }
@@ -1028,42 +1077,221 @@ namespace OpenSim.Region.Framework.Scenes
             Vector3 newpos = new Vector3(pos.X, pos.Y, pos.Z);
             uint neighbourx = m_regionInfo.RegionLocX;
             uint neighboury = m_regionInfo.RegionLocY;
+            const float boundaryDistance = 1.7f;
+            Vector3 northCross = new Vector3(0,boundaryDistance, 0);
+            Vector3 southCross = new Vector3(0, -1 * boundaryDistance, 0);
+            Vector3 eastCross = new Vector3(boundaryDistance, 0, 0);
+            Vector3 westCross = new Vector3(-1 * boundaryDistance, 0, 0);
 
             // distance to edge that will trigger crossing
-            const float boundaryDistance = 1.7f;
+            
 
             // distance into new region to place avatar
-            const float enterDistance = 0.1f;
+            const float enterDistance = 0.5f;
 
-            if (pos.X < boundaryDistance)
+            if (scene.TestBorderCross(pos + westCross, Cardinals.W))
+            {
+                if (scene.TestBorderCross(pos + northCross, Cardinals.N))
+                {
+                    Border b = scene.GetCrossedBorder(pos + northCross, Cardinals.N);
+                    neighboury += (uint)(int)(b.BorderLine.Z / (int)Constants.RegionSize);
+                }
+                else if (scene.TestBorderCross(pos + southCross, Cardinals.S))
+                {
+                    Border b = scene.GetCrossedBorder(pos + southCross, Cardinals.S);
+                    if (b.TriggerRegionX == 0 && b.TriggerRegionY == 0)
+                    {
+                        neighboury--;
+                        newpos.Y = Constants.RegionSize - enterDistance;
+                    }
+                    else
+                    {
+                        neighboury = b.TriggerRegionY;
+                        neighbourx = b.TriggerRegionX;
+                        
+                        Vector3 newposition = pos;
+                        newposition.X += (scene.RegionInfo.RegionLocX - neighbourx) * Constants.RegionSize;
+                        newposition.Y += (scene.RegionInfo.RegionLocY - neighboury) * Constants.RegionSize;
+                        agent.ControllingClient.SendAgentAlertMessage(
+                            String.Format("Moving you to region {0},{1}", neighbourx, neighboury), false);
+                        InformClientToInitateTeleportToLocation(agent, neighbourx, neighboury, newposition, scene);
+                        return;
+                    }
+                }
+
+                Border ba = scene.GetCrossedBorder(pos + westCross, Cardinals.W);
+                if (ba.TriggerRegionX == 0 && ba.TriggerRegionY == 0)
+                {
+                    neighbourx--;
+                    newpos.X = Constants.RegionSize - enterDistance;
+                }
+                else
+                {
+                    neighboury = ba.TriggerRegionY;
+                    neighbourx = ba.TriggerRegionX;
+
+
+                    Vector3 newposition = pos;
+                    newposition.X += (scene.RegionInfo.RegionLocX - neighbourx) * Constants.RegionSize;
+                    newposition.Y += (scene.RegionInfo.RegionLocY - neighboury) * Constants.RegionSize;
+                    agent.ControllingClient.SendAgentAlertMessage(
+                            String.Format("Moving you to region {0},{1}", neighbourx, neighboury), false);
+                    InformClientToInitateTeleportToLocation(agent, neighbourx, neighboury, newposition, scene);
+
+
+                    return;
+                }
+
+            }
+            else if (scene.TestBorderCross(pos + eastCross, Cardinals.E))
+            {
+                Border b = scene.GetCrossedBorder(pos + eastCross, Cardinals.E);
+                neighbourx += (uint)(int)(b.BorderLine.Z / (int)Constants.RegionSize);
+                newpos.X = enterDistance;
+
+                if (scene.TestBorderCross(pos + southCross, Cardinals.S))
+                {
+                    Border ba = scene.GetCrossedBorder(pos + southCross, Cardinals.S);
+                    if (ba.TriggerRegionX == 0 && ba.TriggerRegionY == 0)
+                    {
+                        neighboury--;
+                        newpos.Y = Constants.RegionSize - enterDistance;
+                    }
+                    else
+                    {
+                        neighboury = ba.TriggerRegionY;
+                        neighbourx = ba.TriggerRegionX;
+                        Vector3 newposition = pos;
+                        newposition.X += (scene.RegionInfo.RegionLocX - neighbourx) * Constants.RegionSize;
+                        newposition.Y += (scene.RegionInfo.RegionLocY - neighboury) * Constants.RegionSize;
+                        agent.ControllingClient.SendAgentAlertMessage(
+                            String.Format("Moving you to region {0},{1}", neighbourx, neighboury), false);
+                        InformClientToInitateTeleportToLocation(agent, neighbourx, neighboury, newposition, scene);
+                        return;
+                    }
+                }
+                else if (scene.TestBorderCross(pos + northCross, Cardinals.N))
+                {
+                    Border c = scene.GetCrossedBorder(pos + northCross, Cardinals.N);
+                    neighboury += (uint)(int)(c.BorderLine.Z / (int)Constants.RegionSize);
+                    newpos.Y = enterDistance;
+                }
+
+
+            }
+            else if (scene.TestBorderCross(pos + southCross, Cardinals.S))
+            {
+                Border b = scene.GetCrossedBorder(pos + southCross, Cardinals.S);
+                if (b.TriggerRegionX == 0 && b.TriggerRegionY == 0)
+                {
+                    neighboury--;
+                    newpos.Y = Constants.RegionSize - enterDistance;
+                }
+                else
+                {
+                    neighboury = b.TriggerRegionY;
+                    neighbourx = b.TriggerRegionX;
+                    Vector3 newposition = pos;
+                    newposition.X += (scene.RegionInfo.RegionLocX - neighbourx) * Constants.RegionSize;
+                    newposition.Y += (scene.RegionInfo.RegionLocY - neighboury) * Constants.RegionSize;
+                    agent.ControllingClient.SendAgentAlertMessage(
+                            String.Format("Moving you to region {0},{1}", neighbourx, neighboury), false);
+                    InformClientToInitateTeleportToLocation(agent, neighbourx, neighboury, newposition, scene);
+                    return;
+                }
+            }
+            else if (scene.TestBorderCross(pos + northCross, Cardinals.N))
+            {
+
+                Border b = scene.GetCrossedBorder(pos + northCross, Cardinals.N);
+                neighboury += (uint)(int)(b.BorderLine.Z / (int)Constants.RegionSize);
+                newpos.Y = enterDistance;
+            }
+
+            /*
+
+            if (pos.X < boundaryDistance) //West
             {
                 neighbourx--;
                 newpos.X = Constants.RegionSize - enterDistance;
             }
-            else if (pos.X > Constants.RegionSize - boundaryDistance)
+            else if (pos.X > Constants.RegionSize - boundaryDistance) // East
             {
                 neighbourx++;
                 newpos.X = enterDistance;
             }
 
-            if (pos.Y < boundaryDistance)
+            if (pos.Y < boundaryDistance) // South
             {
                 neighboury--;
                 newpos.Y = Constants.RegionSize - enterDistance;
             }
-            else if (pos.Y > Constants.RegionSize - boundaryDistance)
+            else if (pos.Y > Constants.RegionSize - boundaryDistance) // North
             {
                 neighboury++;
                 newpos.Y = enterDistance;
             }
+            */
 
             CrossAgentToNewRegionDelegate d = CrossAgentToNewRegionAsync;
             d.BeginInvoke(agent, newpos, neighbourx, neighboury, isFlying, CrossAgentToNewRegionCompleted, d);
         }
 
+        public delegate void InformClientToInitateTeleportToLocationDelegate(ScenePresence agent, uint regionX, uint regionY,
+                                                                    Vector3 position,
+                                                                    Scene initiatingScene);
+
+        public void InformClientToInitateTeleportToLocation(ScenePresence agent, uint regionX, uint regionY, Vector3 position, 
+            Scene initiatingScene)
+        {
+
+            // This assumes that we know what our neighbors are.
+            
+                InformClientToInitateTeleportToLocationDelegate d = InformClientToInitiateTeleportToLocationAsync;
+                        d.BeginInvoke(agent,regionX,regionY,position,initiatingScene,
+                                      InformClientToInitiateTeleportToLocationCompleted,
+                                      d);
+        }
+
+        public void InformClientToInitiateTeleportToLocationAsync(ScenePresence agent, uint regionX, uint regionY, Vector3 position, 
+            Scene initiatingScene)
+        {
+                Thread.Sleep(10000);
+                IMessageTransferModule im = initiatingScene.RequestModuleInterface<IMessageTransferModule>();
+                if (im != null)
+                {
+                    UUID gotoLocation = Util.BuildFakeParcelID(
+                        Util.UIntsToLong(
+                                                  (regionX *
+                                                   (uint)Constants.RegionSize),
+                                                  (regionY *
+                                                   (uint)Constants.RegionSize)),
+                        (uint)(int)position.X,
+                        (uint)(int)position.Y,
+                        (uint)(int)position.Z);
+                    GridInstantMessage m = new GridInstantMessage(initiatingScene, UUID.Zero,
+                    "Region", agent.UUID,
+                    (byte)InstantMessageDialog.GodLikeRequestTeleport, false,
+                    "", gotoLocation, false, new Vector3(127, 0, 0),
+                    new Byte[0]);
+                    im.SendInstantMessage(m, delegate(bool success)
+                    {
+                        m_log.DebugFormat("[CLIENT]: Client Initiating Teleport sending IM success = {0}", success);
+                    });
+
+                }
+        }
+
+        private void InformClientToInitiateTeleportToLocationCompleted(IAsyncResult iar)
+        {
+            InformClientToInitateTeleportToLocationDelegate icon =
+                (InformClientToInitateTeleportToLocationDelegate) iar.AsyncState;
+            icon.EndInvoke(iar);
+        }
+
         public delegate ScenePresence CrossAgentToNewRegionDelegate(ScenePresence agent, Vector3 pos, uint neighbourx, uint neighboury, bool isFlying);
 
-                /// <summary>
+        /// <summary>
         /// This Closes child agents on neighboring regions
         /// Calls an asynchronous method to do so..  so it doesn't lag the sim.
         /// </summary>
@@ -1072,21 +1300,24 @@ namespace OpenSim.Region.Framework.Scenes
             m_log.DebugFormat("[SCENE COMM]: Crossing agent {0} {1} to {2}-{3}", agent.Firstname, agent.Lastname, neighbourx, neighboury);
 
             ulong neighbourHandle = Utils.UIntsToLong((uint)(neighbourx * Constants.RegionSize), (uint)(neighboury * Constants.RegionSize));
-            SimpleRegionInfo neighbourRegion = RequestNeighbouringRegionInfo(neighbourHandle);
+
+            int x = (int)(neighbourx * Constants.RegionSize), y = (int)(neighboury * Constants.RegionSize);
+            GridRegion neighbourRegion = m_scene.GridService.GetRegionByPosition(m_scene.RegionInfo.ScopeID, (int)x, (int)y);
+
             if (neighbourRegion != null && agent.ValidateAttachments())
             {
                 pos = pos + (agent.Velocity);
 
-                CachedUserInfo userInfo = m_commsProvider.UserProfileCacheService.GetUserDetails(agent.UUID);
-                if (userInfo != null)
-                {
-                    userInfo.DropInventory();
-                }
-                else
-                {
-                    m_log.WarnFormat("[SCENE COMM]: No cached user info found for {0} {1} on leaving region {2}", 
-                            agent.Name, agent.UUID, agent.Scene.RegionInfo.RegionName);
-                }
+                //CachedUserInfo userInfo = m_commsProvider.UserProfileCacheService.GetUserDetails(agent.UUID);
+                //if (userInfo != null)
+                //{
+                //    userInfo.DropInventory();
+                //}
+                //else
+                //{
+                //    m_log.WarnFormat("[SCENE COMM]: No cached user info found for {0} {1} on leaving region {2}", 
+                //            agent.Name, agent.UUID, agent.Scene.RegionInfo.RegionName);
+                //}
 
                 //bool crossingSuccessful =
                 //    CrossToNeighbouringRegion(neighbourHandle, agent.ControllingClient.AgentId, pos,
@@ -1152,7 +1383,9 @@ namespace OpenSim.Region.Framework.Scenes
                 // now we have a child agent in this region. Request all interesting data about other (root) agents
                 agent.SendInitialFullUpdateToAllClients();
 
+//                Console.WriteLine("SCS 1");
                 agent.CrossAttachmentsIntoNewRegion(neighbourHandle, true);
+//                Console.WriteLine("SCS 2");                
 
                 //                    m_scene.SendKillObject(m_localId);
 
@@ -1185,11 +1418,11 @@ namespace OpenSim.Region.Framework.Scenes
             }
             else // Not successful
             {
-                CachedUserInfo userInfo = m_commsProvider.UserProfileCacheService.GetUserDetails(agent.UUID);
-                if (userInfo != null)
-                {
-                    userInfo.FetchInventory();
-                }
+                //CachedUserInfo userInfo = m_commsProvider.UserProfileCacheService.GetUserDetails(agent.UUID);
+                //if (userInfo != null)
+                //{
+                //    userInfo.FetchInventory();
+                //}
                 agent.RestoreInCurrentScene();
             }
             // In any case
@@ -1198,11 +1431,6 @@ namespace OpenSim.Region.Framework.Scenes
             //m_log.DebugFormat("[SCENE COMM]: Crossing agent {0} {1} completed.", agent.Firstname, agent.Lastname);
         }
 
-
-        public Dictionary<string, string> GetGridSettings()
-        {
-            return m_commsProvider.GridService.GetGridSettings();
-        }
 
         public void LogOffUser(UUID userid, UUID regionid, ulong regionhandle, Vector3 position, Vector3 lookat)
         {
@@ -1240,32 +1468,27 @@ namespace OpenSim.Region.Framework.Scenes
             return m_commsProvider.GetUserFriendList(friendlistowner);
         }
 
-        public  List<MapBlockData> RequestNeighbourMapBlocks(int minX, int minY, int maxX, int maxY)
-        {
-            return m_commsProvider.GridService.RequestNeighbourMapBlocks(minX, minY, maxX, maxY);
-        }
-
         public List<AvatarPickerAvatar> GenerateAgentPickerRequestResponse(UUID queryID, string query)
         {
             return m_commsProvider.GenerateAgentPickerRequestResponse(queryID, query);
         }
         
-        public List<RegionInfo> RequestNamedRegions(string name, int maxNumber)
+        public List<GridRegion> RequestNamedRegions(string name, int maxNumber)
         {
-            return m_commsProvider.GridService.RequestNamedRegions(name, maxNumber);
+            return m_scene.GridService.GetRegionsByName(UUID.Zero, name, maxNumber);
         }
 
-//        private void Dump(string msg, List<ulong> handles)
-//        {
-//            m_log.Info"-------------- HANDLE DUMP ({0}) ---------", msg);
-//            foreach (ulong handle in handles)
-//            {
-//                uint x, y;
-//                Utils.LongToUInts(handle, out x, out y);
-//                x = x / Constants.RegionSize;
-//                y = y / Constants.RegionSize;
-//                m_log.Info("({0}, {1})", x, y);
-//            }
-//        }
+        //private void Dump(string msg, List<ulong> handles)
+        //{
+        //    m_log.InfoFormat("-------------- HANDLE DUMP ({0}) ---------", msg);
+        //    foreach (ulong handle in handles)
+        //    {
+        //        uint x, y;
+        //        Utils.LongToUInts(handle, out x, out y);
+        //        x = x / Constants.RegionSize;
+        //        y = y / Constants.RegionSize;
+        //        m_log.InfoFormat("({0}, {1})", x, y);
+        //    }
+        //}
     }
 }

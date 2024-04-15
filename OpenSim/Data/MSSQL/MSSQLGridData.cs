@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -272,26 +272,23 @@ namespace OpenSim.Data.MSSQL
         /// </summary>
         /// <param name="profile">The profile to add</param>
         /// <returns>A dataresponse enum indicating success</returns>
-        override public DataResponse AddProfile(RegionProfileData profile)
+        override public DataResponse StoreProfile(RegionProfileData profile)
         {
-            if (InsertRegionRow(profile))
+            if (GetProfileByUUID(profile.UUID) == null)
             {
-                return DataResponse.RESPONSE_OK;
+                if (InsertRegionRow(profile))
+                {
+                    return DataResponse.RESPONSE_OK;
+                }
             }
-            return DataResponse.RESPONSE_ERROR;
-        }
+            else
+            {
+                if (UpdateRegionRow(profile))
+                {
+                    return DataResponse.RESPONSE_OK;
+                }
+            }
 
-        /// <summary>
-        /// Update the specified region in the database
-        /// </summary>
-        /// <param name="profile">The profile to update</param>
-        /// <returns>A dataresponse enum indicating success</returns>
-        override public DataResponse UpdateProfile(RegionProfileData profile)
-        {
-            if (UpdateRegionRow(profile))
-            {
-                return DataResponse.RESPONSE_OK;
-            }
             return DataResponse.RESPONSE_ERROR;
         }
 
@@ -445,9 +442,7 @@ namespace OpenSim.Data.MSSQL
             // World Map Addition
             retval.regionMapTextureID = new UUID((Guid)reader["regionMapTexture"]);
             retval.owner_uuid = new UUID((Guid)reader["owner_uuid"]);
-//            UUID.TryParse((string)reader["regionMapTexture"], out retval.regionMapTextureID);
-//            UUID.TryParse((string)reader["owner_uuid"], out retval.owner_uuid);
-
+            retval.maturity = Convert.ToUInt32(reader["access"]);
             return retval;
         }
 
@@ -535,11 +530,11 @@ namespace OpenSim.Data.MSSQL
                                                       [serverIP], [serverPort], [serverURI], [locX], [locY], [locZ], [eastOverrideHandle], [westOverrideHandle], 
                                                       [southOverrideHandle], [northOverrideHandle], [regionAssetURI], [regionAssetRecvKey], [regionAssetSendKey], 
                                                       [regionUserURI], [regionUserRecvKey], [regionUserSendKey], [regionMapTexture], [serverHttpPort], 
-                                                      [serverRemotingPort], [owner_uuid], [originUUID]) 
+                                                      [serverRemotingPort], [owner_uuid], [originUUID], [access]) 
                                                 VALUES (@regionHandle, @regionName, @uuid, @regionRecvKey, @regionSecret, @regionSendKey, @regionDataURI, 
                                                         @serverIP, @serverPort, @serverURI, @locX, @locY, @locZ, @eastOverrideHandle, @westOverrideHandle, 
                                                         @southOverrideHandle, @northOverrideHandle, @regionAssetURI, @regionAssetRecvKey, @regionAssetSendKey, 
-                                                        @regionUserURI, @regionUserRecvKey, @regionUserSendKey, @regionMapTexture, @serverHttpPort, @serverRemotingPort, @owner_uuid, @originUUID);";
+                                                        @regionUserURI, @regionUserRecvKey, @regionUserSendKey, @regionMapTexture, @serverHttpPort, @serverRemotingPort, @owner_uuid, @originUUID, @access);";
 
             using (AutoClosingSqlCommand command = database.Query(sql))
             {
@@ -571,6 +566,7 @@ namespace OpenSim.Data.MSSQL
                 command.Parameters.Add(database.CreateParameter("serverRemotingPort", profile.remotingPort));
                 command.Parameters.Add(database.CreateParameter("owner_uuid", profile.owner_uuid));
                 command.Parameters.Add(database.CreateParameter("originUUID", profile.originUUID));
+                command.Parameters.Add(database.CreateParameter("access", profile.maturity));
 
                 try
                 {

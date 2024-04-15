@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -26,6 +26,7 @@
  */
 
 using System;
+using System.Xml;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
@@ -87,7 +88,7 @@ namespace OpenSim.Framework.Console
         /// <param name="helpParts">Parsed parts of the help string.  If empty then general help is returned.</param>
         /// <returns></returns>
         public List<string> GetHelp(string[] cmd)
-        {                  
+        {
             List<string> help = new List<string>();
             List<string> helpParts = new List<string>(cmd);
             
@@ -114,7 +115,7 @@ namespace OpenSim.Framework.Console
         /// <param name="helpParts"></param>
         /// <returns></returns>
         private List<string> CollectHelp(List<string> helpParts)
-        {            
+        {
             string originalHelpRequest = string.Join(" ", helpParts.ToArray());
             List<string> help = new List<string>();
             
@@ -131,7 +132,7 @@ namespace OpenSim.Framework.Console
                 if (dict[helpPart] is Dictionary<string, Object>)
                     dict = (Dictionary<string, object>)dict[helpPart]; 
                 
-                helpParts.RemoveAt(0);                                                               
+                helpParts.RemoveAt(0);
             }
         
             // There was a command for the given help string
@@ -148,7 +149,7 @@ namespace OpenSim.Framework.Console
             }
             
             return help;
-        }            
+        }
 
         private List<string> CollectHelp(Dictionary<string, object> dict)
         {
@@ -179,7 +180,7 @@ namespace OpenSim.Framework.Console
         /// <param name="longhelp"></param>
         /// <param name="fn"></param>
         public void AddCommand(string module, bool shared, string command,
-                string help, string longhelp, CommandDelegate fn)   
+                string help, string longhelp, CommandDelegate fn)
         {
             AddCommand(module, shared, command, help, longhelp,
                     String.Empty, fn);
@@ -369,6 +370,155 @@ namespace OpenSim.Framework.Console
             
             return new string[0];
         }
+
+        public XmlElement GetXml(XmlDocument doc)
+        {
+            CommandInfo help = (CommandInfo)((Dictionary<string, object>)tree["help"])[String.Empty];
+            ((Dictionary<string, object>)tree["help"]).Remove(string.Empty);
+            if (((Dictionary<string, object>)tree["help"]).Count == 0)
+                tree.Remove("help");
+
+            CommandInfo quit = (CommandInfo)((Dictionary<string, object>)tree["quit"])[String.Empty];
+            ((Dictionary<string, object>)tree["quit"]).Remove(string.Empty);
+            if (((Dictionary<string, object>)tree["quit"]).Count == 0)
+                tree.Remove("quit");
+
+            XmlElement root = doc.CreateElement("", "HelpTree", "");
+
+            ProcessTreeLevel(tree, root, doc);
+
+            if (!tree.ContainsKey("help"))
+                tree["help"] = (object) new Dictionary<string, object>();
+            ((Dictionary<string, object>)tree["help"])[String.Empty] = help;
+
+            if (!tree.ContainsKey("quit"))
+                tree["quit"] = (object) new Dictionary<string, object>();
+            ((Dictionary<string, object>)tree["quit"])[String.Empty] = quit;
+
+            return root;
+        }
+
+        private void ProcessTreeLevel(Dictionary<string, object> level, XmlElement xml, XmlDocument doc)
+        {
+            foreach (KeyValuePair<string, object> kvp in level)
+            {
+                if (kvp.Value is Dictionary<string, Object>)
+                {
+                    XmlElement next = doc.CreateElement("", "Level", "");
+                    next.SetAttribute("Name", kvp.Key);
+
+                    xml.AppendChild(next);
+
+                    ProcessTreeLevel((Dictionary<string, object>)kvp.Value, next, doc);
+                }
+                else
+                {
+                    CommandInfo c = (CommandInfo)kvp.Value;
+
+                    XmlElement cmd = doc.CreateElement("", "Command", "");
+
+                    XmlElement e;
+
+                    e = doc.CreateElement("", "Module", "");
+                    cmd.AppendChild(e);
+                    e.AppendChild(doc.CreateTextNode(c.module));
+
+                    e = doc.CreateElement("", "Shared", "");
+                    cmd.AppendChild(e);
+                    e.AppendChild(doc.CreateTextNode(c.shared.ToString()));
+
+                    e = doc.CreateElement("", "HelpText", "");
+                    cmd.AppendChild(e);
+                    e.AppendChild(doc.CreateTextNode(c.help_text));
+
+                    e = doc.CreateElement("", "LongHelp", "");
+                    cmd.AppendChild(e);
+                    e.AppendChild(doc.CreateTextNode(c.long_help));
+
+                    e = doc.CreateElement("", "Description", "");
+                    cmd.AppendChild(e);
+                    e.AppendChild(doc.CreateTextNode(c.descriptive_help));
+
+                    xml.AppendChild(cmd);
+                }
+            }
+        }
+
+        public void FromXml(XmlElement root, CommandDelegate fn)
+        {
+            CommandInfo help = (CommandInfo)((Dictionary<string, object>)tree["help"])[String.Empty];
+            ((Dictionary<string, object>)tree["help"]).Remove(string.Empty);
+            if (((Dictionary<string, object>)tree["help"]).Count == 0)
+                tree.Remove("help");
+
+            CommandInfo quit = (CommandInfo)((Dictionary<string, object>)tree["quit"])[String.Empty];
+            ((Dictionary<string, object>)tree["quit"]).Remove(string.Empty);
+            if (((Dictionary<string, object>)tree["quit"]).Count == 0)
+                tree.Remove("quit");
+
+            tree.Clear();
+
+            ReadTreeLevel(tree, root, fn);
+
+            if (!tree.ContainsKey("help"))
+                tree["help"] = (object) new Dictionary<string, object>();
+            ((Dictionary<string, object>)tree["help"])[String.Empty] = help;
+
+            if (!tree.ContainsKey("quit"))
+                tree["quit"] = (object) new Dictionary<string, object>();
+            ((Dictionary<string, object>)tree["quit"])[String.Empty] = quit;
+        }
+
+        private void ReadTreeLevel(Dictionary<string, object> level, XmlNode node, CommandDelegate fn)
+        {
+            Dictionary<string, object> next;
+            string name;
+
+            XmlNodeList nodeL = node.ChildNodes;
+            XmlNodeList cmdL;
+            CommandInfo c;
+
+            foreach (XmlNode part in nodeL)
+            {
+                switch (part.Name)
+                {
+                case "Level":
+                    name = ((XmlElement)part).GetAttribute("Name");
+                    next = new Dictionary<string, object>();
+                    level[name] = next;
+                    ReadTreeLevel(next, part, fn);
+                    break;
+                case "Command":
+                    cmdL = part.ChildNodes;
+                    c = new CommandInfo();
+                    foreach (XmlNode cmdPart in cmdL)
+                    {
+                        switch (cmdPart.Name)
+                        {
+                        case "Module":
+                            c.module = cmdPart.InnerText;
+                            break;
+                        case "Shared":
+                            c.shared = Convert.ToBoolean(cmdPart.InnerText);
+                            break;
+                        case "HelpText":
+                            c.help_text = cmdPart.InnerText;
+                            break;
+                        case "LongHelp":
+                            c.long_help = cmdPart.InnerText;
+                            break;
+                        case "Description":
+                            c.descriptive_help = cmdPart.InnerText;
+                            break;
+                        }
+                    }
+                    c.fn = new List<CommandDelegate>();
+                    c.fn.Add(fn);
+                    level[String.Empty] = c;
+                    break;
+                }
+            }
+        }
     }
 
     public class Parser
@@ -402,8 +552,9 @@ namespace OpenSim.Framework.Console
         }
     }
 
-    // A console that processes commands internally
-    //
+    /// <summary>
+    /// A console that processes commands internally
+    /// </summary>
     public class CommandConsole : ConsoleBase
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
@@ -424,9 +575,12 @@ namespace OpenSim.Framework.Console
                 Output(s);
         }
 
+        /// <summary>
+        /// Display a command prompt on the console and wait for user input
+        /// </summary>
         public void Prompt()
         {
-            string line = ReadLine(m_defaultPrompt, true, true);
+            string line = ReadLine(m_defaultPrompt + "# ", true, true);
 
             if (line != String.Empty)
             {
@@ -442,7 +596,7 @@ namespace OpenSim.Framework.Console
 
         public override string ReadLine(string p, bool isCommand, bool e)
         {
-            System.Console.Write("{0}", prompt);
+            System.Console.Write("{0}", p);
             string cmdinput = System.Console.ReadLine();
 
             if (isCommand)

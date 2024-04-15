@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -38,7 +38,7 @@ using OpenSim.Framework;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Communications.Services;
 using OpenSim.Framework.Communications.Cache;
-using OpenSim.Framework.Communications.Capabilities;
+using OpenSim.Framework.Capabilities;
 using OpenSim.Framework.Servers;
 using OpenSim.Framework.Servers.HttpServer;
 
@@ -47,7 +47,7 @@ namespace OpenSim.Grid.UserServer.Modules
 
     /// <summary>
     /// Hypergrid login service used in grid mode.
-    /// </summary>     
+    /// </summary>
     public class UserLoginAuthService : HGLoginAuthService
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
@@ -66,7 +66,7 @@ namespace OpenSim.Grid.UserServer.Modules
             m_config = config;
             m_defaultHomeX = m_config.DefaultX;
             m_defaultHomeY = m_config.DefaultY;
-            m_inventoryService = inventoryService;
+            m_interInventoryService = inventoryService;
             m_regionProfileService = regionProfileService;
 
             NetworkServersInfo serversinfo = new NetworkServersInfo(1000, 1000);

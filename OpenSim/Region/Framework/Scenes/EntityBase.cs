@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -94,14 +94,6 @@ namespace OpenSim.Region.Framework.Scenes
             set { m_velocity = value; }
         }
 
-        protected Quaternion m_rotation = new Quaternion(0f, 0f, 1f, 0f);
-
-        public virtual Quaternion Rotation
-        {
-            get { return m_rotation; }
-            set { m_rotation = value; }
-        }
-
         protected uint m_localId;
 
         public virtual uint LocalId
@@ -115,13 +107,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         public EntityBase()
         {
-            m_uuid = UUID.Zero;
-
-            m_pos = Vector3.Zero;
-            m_velocity = Vector3.Zero;
-            Rotation = Quaternion.Identity;
             m_name = "(basic entity)";
-            m_rotationalvelocity = Vector3.Zero;
         }
 
         /// <summary>
@@ -130,7 +116,7 @@ namespace OpenSim.Region.Framework.Scenes
         public abstract void UpdateMovement();
 
         /// <summary>
-        /// Performs any updates that need to be done at each frame, as opposed to immediately.  
+        /// Performs any updates that need to be done at each frame, as opposed to immediately.
         /// These included scheduled updates and updates that occur due to physics processing.
         /// </summary>
         public abstract void Update();

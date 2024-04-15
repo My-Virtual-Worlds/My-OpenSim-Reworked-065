@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -227,13 +227,19 @@ namespace OpenSim.Data.MSSQL
             string sql = @"INSERT INTO inventoryfolders ([folderID], [agentID], [parentFolderID], [folderName], [type], [version]) 
                             VALUES (@folderID, @agentID, @parentFolderID, @folderName, @type, @version);";
 
-
+            string folderName = folder.Name;
+            if (folderName.Length > 64)
+            {
+                folderName = folderName.Substring(0, 64);
+                m_log.Warn("[INVENTORY DB]: Name field truncated from " + folder.Name.Length.ToString() + " to " + folderName.Length + " characters on add");
+            }
+            
             using (AutoClosingSqlCommand command = database.Query(sql))
             {
                 command.Parameters.Add(database.CreateParameter("folderID", folder.ID));
                 command.Parameters.Add(database.CreateParameter("agentID", folder.Owner));
                 command.Parameters.Add(database.CreateParameter("parentFolderID", folder.ParentID));
-                command.Parameters.Add(database.CreateParameter("folderName", folder.Name));
+                command.Parameters.Add(database.CreateParameter("folderName", folderName));
                 command.Parameters.Add(database.CreateParameter("type", folder.Type));
                 command.Parameters.Add(database.CreateParameter("version", folder.Version));
 
@@ -262,15 +268,24 @@ namespace OpenSim.Data.MSSQL
                                                        type = @type,
                                                        version = @version 
                            WHERE folderID = @keyFolderID";
+
+            string folderName = folder.Name;
+            if (folderName.Length > 64)
+            {
+                folderName = folderName.Substring(0, 64);
+                m_log.Warn("[INVENTORY DB]: Name field truncated from " + folder.Name.Length.ToString() + " to " + folderName.Length + " characters on update");
+            }
+            
             using (AutoClosingSqlCommand command = database.Query(sql))
             {
                 command.Parameters.Add(database.CreateParameter("folderID", folder.ID));
                 command.Parameters.Add(database.CreateParameter("agentID", folder.Owner));
                 command.Parameters.Add(database.CreateParameter("parentFolderID", folder.ParentID));
-                command.Parameters.Add(database.CreateParameter("folderName", folder.Name));
+                command.Parameters.Add(database.CreateParameter("folderName", folderName));
                 command.Parameters.Add(database.CreateParameter("type", folder.Type));
                 command.Parameters.Add(database.CreateParameter("version", folder.Version));
                 command.Parameters.Add(database.CreateParameter("@keyFolderID", folder.ID));
+                
                 try
                 {
                     command.ExecuteNonQuery();
@@ -412,7 +427,21 @@ namespace OpenSim.Data.MSSQL
                              @inventoryNextPermissions, @inventoryCurrentPermissions, @invType, @creatorID,
                              @inventoryBasePermissions, @inventoryEveryOnePermissions, @inventoryGroupPermissions, @salePrice, @saleType,
                              @creationDate, @groupID, @groupOwned, @flags)";
-
+            
+            string itemName = item.Name;
+            if (item.Name.Length > 64)
+            {
+                itemName = item.Name.Substring(0, 64);
+                m_log.Warn("[INVENTORY DB]: Name field truncated from " + item.Name.Length.ToString() + " to " + itemName.Length.ToString() + " characters");
+            }
+            
+            string itemDesc = item.Description;
+            if (item.Description.Length > 128)
+            {
+                itemDesc = item.Description.Substring(0, 128);
+                m_log.Warn("[INVENTORY DB]: Description field truncated from " + item.Description.Length.ToString() + " to " + itemDesc.Length.ToString() + " characters");
+            }
+            
             using (AutoClosingSqlCommand command = database.Query(sql))
             {
                 command.Parameters.Add(database.CreateParameter("inventoryID", item.ID));
@@ -420,8 +449,8 @@ namespace OpenSim.Data.MSSQL
                 command.Parameters.Add(database.CreateParameter("assetType", item.AssetType));
                 command.Parameters.Add(database.CreateParameter("parentFolderID", item.Folder));
                 command.Parameters.Add(database.CreateParameter("avatarID", item.Owner));
-                command.Parameters.Add(database.CreateParameter("inventoryName", item.Name));
-                command.Parameters.Add(database.CreateParameter("inventoryDescription", item.Description));
+                command.Parameters.Add(database.CreateParameter("inventoryName", itemName));
+                command.Parameters.Add(database.CreateParameter("inventoryDescription", itemDesc));
                 command.Parameters.Add(database.CreateParameter("inventoryNextPermissions", item.NextPermissions));
                 command.Parameters.Add(database.CreateParameter("inventoryCurrentPermissions", item.CurrentPermissions));
                 command.Parameters.Add(database.CreateParameter("invType", item.InvType));
@@ -487,6 +516,21 @@ namespace OpenSim.Data.MSSQL
                                                 groupOwned = @groupOwned, 
                                                 flags = @flags 
                                         WHERE inventoryID = @keyInventoryID";
+
+            string itemName = item.Name;
+            if (item.Name.Length > 64)
+            {
+                itemName = item.Name.Substring(0, 64);
+                m_log.Warn("[INVENTORY DB]: Name field truncated from " + item.Name.Length.ToString() + " to " + itemName.Length.ToString() + " characters on update");
+            }
+            
+            string itemDesc = item.Description;
+            if (item.Description.Length > 128)
+            {
+                itemDesc = item.Description.Substring(0, 128);
+                m_log.Warn("[INVENTORY DB]: Description field truncated from " + item.Description.Length.ToString() + " to " + itemDesc.Length.ToString() + " characters on update");
+            }
+            
             using (AutoClosingSqlCommand command = database.Query(sql))
             {
                 command.Parameters.Add(database.CreateParameter("inventoryID", item.ID));
@@ -494,8 +538,8 @@ namespace OpenSim.Data.MSSQL
                 command.Parameters.Add(database.CreateParameter("assetType", item.AssetType));
                 command.Parameters.Add(database.CreateParameter("parentFolderID", item.Folder));
                 command.Parameters.Add(database.CreateParameter("avatarID", item.Owner));
-                command.Parameters.Add(database.CreateParameter("inventoryName", item.Name));
-                command.Parameters.Add(database.CreateParameter("inventoryDescription", item.Description));
+                command.Parameters.Add(database.CreateParameter("inventoryName", itemName));
+                command.Parameters.Add(database.CreateParameter("inventoryDescription", itemDesc));
                 command.Parameters.Add(database.CreateParameter("inventoryNextPermissions", item.NextPermissions));
                 command.Parameters.Add(database.CreateParameter("inventoryCurrentPermissions", item.CurrentPermissions));
                 command.Parameters.Add(database.CreateParameter("invType", item.InvType));
@@ -591,9 +635,9 @@ namespace OpenSim.Data.MSSQL
         /// <param name="connection">connection to the database</param>
         private void DeleteItemsInFolder(UUID folderID, SqlConnection connection)
         {
-            using (SqlCommand command = new SqlCommand("DELETE FROM inventoryitems WHERE folderID=@folderID", connection))
+            using (SqlCommand command = new SqlCommand("DELETE FROM inventoryitems WHERE parentFolderID=@parentFolderID", connection))
             {
-                command.Parameters.Add(database.CreateParameter("folderID", folderID));
+                command.Parameters.Add(database.CreateParameter("parentFolderID", folderID));
 
                 try
                 {

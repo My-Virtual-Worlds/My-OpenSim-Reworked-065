@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -36,25 +36,47 @@ using OpenSim.Framework.Console;
 
 namespace OpenSim
 {
+    /// <summary>
+    /// Starting class for the OpenSimulator Region
+    /// </summary>
     public class Application
     {
+        /// <summary>
+        /// Text Console Logger
+        /// </summary>
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
+        /// <summary>
+        /// Path to the main ini Configuration file
+        /// </summary>
         public static string iniFilePath = "";
 
+        /// <summary>
+        /// Save Crashes in the bin/crashes folder.  Configurable with m_crashDir
+        /// </summary>
         public static bool m_saveCrashDumps = false;
+
+        /// <summary>
+        /// Directory to save crash reports to.  Relative to bin/
+        /// </summary>
         public static string m_crashDir = "crashes";
 
+        /// <summary>
+        /// Instance of the OpenSim class.  This could be OpenSim or OpenSimBackground depending on the configuration
+        /// </summary>
         protected static OpenSimBase m_sim = null;
 
         //could move our main function into OpenSimMain and kill this class
         public static void Main(string[] args)
         {
-            // First line
+            // First line, hook the appdomain to the crash reporter
             AppDomain.CurrentDomain.UnhandledException +=
                 new UnhandledExceptionEventHandler(CurrentDomain_UnhandledException);
 
+            // Add the arguments supplied when running the application to the configuration
             ArgvConfigSource configSource = new ArgvConfigSource(args);
+
+            // Configure Log4Net
             configSource.AddSwitch("Startup", "logconfig");
             string logConfigFile = configSource.Configs["Startup"].GetString("logconfig", String.Empty);
             if (logConfigFile != String.Empty)
@@ -69,6 +91,20 @@ namespace OpenSim
                 m_log.Info("[OPENSIM MAIN]: configured log4net using default OpenSim.exe.config");
             }
 
+            // Increase the number of IOCP threads available. Mono defaults to a tragically low number
+            int workerThreads, iocpThreads;
+            System.Threading.ThreadPool.GetMaxThreads(out workerThreads, out iocpThreads);
+            m_log.InfoFormat("[OPENSIM MAIN]: Runtime gave us {0} worker threads and {1} IOCP threads", workerThreads, iocpThreads);
+            if (workerThreads < 500 || iocpThreads < 1000)
+            {
+                workerThreads = 500;
+                iocpThreads = 1000;
+                m_log.Info("[OPENSIM MAIN]: Bumping up to 500 worker threads and 1000 IOCP threads");
+                System.Threading.ThreadPool.SetMaxThreads(workerThreads, iocpThreads);
+            }
+
+            // Check if the system is compatible with OpenSimulator.
+            // Ensures that the minimum system requirements are met
             m_log.Info("Performing compatibility checks... ");
             string supported = String.Empty;
             if (Util.IsEnvironmentSupported(ref supported))
@@ -80,6 +116,7 @@ namespace OpenSim
                 m_log.Warn("Environment is unsupported (" + supported + ")\n");
             }
 
+            // Configure nIni aliases and localles
             Culture.SetCurrentCulture();
 
 
@@ -95,12 +132,18 @@ namespace OpenSim
             configSource.AddSwitch("Startup", "gridmode");
             configSource.AddSwitch("Startup", "physics");
             configSource.AddSwitch("Startup", "gui");
+            configSource.AddSwitch("Startup", "console");
 
             configSource.AddConfig("StandAlone");
             configSource.AddConfig("Network");
 
+            // Check if we're running in the background or not
             bool background = configSource.Configs["Startup"].GetBoolean("background", false);
+
+            // Check if we're saving crashes
             m_saveCrashDumps = configSource.Configs["Startup"].GetBoolean("save_crashes", false);
+
+            // load Crash directory config
             m_crashDir = configSource.Configs["Startup"].GetString("crash_dir", m_crashDir);
 
             if (background)
@@ -118,11 +161,12 @@ namespace OpenSim
                 {
                     try
                     {
+                        // Block thread here for input
                         MainConsole.Instance.Prompt();
                     }
                     catch (Exception e)
                     {
-                        m_log.Error("Caught exception from command: {0}", e);
+                        m_log.ErrorFormat("Command error: {0}", e);
                     }
                 }
             }
@@ -138,7 +182,10 @@ namespace OpenSim
         private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
             if (_IsHandlingException)
+            {
                 return;
+            }
+
             _IsHandlingException = true;
             // TODO: Add config option to allow users to turn off error reporting
             // TODO: Post error report (disabled for now)
@@ -160,27 +207,27 @@ namespace OpenSim
 
             m_log.ErrorFormat("[APPLICATION]: {0}", msg);
 
-            // Log exception to disk
-            try
+            if (m_saveCrashDumps)
             {
-                if (!Directory.Exists(m_crashDir))
+                // Log exception to disk
+                try
                 {
-                    Directory.CreateDirectory(m_crashDir);
+                    if (!Directory.Exists(m_crashDir))
+                    {
+                        Directory.CreateDirectory(m_crashDir);
+                    }
+                    string log = Util.GetUniqueFilename(ex.GetType() + ".txt");
+                    using (StreamWriter m_crashLog = new StreamWriter(Path.Combine(m_crashDir, log)))
+                    {
+                        m_crashLog.WriteLine(msg);
+                    }
+
+                    File.Copy("OpenSim.ini", Path.Combine(m_crashDir, log + "_OpenSim.ini"), true);
                 }
-                string log = Util.GetUniqueFilename(ex.GetType() + ".txt");
-                StreamWriter m_crashLog =
-                    new StreamWriter(
-                        Path.Combine(m_crashDir, log)
-                        );
-
-                m_crashLog.WriteLine(msg);
-                m_crashLog.Close();
-
-                File.Copy("OpenSim.ini", Path.Combine(m_crashDir, log + "_OpenSim.ini"), true);
-            }
-            catch (Exception e2)
-            {
-                m_log.ErrorFormat("[CRASH LOGGER CRASHED]: {0}", e2);
+                catch (Exception e2)
+                {
+                    m_log.ErrorFormat("[CRASH LOGGER CRASHED]: {0}", e2);
+                }
             }
 
             _IsHandlingException = false;

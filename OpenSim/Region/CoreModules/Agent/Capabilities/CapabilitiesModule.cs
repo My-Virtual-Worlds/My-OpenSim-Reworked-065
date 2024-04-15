@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyrightD
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -34,11 +34,11 @@ using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
-using Caps=OpenSim.Framework.Communications.Capabilities.Caps;
+using Caps=OpenSim.Framework.Capabilities.Caps;
 
 namespace OpenSim.Region.CoreModules.Agent.Capabilities
 {
-    public class CapabilitiesModule : IRegionModule, ICapabilitiesModule
+    public class CapabilitiesModule : INonSharedRegionModule, ICapabilitiesModule
     { 
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         
@@ -49,20 +49,42 @@ namespace OpenSim.Region.CoreModules.Agent.Capabilities
         /// </summary>
         protected Dictionary<UUID, Caps> m_capsHandlers = new Dictionary<UUID, Caps>();
         
-        protected Dictionary<UUID, string> capsPaths = new Dictionary<UUID, string>();               
+        protected Dictionary<UUID, string> capsPaths = new Dictionary<UUID, string>();
         protected Dictionary<UUID, Dictionary<ulong, string>> childrenSeeds 
-            = new Dictionary<UUID, Dictionary<ulong, string>>();        
+            = new Dictionary<UUID, Dictionary<ulong, string>>();
         
-        public void Initialise(Scene scene, IConfigSource source)
+        public void Initialise(IConfigSource source)
+        {
+        }
+
+        public void AddRegion(Scene scene)
         {
             m_scene = scene;
             m_scene.RegisterModuleInterface<ICapabilitiesModule>(this);
         }
+
+        public void RegionLoaded(Scene scene)
+        {
+        }
+
+        public void RemoveRegion(Scene scene)
+        {
+            m_scene.UnregisterModuleInterface<ICapabilitiesModule>(this);
+        }
         
         public void PostInitialise() {}
+
         public void Close() {}
-        public string Name { get { return "Capabilities Module"; } }
-        public bool IsSharedModule { get { return false; } }
+
+        public string Name 
+        { 
+            get { return "Capabilities Module"; } 
+        }
+
+        public Type ReplaceableInterface
+        {
+            get { return null; }
+        }
 
         public void AddCapsHandler(UUID agentId)
         {
@@ -86,8 +108,8 @@ namespace OpenSim.Region.CoreModules.Agent.Capabilities
 
             Caps caps
                 = new Caps(
-                    m_scene.CommsManager.AssetCache, m_scene.CommsManager.HttpServer, m_scene.RegionInfo.ExternalHostName, 
-                    m_scene.CommsManager.HttpServer.Port,
+                    m_scene.AssetService, MainServer.Instance, m_scene.RegionInfo.ExternalHostName,
+                    MainServer.Instance.Port,
                     capsObjectPath, agentId, m_scene.DumpAssetsToFile, m_scene.RegionInfo.RegionName);
             
             caps.RegisterHandlers();
@@ -125,7 +147,7 @@ namespace OpenSim.Region.CoreModules.Agent.Capabilities
                         agentId, m_scene.RegionInfo.RegionName);
                 }
             }
-        }        
+        }
         
         public Caps GetCapsHandlerForUser(UUID agentId)
         {
@@ -155,7 +177,7 @@ namespace OpenSim.Region.CoreModules.Agent.Capabilities
             }
 
             return null;
-        }        
+        }
         
         public Dictionary<ulong, string> GetChildrenSeeds(UUID agentID)
         {
@@ -188,7 +210,7 @@ namespace OpenSim.Region.CoreModules.Agent.Capabilities
 
         public void SetChildrenSeed(UUID agentID, Dictionary<ulong, string> seeds)
         {
-            //m_log.Debug(" !!! Setting child seeds in {0} to {1}", RegionInfo.RegionName, value.Count);
+            //m_log.DebugFormat(" !!! Setting child seeds in {0} to {1}", m_scene.RegionInfo.RegionName, seeds.Count);
             childrenSeeds[agentID] = seeds;
         }
 
@@ -203,6 +225,6 @@ namespace OpenSim.Region.CoreModules.Agent.Capabilities
                 y = y / Constants.RegionSize;
                 m_log.Info(" >> "+x+", "+y+": "+kvp.Value);
             }
-        }        
+        }
     }
 }

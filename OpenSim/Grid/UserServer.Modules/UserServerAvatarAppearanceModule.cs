@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -28,6 +28,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net;
 using System.Reflection;
 using log4net;
 using Nwc.XmlRpc;
@@ -70,7 +71,7 @@ namespace OpenSim.Grid.UserServer.Modules
             m_httpServer.AddXmlRPCHandler("update_avatar_appearance", XmlRPCUpdateAvatarAppearance);
         }
 
-        public XmlRpcResponse XmlRPCGetAvatarAppearance(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCGetAvatarAppearance(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -101,7 +102,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return response;
         }
 
-        public XmlRpcResponse XmlRPCUpdateAvatarAppearance(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCUpdateAvatarAppearance(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -109,7 +110,12 @@ namespace OpenSim.Grid.UserServer.Modules
             if (requestData.Contains("owner"))
             {
                 AvatarAppearance appearance = new AvatarAppearance(requestData);
-                m_userDataBaseService.UpdateUserAppearance(new UUID((string)requestData["owner"]), appearance);
+                
+                // TODO: Sometime in the future we may have a database layer that is capable of updating appearance when
+                // the TextureEntry is null. When that happens, this check can be removed
+                if (appearance.Texture != null)
+                    m_userDataBaseService.UpdateUserAppearance(new UUID((string)requestData["owner"]), appearance);
+
                 responseData = new Hashtable();
                 responseData["returnString"] = "TRUE";
             }

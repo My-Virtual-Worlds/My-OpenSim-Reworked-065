@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -36,9 +36,12 @@ using Nwc.XmlRpc;
 using OpenSim.Framework.Communications.Cache;
 using OpenSim.Framework.Communications.Services;
 using OpenSim.Region.Communications.Local;
+using OpenSim.Tests.Common.Setup;
 using OpenSim.Tests.Common.Mock;
 using OpenSim.Client.Linden;
 using OpenSim.Tests.Common;
+using OpenSim.Services.Interfaces;
+using OpenMetaverse;
 
 namespace OpenSim.Framework.Communications.Tests
 {
@@ -55,11 +58,12 @@ namespace OpenSim.Framework.Communications.Tests
         private string m_regionExternalName = "localhost";
 
         private IPEndPoint m_capsEndPoint;
-        private CommunicationsManager m_commsManager;
+        private TestCommunicationsManager m_commsManager;
         private TestLoginToRegionConnector m_regionConnector;
         private LocalUserServices m_localUserServices;
         private LoginService m_loginService;
         private UserProfileData m_userProfileData;
+        private TestScene m_testScene;
 
         [SetUp]
         public void SetUpLoginEnviroment()
@@ -67,13 +71,16 @@ namespace OpenSim.Framework.Communications.Tests
             m_capsEndPoint = new IPEndPoint(IPAddress.Loopback, 9123);
             m_commsManager = new TestCommunicationsManager(new NetworkServersInfo(42, 43));
             m_regionConnector = new TestLoginToRegionConnector();
+            m_testScene = SceneSetupHelpers.SetupScene(m_commsManager, "");
 
             m_regionConnector.AddRegion(new RegionInfo(42, 43, m_capsEndPoint, m_regionExternalName));
+
+            //IInventoryService m_inventoryService = new MockInventoryService();
 
             m_localUserServices = (LocalUserServices) m_commsManager.UserService;
             m_localUserServices.AddUser(m_firstName,m_lastName,"boingboing","abc@ftw.com",42,43);
 
-            m_loginService = new LLStandaloneLoginService((UserManagerBase) m_localUserServices, "Hello folks", m_commsManager.InterServiceInventoryService,
+            m_loginService = new LLStandaloneLoginService((UserManagerBase) m_localUserServices, "Hello folks", m_testScene.InventoryService,
                   m_commsManager.NetworkServersInfo, true, new LibraryRootFolder(String.Empty), m_regionConnector);
 
             m_userProfileData = m_localUserServices.GetUserProfile(m_firstName, m_lastName);
@@ -88,8 +95,9 @@ namespace OpenSim.Framework.Communications.Tests
             TestHelper.InMethod();
             // We want to use our own LoginService for this test, one that
             // doesn't require authentication.
-            LoginService loginService = new LLStandaloneLoginService((UserManagerBase)m_commsManager.UserService, "Hello folks", m_commsManager.InterServiceInventoryService,
-                 m_commsManager.NetworkServersInfo, false, new LibraryRootFolder(String.Empty), m_regionConnector);
+            new LLStandaloneLoginService(
+                (UserManagerBase)m_commsManager.UserService, "Hello folks", new MockInventoryService(),
+                m_commsManager.NetworkServersInfo, false, new LibraryRootFolder(String.Empty), m_regionConnector);
 
             Hashtable loginParams = new Hashtable();
             loginParams["first"] = m_firstName;
@@ -103,7 +111,10 @@ namespace OpenSim.Framework.Communications.Tests
 
             XmlRpcRequest request = new XmlRpcRequest("login_to_simulator", sendParams);
 
-            XmlRpcResponse response = loginService.XmlRpcLoginMethod(request);
+            IPAddress tmpLocal = Util.GetLocalHost();
+            IPEndPoint tmpEnd = new IPEndPoint(tmpLocal, 80);
+            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request, tmpEnd);
+
             Hashtable responseData = (Hashtable)response.Value;
 
             Assert.That(responseData["first_name"], Is.EqualTo(m_firstName));
@@ -113,7 +124,7 @@ namespace OpenSim.Framework.Communications.Tests
 
             Regex capsSeedPattern
                 = new Regex("^http://"
-                    + m_regionExternalName
+                    + NetworkUtil.GetHostFor(tmpLocal, m_regionExternalName)
                     + ":9000/CAPS/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}0000/$");
 
             Assert.That(capsSeedPattern.IsMatch((string)responseData["seed_capability"]), Is.True);
@@ -140,7 +151,10 @@ namespace OpenSim.Framework.Communications.Tests
 
             XmlRpcRequest request = new XmlRpcRequest("login_to_simulator", sendParams);
 
-            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request);
+            IPAddress tmpLocal = Util.GetLocalHost();
+            IPEndPoint tmpEnd = new IPEndPoint(tmpLocal, 80);
+            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request, tmpEnd);
+
             Hashtable responseData = (Hashtable)response.Value;
 
             UserAgentData uagent = m_userProfileData.CurrentAgent;
@@ -163,7 +177,7 @@ namespace OpenSim.Framework.Communications.Tests
 
             Regex capsSeedPattern
                 = new Regex("^http://"
-                    + m_regionExternalName
+                    + NetworkUtil.GetHostFor(tmpLocal, m_regionExternalName)
                     + ":9000/CAPS/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}0000/$");
 
             Assert.That(capsSeedPattern.IsMatch((string)responseData["seed_capability"]), Is.True);
@@ -194,13 +208,15 @@ namespace OpenSim.Framework.Communications.Tests
 
             XmlRpcRequest request = new XmlRpcRequest("login_to_simulator", sendParams);
 
-            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request);
+            IPAddress tmpLocal = Util.GetLocalHost();
+            IPEndPoint tmpEnd = new IPEndPoint(tmpLocal, 80);
+            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request, tmpEnd);
+
             Hashtable responseData = (Hashtable)response.Value;
 
             ArrayList friendslist = (ArrayList) responseData["buddy-list"];
 
             Assert.That(friendslist,Is.Not.Null);
-
 
             Hashtable buddy1 = (Hashtable) friendslist[0];
             Hashtable buddy2 = (Hashtable) friendslist[1];
@@ -231,7 +247,10 @@ namespace OpenSim.Framework.Communications.Tests
 
             XmlRpcRequest request = new XmlRpcRequest("login_to_simulator", sendParams);
 
-            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request);
+            IPAddress tmpLocal = Util.GetLocalHost();
+            IPEndPoint tmpEnd = new IPEndPoint(tmpLocal, 80);
+            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request, tmpEnd);
+
             Hashtable responseData = (Hashtable)response.Value;
             Assert.That(responseData["message"], Is.EqualTo(error_auth_message));
 
@@ -256,7 +275,10 @@ namespace OpenSim.Framework.Communications.Tests
 
             XmlRpcRequest request = new XmlRpcRequest("login_to_simulator", sendParams);
 
-            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request);
+            IPAddress tmpLocal = Util.GetLocalHost();
+            IPEndPoint tmpEnd = new IPEndPoint(tmpLocal, 80);
+            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request, tmpEnd);
+
             Hashtable responseData = (Hashtable)response.Value;
             Assert.That(responseData["message"], Is.EqualTo(error_auth_message));
 
@@ -281,18 +303,23 @@ namespace OpenSim.Framework.Communications.Tests
 
             XmlRpcRequest request = new XmlRpcRequest("login_to_simulator", sendParams);
 
-            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request);
+            IPAddress tmpLocal = Util.GetLocalHost();
+            IPEndPoint tmpEnd = new IPEndPoint(tmpLocal, 80);
+            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request, tmpEnd);
+
             Hashtable responseData = (Hashtable)response.Value;
             Assert.That(responseData["message"], Is.EqualTo(error_xml_message));
 
         }
 
-        [Test]
+        // [Test]
+        // Commenting out test now that LLStandAloneLoginService no longer replies with message in this case.
+        // Kept the code for future test with grid mode, which will keep this behavior.
         public void T023_TestAuthenticatedLoginAlreadyLoggedIn()
         {
             TestHelper.InMethod();
 
-            //Console.WriteLine("Starting T023_TestAuthenticatedLoginAlreadyLoggedIn()");            
+            //Console.WriteLine("Starting T023_TestAuthenticatedLoginAlreadyLoggedIn()");
             //log4net.Config.XmlConfigurator.Configure();
             
             string error_already_logged = "You appear to be already logged in. " +
@@ -312,24 +339,38 @@ namespace OpenSim.Framework.Communications.Tests
 
             // First we log in.
             XmlRpcRequest request = new XmlRpcRequest("login_to_simulator", sendParams);
-            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request);
+
+            IPAddress tmpLocal = Util.GetLocalHost();
+            IPEndPoint tmpEnd = new IPEndPoint(tmpLocal, 80);
+            XmlRpcResponse response = m_loginService.XmlRpcLoginMethod(request, tmpEnd);
+
             Hashtable responseData = (Hashtable)response.Value;
             Assert.That(responseData["message"], Is.EqualTo("Hello folks"));
 
             // Then we try again, this time expecting failure.
             request = new XmlRpcRequest("login_to_simulator", sendParams);
-            response = m_loginService.XmlRpcLoginMethod(request);
+            response = m_loginService.XmlRpcLoginMethod(request, tmpEnd);
             responseData = (Hashtable)response.Value;
             Assert.That(responseData["message"], Is.EqualTo(error_already_logged));
 
             // Finally the third time we should be able to get right back in.
             request = new XmlRpcRequest("login_to_simulator", sendParams);
 
-            response = m_loginService.XmlRpcLoginMethod(request);
+            response = m_loginService.XmlRpcLoginMethod(request, tmpEnd);
             responseData = (Hashtable)response.Value;
             Assert.That(responseData["message"], Is.EqualTo("Hello folks"));
             
             //Console.WriteLine("Finished T023_TestAuthenticatedLoginAlreadyLoggedIn()");
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            try
+            {
+                if (MainServer.Instance != null) MainServer.Instance.Stop();
+            } catch (NullReferenceException)
+            {}
         }
 
         public class TestLoginToRegionConnector : ILoginServiceToRegionsConnector
@@ -345,12 +386,6 @@ namespace OpenSim.Framework.Communications.Tests
                         m_regionsList.Add(regionInfo);
                     }
                 }
-            }
-
-            #region ILoginRegionsConnector Members
-            public bool RegionLoginsEnabled
-            {
-                get { return true; }
             }
 
             public void LogOffUserFromGrid(ulong regionHandle, OpenMetaverse.UUID AvatarID, OpenMetaverse.UUID RegionSecret, string message)
@@ -413,8 +448,6 @@ namespace OpenSim.Framework.Communications.Tests
 
                 return null;
             }
-
-            #endregion
         }
     }
 }

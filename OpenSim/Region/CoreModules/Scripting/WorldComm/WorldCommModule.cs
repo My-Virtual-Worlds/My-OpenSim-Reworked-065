@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -262,41 +262,31 @@ namespace OpenSim.Region.CoreModules.Scripting.WorldComm
                 {
                     case ChatTypeEnum.Whisper:
                         if (dis < m_whisperdistance)
-                        {
-                            lock (m_pending.SyncRoot)
-                            {
-                                m_pending.Enqueue(new ListenerInfo(li,name,id,msg));
-                            }
-                        }
+                            QueueMessage(new ListenerInfo(li, name, id, msg));
                         break;
 
                     case ChatTypeEnum.Say:
                         if (dis < m_saydistance)
-                        {
-                            lock (m_pending.SyncRoot)
-                            {
-                                m_pending.Enqueue(new ListenerInfo(li,name,id,msg));
-                            }
-                        }
+                            QueueMessage(new ListenerInfo(li, name, id, msg));
                         break;
 
                     case ChatTypeEnum.Shout:
                         if (dis < m_shoutdistance)
-                        {
-                            lock (m_pending.SyncRoot)
-                            {
-                                m_pending.Enqueue(new ListenerInfo(li,name,id,msg));
-                            }
-                        }
+                            QueueMessage(new ListenerInfo(li, name, id, msg));
                         break;
 
                     case ChatTypeEnum.Region:
-                        lock (m_pending.SyncRoot)
-                        {
-                            m_pending.Enqueue(new ListenerInfo(li,name,id,msg));
-                        }
+                        QueueMessage(new ListenerInfo(li, name, id, msg));
                         break;
                 }
+            }
+        }
+
+        protected void QueueMessage(ListenerInfo li)
+        {
+            lock (m_pending.SyncRoot)
+            {
+                m_pending.Enqueue(li);
             }
         }
 
@@ -319,7 +309,7 @@ namespace OpenSim.Region.CoreModules.Scripting.WorldComm
 
             lock (m_pending.SyncRoot)
             {
-                li = (ListenerInfo) m_pending.Dequeue();
+                li = (ListenerInfo)m_pending.Dequeue();
             }
 
             return li;
@@ -602,9 +592,12 @@ namespace OpenSim.Region.CoreModules.Scripting.WorldComm
                 ListenerInfo info =
                         ListenerInfo.FromData(localID, itemID, hostID, item);
 
-                if (!m_listeners.ContainsKey((int)item[2]))
-                    m_listeners.Add((int)item[2], new List<ListenerInfo>());
-                m_listeners[(int)item[2]].Add(info);
+                lock (m_listeners)
+                {
+                    if (!m_listeners.ContainsKey((int)item[2]))
+                        m_listeners.Add((int)item[2], new List<ListenerInfo>());
+                    m_listeners[(int)item[2]].Add(info);
+                }
 
                 idx+=6;
             }

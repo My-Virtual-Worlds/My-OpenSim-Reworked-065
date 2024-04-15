@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,13 +29,34 @@ namespace OpenSim
 {
     public class VersionInfo
     {
-        /// <value>
-        /// This is the OpenSim version string.  Change this if you are releasing a new OpenSim version.
-        /// </value>        
-        public readonly static string Version = "OpenSimulator Server  0.6.5";  // stay with 27 chars (used in regioninfo)
+        private const string VERSION_NUMBER = "0.6.9";
+        private const Flavour VERSION_FLAVOUR = Flavour.Post_Fixes;
+
+        public enum Flavour
+        {
+            Unknown,
+            Dev,
+            RC1,
+            RC2,
+            Release,
+            Post_Fixes
+        }
+
+        public static string Version
+        {
+            get { return GetVersionString(VERSION_NUMBER, VERSION_FLAVOUR); }
+        }
+
+        public static string GetVersionString(string versionNumber, Flavour flavour)
+        {
+            string versionString = "OpenSim " + versionNumber + " (" + flavour + ")";
+            return versionString.PadRight(VERSIONINFO_VERSION_LENGTH);
+        }
+
+        public const int VERSIONINFO_VERSION_LENGTH = 27;
         
         /// <value>
-        /// This is the external interface version.  It is separate from the OpenSimulator project version.  
+        /// This is the external interface version.  It is separate from the OpenSimulator project version.
         /// 
         /// This version number should be 
         /// increased by 1 every time a code change makes the previous OpenSimulator revision incompatible
@@ -46,8 +67,8 @@ namespace OpenSim
         /// 
         /// Having this version number allows the grid service to reject connections from regions running a version
         /// of the code that is too old. 
-        ///   
+        ///
         /// </value>
-        public readonly static int MajorInterfaceVersion = 4;
+        public readonly static int MajorInterfaceVersion = 6;
     }
 }

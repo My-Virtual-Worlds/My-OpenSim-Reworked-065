@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -72,9 +72,9 @@ namespace OpenSim.Region.ScriptEngine.Shared
                     return;
                 }
                 bool res;
-                res = Double.TryParse(tmps[0], out x);
-                res = res & Double.TryParse(tmps[1], out y);
-                res = res & Double.TryParse(tmps[2], out z);
+                res = Double.TryParse(tmps[0], NumberStyles.Float, Culture.NumberFormatInfo, out x);
+                res = res & Double.TryParse(tmps[1], NumberStyles.Float, Culture.NumberFormatInfo, out y);
+                res = res & Double.TryParse(tmps[2], NumberStyles.Float, Culture.NumberFormatInfo, out z);
             }
 
             #endregion
@@ -262,7 +262,12 @@ namespace OpenSim.Region.ScriptEngine.Shared
             public static Vector3 Norm(Vector3 vector)
             {
                 double mag = Mag(vector);
-                return new Vector3(vector.x / mag, vector.y / mag, vector.z / mag);
+                if (mag > 0.0)
+                {
+                    double invMag = 1.0 / mag;
+                    return vector * invMag;
+                }
+                return new Vector3(0, 0, 0);
             }
 
             #endregion
@@ -309,10 +314,10 @@ namespace OpenSim.Region.ScriptEngine.Shared
                     return;
                 }
                 bool res;
-                res = Double.TryParse(tmps[0], NumberStyles.Float, Culture.FormatProvider, out x);
-                res = res & Double.TryParse(tmps[1], NumberStyles.Float, Culture.FormatProvider, out y);
-                res = res & Double.TryParse(tmps[2], NumberStyles.Float, Culture.FormatProvider, out z);
-                res = res & Double.TryParse(tmps[3], NumberStyles.Float, Culture.FormatProvider, out s);
+                res = Double.TryParse(tmps[0], NumberStyles.Float, Culture.NumberFormatInfo, out x);
+                res = res & Double.TryParse(tmps[1], NumberStyles.Float, Culture.NumberFormatInfo, out y);
+                res = res & Double.TryParse(tmps[2], NumberStyles.Float, Culture.NumberFormatInfo, out z);
+                res = res & Double.TryParse(tmps[3], NumberStyles.Float, Culture.NumberFormatInfo, out s);
                 if (x == 0 && y == 0 && z == 0 && s == 0)
                     s = 1;
             }
@@ -416,16 +421,54 @@ namespace OpenSim.Region.ScriptEngine.Shared
 
             public list(params object[] args)
             {
-                m_data = new object[args.Length];
                 m_data = args;
             }
 
             public int Length
             {
-                get {
+                get
+                {
                     if (m_data == null)
                         m_data=new Object[0];
                     return m_data.Length;
+                }
+            }
+
+            public int Size
+            {
+                get
+                {
+                    if (m_data == null)
+                        m_data=new Object[0];
+
+                    int size = 0;
+
+                    foreach (Object o in m_data)
+                    {
+                        if (o is LSL_Types.LSLInteger)
+                            size += 4;
+                        else if (o is LSL_Types.LSLFloat)
+                            size += 8;
+                        else if (o is LSL_Types.LSLString)
+                            size += ((LSL_Types.LSLString)o).m_string.Length;
+                        else if (o is LSL_Types.key)
+                            size += ((LSL_Types.key)o).value.Length;
+                        else if (o is LSL_Types.Vector3)
+                            size += 32;
+                        else if (o is LSL_Types.Quaternion)
+                            size += 64;
+                        else if (o is int)
+                            size += 4;
+                        else if (o is string)
+                            size += ((string)o).Length;
+                        else if (o is float)
+                            size += 8;
+                        else if (o is double)
+                            size += 16;
+                        else
+                            throw new Exception("Unknown type in List.Size: " + o.GetType().ToString());
+                    }
+                    return size;
                 }
             }
 
@@ -439,6 +482,13 @@ namespace OpenSim.Region.ScriptEngine.Shared
 
                 set {m_data = value; }
             }
+        // Function to obtain LSL type from an index. This is needed
+        // because LSL lists allow for multiple types, and safely
+        // iterating in them requires a type check.
+            public Type GetLSLListItemType(int itemIndex)
+            {
+                return m_data[itemIndex].GetType();
+            }
 
         // Member functions to obtain item as specific types.
         // For cases where implicit conversions would apply if items
@@ -447,7 +497,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
         // down-cast from Object to the correct type.
         // Note: no checks for item index being valid are performed
 
-            public LSL_Types.LSLFloat GetLSLFloatItem( int itemIndex )
+            public LSL_Types.LSLFloat GetLSLFloatItem(int itemIndex)
             {
                 if (m_data[itemIndex] is LSL_Types.LSLInteger)
                 {
@@ -465,6 +515,10 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 {
                     return new LSL_Types.LSLFloat((Double)m_data[itemIndex]);
                 }
+                else if (m_data[itemIndex] is LSL_Types.LSLString)
+                {
+                    return new LSL_Types.LSLFloat(m_data[itemIndex].ToString());
+                }
                 else
                 {
                     return (LSL_Types.LSLFloat)m_data[itemIndex];
@@ -481,20 +535,32 @@ namespace OpenSim.Region.ScriptEngine.Shared
               {
                 return new LSL_Types.LSLString((string)m_data[itemIndex]);
               }
+              else if (m_data[itemIndex] is LSL_Types.LSLFloat)
+              {
+                  return new LSL_Types.LSLString((LSLFloat)m_data[itemIndex]);
+              }
+              else if (m_data[itemIndex] is LSL_Types.LSLInteger)
+              {
+                  return new LSL_Types.LSLString((LSLInteger)m_data[itemIndex]);
+              }
               else
               {
-                return (LSL_Types.LSLString)m_data[itemIndex];
+                  return (LSL_Types.LSLString)m_data[itemIndex];
               }
             }
 
             public LSL_Types.LSLInteger GetLSLIntegerItem(int itemIndex)
             {
-              if (m_data[itemIndex] is LSL_Types.LSLInteger)
-                  return (LSL_Types.LSLInteger)m_data[itemIndex];
-              else if (m_data[itemIndex] is Int32)
-                  return new LSLInteger((int)m_data[itemIndex]);
-              else
-                  throw new InvalidCastException();
+                if (m_data[itemIndex] is LSL_Types.LSLInteger)
+                    return (LSL_Types.LSLInteger)m_data[itemIndex];
+                if (m_data[itemIndex] is LSL_Types.LSLFloat)
+                    return new LSLInteger((int)m_data[itemIndex]);
+                else if (m_data[itemIndex] is Int32)
+                    return new LSLInteger((int)m_data[itemIndex]);
+                else if (m_data[itemIndex] is LSL_Types.LSLString)
+                    return new LSLInteger((string)m_data[itemIndex]);
+                else
+                    throw new InvalidCastException();
             }
 
             public LSL_Types.Vector3 GetVector3Item(int itemIndex)
@@ -953,7 +1019,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 double entry;
                 for (int i = 0; i < Data.Length; i++)
                 {
-                    if (double.TryParse(Data[i].ToString(), out entry))
+                    if (double.TryParse(Data[i].ToString(), NumberStyles.Float, Culture.NumberFormatInfo, out entry))
                     {
                         if (entry < minimum) minimum = entry;
                     }
@@ -967,7 +1033,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 double entry;
                 for (int i = 0; i < Data.Length; i++)
                 {
-                    if (double.TryParse(Data[i].ToString(), out entry))
+                    if (double.TryParse(Data[i].ToString(), NumberStyles.Float, Culture.NumberFormatInfo, out entry))
                     {
                         if (entry > maximum) maximum = entry;
                     }
@@ -986,7 +1052,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 double entry;
                 for (int i = 0; i < Data.Length; i++)
                 {
-                    if (double.TryParse(Data[i].ToString(), out entry))
+                    if (double.TryParse(Data[i].ToString(), NumberStyles.Float, Culture.NumberFormatInfo, out entry))
                     {
                         count++;
                     }
@@ -1000,7 +1066,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 double entry;
                 for (int i = 0; i < src.Data.Length - 1; i++)
                 {
-                    if (double.TryParse(src.Data[i].ToString(), out entry))
+                    if (double.TryParse(src.Data[i].ToString(), NumberStyles.Float, Culture.NumberFormatInfo, out entry))
                     {
                         ret.Add(entry);
                     }
@@ -1014,7 +1080,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 double entry;
                 for (int i = 0; i < Data.Length; i++)
                 {
-                    if (double.TryParse(Data[i].ToString(), out entry))
+                    if (double.TryParse(Data[i].ToString(), NumberStyles.Float, Culture.NumberFormatInfo, out entry))
                     {
                         sum = sum + entry;
                     }
@@ -1028,7 +1094,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 double entry;
                 for (int i = 0; i < Data.Length; i++)
                 {
-                    if (double.TryParse(Data[i].ToString(), out entry))
+                    if (double.TryParse(Data[i].ToString(), NumberStyles.Float, Culture.NumberFormatInfo, out entry))
                     {
                         sum = sum + Math.Pow(entry, 2);
                     }
@@ -1151,11 +1217,11 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 {
                     double a;
                     double b;
-                    if (!double.TryParse(x.ToString(), out a))
+                    if (!double.TryParse(x.ToString(), NumberStyles.Float, Culture.NumberFormatInfo, out a))
                     {
                         a = 0.0;
                     }
-                    if (!double.TryParse(y.ToString(), out b))
+                    if (!double.TryParse(y.ToString(), NumberStyles.Float, Culture.NumberFormatInfo, out b))
                     {
                         b = 0.0;
                     }
@@ -1329,6 +1395,12 @@ namespace OpenSim.Region.ScriptEngine.Shared
             {
                 string s = String.Format(Culture.FormatProvider, "{0:0.000000}", f.value);
                 m_string=s;
+            }
+
+            public LSLString(LSLInteger i)
+            {
+                string s = String.Format("{0}", i);
+                m_string = s;
             }
 
             #endregion
@@ -1789,7 +1861,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
                     else
                         if (v.EndsWith("."))
                             v = v + "0";
-                this.value = double.Parse(v, System.Globalization.NumberStyles.Float, Culture.FormatProvider);
+                this.value = double.Parse(v, System.Globalization.NumberStyles.Float, Culture.NumberFormatInfo);
             }
 
             #endregion
@@ -1946,7 +2018,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
 
             public override int GetHashCode()
             {
-                return Convert.ToInt32(value);
+                return value.GetHashCode();
             }
 
 

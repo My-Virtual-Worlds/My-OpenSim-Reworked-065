@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -36,6 +36,9 @@ namespace OpenSim.Region.CoreModules.Avatar.Gods
 {
     public class GodsModule : IRegionModule, IGodsModule
     {
+        /// <summary>Special UUID for actions that apply to all agents</summary>
+        private static readonly UUID ALL_AGENTS = new UUID("44e87126-e794-4ded-05b3-7c42da3d5cdb");
+
         protected Scene m_scene;
         protected IDialogModule m_dialogModule;
         
@@ -43,7 +46,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Gods
         {
             m_scene = scene;
             m_dialogModule = m_scene.RequestModuleInterface<IDialogModule>();
-            m_scene.RegisterModuleInterface<IGodsModule>(this);           
+            m_scene.RegisterModuleInterface<IGodsModule>(this);
         }
         
         public void PostInitialise() {}
@@ -84,7 +87,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Gods
                         m_dialogModule.SendAlertToUser(agentID, "Request for god powers denied");
                 }
             }
-        }        
+        }
         
         /// <summary>
         /// Kicks User specified from the simulator. This logs them off of the grid
@@ -95,12 +98,11 @@ namespace OpenSim.Region.CoreModules.Avatar.Gods
         /// <param name="godID">The person doing the kicking</param>
         /// <param name="sessionID">The session of the person doing the kicking</param>
         /// <param name="agentID">the person that is being kicked</param>
-        /// <param name="kickflags">This isn't used apparently</param>
+        /// <param name="kickflags">Tells what to do to the user</param>
         /// <param name="reason">The message to send to the user after it's been turned into a field</param>
         public void KickUser(UUID godID, UUID sessionID, UUID agentID, uint kickflags, byte[] reason)
         {
-            // For some reason the client sends this seemingly hard coded UUID for kicking everyone.   Dun-know.
-            UUID kickUserID = new UUID("44e87126e7944ded05b37c42da3d5cdb");
+            UUID kickUserID = ALL_AGENTS;
             
             ScenePresence sp = m_scene.GetScenePresence(agentID);
 
@@ -108,41 +110,60 @@ namespace OpenSim.Region.CoreModules.Avatar.Gods
             {
                 if (m_scene.Permissions.IsGod(godID))
                 {
-                    if (agentID == kickUserID)
+                    if (kickflags == 0)
                     {
-                        m_scene.ClientManager.ForEachClient(
-                            delegate(IClientAPI controller)
-                            {
-                                if (controller.AgentId != godID)
-                                    controller.Kick(Utils.BytesToString(reason));
-                            }
-                        );
+                        if (agentID == kickUserID)
+                        {
+                            string reasonStr = Utils.BytesToString(reason);
 
-                        // This is a bit crude.   It seems the client will be null before it actually stops the thread
-                        // The thread will kill itself eventually :/
-                        // Is there another way to make sure *all* clients get this 'inter region' message?
-                        m_scene.ForEachScenePresence(
-                            delegate(ScenePresence p)
-                            {
-                                if (p.UUID != godID && !p.IsChildAgent)
+                            m_scene.ForEachClient(
+                                delegate(IClientAPI controller)
                                 {
-                                    // Possibly this should really be p.Close() though that method doesn't send a close
-                                    // to the client
-                                    p.ControllingClient.Close(true);
+                                    if (controller.AgentId != godID)
+                                        controller.Kick(reasonStr);
                                 }
-                            }
-                        );
-                    }
-                    else
-                    {
-                        m_scene.SceneGraph.removeUserCount(!sp.IsChildAgent);
+                            );
 
-                        sp.ControllingClient.Kick(Utils.BytesToString(reason));
-                        sp.ControllingClient.Close(true);
+                            // This is a bit crude. It seems the client will be null before it actually stops the thread
+                            // The thread will kill itself eventually :/
+                            // Is there another way to make sure *all* clients get this 'inter region' message?
+                            m_scene.ForEachScenePresence(
+                                delegate(ScenePresence p)
+                                {
+                                    if (p.UUID != godID && !p.IsChildAgent)
+                                    {
+                                        // Possibly this should really be p.Close() though that method doesn't send a close
+                                        // to the client
+                                        p.ControllingClient.Close();
+                                    }
+                                }
+                            );
+                        }
+                        else
+                        {
+                            m_scene.SceneGraph.removeUserCount(!sp.IsChildAgent);
+
+                            sp.ControllingClient.Kick(Utils.BytesToString(reason));
+                            sp.ControllingClient.Close();
+                        }
+                    }
+                    
+                    if (kickflags == 1)
+                    {
+                        sp.AllowMovement = false;
+                        m_dialogModule.SendAlertToUser(agentID, Utils.BytesToString(reason));
+                        m_dialogModule.SendAlertToUser(godID, "User Frozen");
+                    }
+                    
+                    if (kickflags == 2)
+                    {
+                        sp.AllowMovement = true;
+                        m_dialogModule.SendAlertToUser(agentID, Utils.BytesToString(reason));
+                        m_dialogModule.SendAlertToUser(godID, "User Unfrozen");
                     }
                 }
                 else
-                {                  
+                {
                     m_dialogModule.SendAlertToUser(godID, "Kick request denied");
                 }
             }

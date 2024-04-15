@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,7 +29,7 @@ using OpenMetaverse;
 using OpenSim.Region.Framework.Scenes;
 
 namespace OpenSim.Region.Framework.Interfaces
-{        
+{
     public interface IVegetationModule : IEntityCreator
     {
         /// <summary>
@@ -44,6 +44,6 @@ namespace OpenSim.Region.Framework.Interfaces
         /// <param name="newTree"></param>
         /// <returns></returns>
         SceneObjectGroup AddTree(
-            UUID uuid, UUID groupID, Vector3 scale, Quaternion rotation, Vector3 position, Tree treeType, bool newTree);        
+            UUID uuid, UUID groupID, Vector3 scale, Quaternion rotation, Vector3 position, Tree treeType, bool newTree);
     }
 }

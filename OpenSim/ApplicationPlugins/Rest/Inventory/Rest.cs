@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -34,6 +34,8 @@ using log4net;
 using Nini.Config;
 using OpenSim.Framework;
 using OpenSim.Framework.Communications;
+using OpenSim.Services.Interfaces;
+using IUserService = OpenSim.Framework.Communications.IUserService;
 
 namespace OpenSim.ApplicationPlugins.Rest.Inventory
 {
@@ -95,9 +97,9 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
             get { return main.CommunicationsManager; }
         }
 
-        internal static IInventoryServices InventoryServices
+        internal static IInventoryService InventoryServices
         {
-            get { return Comms.InventoryService; }
+            get { return main.SceneManager.CurrentOrFirstScene.InventoryService; }
         }
 
         internal static IUserService UserServices
@@ -110,9 +112,9 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
             get { return Comms.AvatarService; }
         }
 
-        internal static IAssetCache AssetServices
+        internal static IAssetService AssetServices
         {
-            get { return Comms.AssetCache; }
+            get { return main.SceneManager.CurrentOrFirstScene.AssetService; }
         }
 
         /// <summary>
@@ -161,7 +163,7 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
             get { return Plugin.RequestId; }
         }
 
-        internal static Encoding Encoding = Encoding.UTF8;
+        internal static Encoding Encoding = Util.UTF8;
 
         /// <summary>
         /// Version control for REST implementation. This
@@ -433,7 +435,7 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
             try
             {
                 byte[] encData_byte = new byte[str.Length];
-                encData_byte = Encoding.UTF8.GetBytes(str);
+                encData_byte = Util.UTF8.GetBytes(str);
                 return Convert.ToBase64String(encData_byte);
             }
             catch

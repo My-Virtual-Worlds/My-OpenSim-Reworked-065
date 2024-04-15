@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -99,18 +99,11 @@ namespace OpenSim.Data
         bool AuthenticateSim(UUID UUID, ulong regionHandle, string simrecvkey);
 
         /// <summary>
-        /// Adds a new profile to the database
+        /// Adds or updates a profile in the database
         /// </summary>
         /// <param name="profile">The profile to add</param>
         /// <returns>RESPONSE_OK if successful, error if not.</returns>
-        DataResponse AddProfile(RegionProfileData profile);
-
-        /// <summary>
-        /// Updates a profile in the database
-        /// </summary>
-        /// <param name="profile"></param>
-        /// <returns></returns>
-        DataResponse UpdateProfile(RegionProfileData profile);
+        DataResponse StoreProfile(RegionProfileData profile);
 
         /// <summary>
         /// Remove a profile from the database

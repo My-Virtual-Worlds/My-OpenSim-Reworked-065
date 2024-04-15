@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,7 +33,6 @@ using log4net;
 using Nini.Config;
 using OpenMetaverse;
 using OpenSim.Framework;
-using OpenSim.Region.CoreModules.World.Terrain;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 
@@ -47,7 +46,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
 
         private Scene m_scene;
 
-        private EstateTerrainXferHandler TerrainUploader = null;
+        private EstateTerrainXferHandler TerrainUploader;
 
         #region Packet Data Responders
 
@@ -76,8 +75,19 @@ namespace OpenSim.Region.CoreModules.World.Estate
                     m_scene.RegionInfo.EstateSettings.AbuseEmail,
                     estateOwner);
 
-            remote_client.SendEstateManagersList(invoice,
+            remote_client.SendEstateList(invoice,
+                    (int)Constants.EstateAccessCodex.EstateManagers,
                     m_scene.RegionInfo.EstateSettings.EstateManagers,
+                    m_scene.RegionInfo.EstateSettings.EstateID);
+
+            remote_client.SendEstateList(invoice,
+                    (int)Constants.EstateAccessCodex.AccessOptions,
+                    m_scene.RegionInfo.EstateSettings.EstateAccess,
+                    m_scene.RegionInfo.EstateSettings.EstateID);
+
+            remote_client.SendEstateList(invoice,
+                    (int)Constants.EstateAccessCodex.AllowedGroups,
+                    m_scene.RegionInfo.EstateSettings.EstateGroups,
                     m_scene.RegionInfo.EstateSettings.EstateID);
 
             remote_client.SendBannedUserList(invoice,
@@ -155,6 +165,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
                     break;
             }
             m_scene.RegionInfo.RegionSettings.Save();
+            sendRegionInfoPacketToAll();
         }
 
         public void setEstateTerrainTextureHeights(IClientAPI client, int corner, float lowValue, float highValue)
@@ -179,6 +190,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
                     break;
             }
             m_scene.RegionInfo.RegionSettings.Save();
+            sendRegionInfoPacketToAll();
         }
 
         private void handleCommitEstateTerrainTextureRequest(IClientAPI remoteClient)
@@ -232,127 +244,176 @@ namespace OpenSim.Region.CoreModules.World.Estate
             if (user == m_scene.RegionInfo.MasterAvatarAssignedUUID)
                 return; // never process owner
 
-            switch (estateAccessType)
+            if ((estateAccessType & 4) != 0) // User add
             {
-                case 64:
-                    if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, false) || m_scene.Permissions.BypassPermissions())
+                if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, true) || m_scene.Permissions.BypassPermissions())
+                {
+                    m_scene.RegionInfo.EstateSettings.AddEstateUser(user);
+                    m_scene.RegionInfo.EstateSettings.Save();
+                    remote_client.SendEstateList(invoice, (int)Constants.EstateAccessCodex.AccessOptions, m_scene.RegionInfo.EstateSettings.EstateAccess, m_scene.RegionInfo.EstateSettings.EstateID);
+                }
+                else
+                {
+                    remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
+                }
+
+            }
+            if ((estateAccessType & 8) != 0) // User remove
+            {
+                if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, true) || m_scene.Permissions.BypassPermissions())
+                {
+                    m_scene.RegionInfo.EstateSettings.RemoveEstateUser(user);
+                    m_scene.RegionInfo.EstateSettings.Save();
+
+                    remote_client.SendEstateList(invoice, (int)Constants.EstateAccessCodex.AccessOptions, m_scene.RegionInfo.EstateSettings.EstateAccess, m_scene.RegionInfo.EstateSettings.EstateID);
+                }
+                else
+                {
+                    remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
+                }
+            }
+            if ((estateAccessType & 16) != 0) // Group add
+            {
+                if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, true) || m_scene.Permissions.BypassPermissions())
+                {
+                    m_scene.RegionInfo.EstateSettings.AddEstateGroup(user);
+                    m_scene.RegionInfo.EstateSettings.Save();
+                    remote_client.SendEstateList(invoice, (int)Constants.EstateAccessCodex.AllowedGroups, m_scene.RegionInfo.EstateSettings.EstateGroups, m_scene.RegionInfo.EstateSettings.EstateID);
+                }
+                else
+                {
+                    remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
+                }
+            }
+            if ((estateAccessType & 32) != 0) // Group remove
+            {
+                if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, true) || m_scene.Permissions.BypassPermissions())
+                {
+                    m_scene.RegionInfo.EstateSettings.RemoveEstateGroup(user);
+                    m_scene.RegionInfo.EstateSettings.Save();
+
+                    remote_client.SendEstateList(invoice, (int)Constants.EstateAccessCodex.AllowedGroups, m_scene.RegionInfo.EstateSettings.EstateGroups, m_scene.RegionInfo.EstateSettings.EstateID);
+                }
+                else
+                {
+                    remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
+                }
+            }
+            if ((estateAccessType & 64) != 0) // Ban add
+            {
+                if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, false) || m_scene.Permissions.BypassPermissions())
+                {
+                    EstateBan[] banlistcheck = m_scene.RegionInfo.EstateSettings.EstateBans;
+
+                    bool alreadyInList = false;
+
+                    for (int i = 0; i < banlistcheck.Length; i++)
                     {
-                        EstateBan[] banlistcheck = m_scene.RegionInfo.EstateSettings.EstateBans;
-
-                        bool alreadyInList = false;
-
-                        for (int i = 0; i < banlistcheck.Length; i++)
+                        if (user == banlistcheck[i].BannedUserID)
                         {
-                            if (user == banlistcheck[i].BannedUserID)
-                            {
-                                alreadyInList = true;
-                                break;
-                            }
-
+                            alreadyInList = true;
+                            break;
                         }
-                        if (!alreadyInList)
-                        {
 
-                            EstateBan item = new EstateBan();
-
-                            item.BannedUserID = user;
-                            item.EstateID = m_scene.RegionInfo.EstateSettings.EstateID;
-                            item.BannedHostAddress = "0.0.0.0";
-                            item.BannedHostIPMask = "0.0.0.0";
-
-                            m_scene.RegionInfo.EstateSettings.AddBan(item);
-                            m_scene.RegionInfo.EstateSettings.Save();
-
-                            ScenePresence s = m_scene.GetScenePresence(user);
-                            if (s != null)
-                            {
-                                if (!s.IsChildAgent)
-                                {
-                                    s.ControllingClient.SendTeleportLocationStart();
-                                    m_scene.TeleportClientHome(user, s.ControllingClient);
-                                }
-                            }
-
-                        }
-                        else
-                        {
-                            remote_client.SendAlertMessage("User is already on the region ban list");
-                        }
-                        //m_scene.RegionInfo.regionBanlist.Add(Manager(user);
-                        remote_client.SendBannedUserList(invoice, m_scene.RegionInfo.EstateSettings.EstateBans, m_scene.RegionInfo.EstateSettings.EstateID);
                     }
-                    else
+                    if (!alreadyInList)
                     {
-                        remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
-                    }
-                    break;
-                case 128:
-                    if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, false) || m_scene.Permissions.BypassPermissions())
-                    {
-                        EstateBan[] banlistcheck = m_scene.RegionInfo.EstateSettings.EstateBans;
 
-                        bool alreadyInList = false;
-                        EstateBan listitem = null;
+                        EstateBan item = new EstateBan();
 
-                        for (int i = 0; i < banlistcheck.Length; i++)
-                        {
-                            if (user == banlistcheck[i].BannedUserID)
-                            {
-                                alreadyInList = true;
-                                listitem = banlistcheck[i];
-                                break;
-                            }
+                        item.BannedUserID = user;
+                        item.EstateID = m_scene.RegionInfo.EstateSettings.EstateID;
+                        item.BannedHostAddress = "0.0.0.0";
+                        item.BannedHostIPMask = "0.0.0.0";
 
-                        }
-                        if (alreadyInList && listitem != null)
-                        {
-                            m_scene.RegionInfo.EstateSettings.RemoveBan(listitem.BannedUserID);
-                            m_scene.RegionInfo.EstateSettings.Save();
-                        }
-                        else
-                        {
-                            remote_client.SendAlertMessage("User is not on the region ban list");
-                        }
-                        //m_scene.RegionInfo.regionBanlist.Add(Manager(user);
-                        remote_client.SendBannedUserList(invoice, m_scene.RegionInfo.EstateSettings.EstateBans, m_scene.RegionInfo.EstateSettings.EstateID);
-                    }
-                    else
-                    {
-                        remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
-                    }
-                    break;
-                case 256:
-
-                    if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, true) || m_scene.Permissions.BypassPermissions())
-                    {
-                        m_scene.RegionInfo.EstateSettings.AddEstateManager(user);
-                        m_scene.RegionInfo.EstateSettings.Save();
-                        remote_client.SendEstateManagersList(invoice, m_scene.RegionInfo.EstateSettings.EstateManagers, m_scene.RegionInfo.EstateSettings.EstateID);
-                    }
-                    else
-                    {
-                        remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
-                    }
-
-                    break;
-                case 512:
-                    if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, true) || m_scene.Permissions.BypassPermissions())
-                    {
-                        m_scene.RegionInfo.EstateSettings.RemoveEstateManager(user);
+                        m_scene.RegionInfo.EstateSettings.AddBan(item);
                         m_scene.RegionInfo.EstateSettings.Save();
 
-                        remote_client.SendEstateManagersList(invoice, m_scene.RegionInfo.EstateSettings.EstateManagers, m_scene.RegionInfo.EstateSettings.EstateID);
+                        ScenePresence s = m_scene.GetScenePresence(user);
+                        if (s != null)
+                        {
+                            if (!s.IsChildAgent)
+                            {
+                                s.ControllingClient.SendTeleportLocationStart();
+                                m_scene.TeleportClientHome(user, s.ControllingClient);
+                            }
+                        }
+
                     }
                     else
                     {
-                        remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
+                        remote_client.SendAlertMessage("User is already on the region ban list");
                     }
-                    break;
+                    //m_scene.RegionInfo.regionBanlist.Add(Manager(user);
+                    remote_client.SendBannedUserList(invoice, m_scene.RegionInfo.EstateSettings.EstateBans, m_scene.RegionInfo.EstateSettings.EstateID);
+                }
+                else
+                {
+                    remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
+                }
+            }
+            if ((estateAccessType & 128) != 0) // Ban remove
+            {
+                if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, false) || m_scene.Permissions.BypassPermissions())
+                {
+                    EstateBan[] banlistcheck = m_scene.RegionInfo.EstateSettings.EstateBans;
 
-                default:
+                    bool alreadyInList = false;
+                    EstateBan listitem = null;
 
-                    m_log.ErrorFormat("EstateOwnerMessage: Unknown EstateAccessType requested in estateAccessDelta: {0}", estateAccessType.ToString());
-                    break;
+                    for (int i = 0; i < banlistcheck.Length; i++)
+                    {
+                        if (user == banlistcheck[i].BannedUserID)
+                        {
+                            alreadyInList = true;
+                            listitem = banlistcheck[i];
+                            break;
+                        }
+
+                    }
+                    if (alreadyInList && listitem != null)
+                    {
+                        m_scene.RegionInfo.EstateSettings.RemoveBan(listitem.BannedUserID);
+                        m_scene.RegionInfo.EstateSettings.Save();
+                    }
+                    else
+                    {
+                        remote_client.SendAlertMessage("User is not on the region ban list");
+                    }
+                    //m_scene.RegionInfo.regionBanlist.Add(Manager(user);
+                    remote_client.SendBannedUserList(invoice, m_scene.RegionInfo.EstateSettings.EstateBans, m_scene.RegionInfo.EstateSettings.EstateID);
+                }
+                else
+                {
+                    remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
+                }
+            }
+            if ((estateAccessType & 256) != 0) // Manager add
+            {
+                if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, true) || m_scene.Permissions.BypassPermissions())
+                {
+                    m_scene.RegionInfo.EstateSettings.AddEstateManager(user);
+                    m_scene.RegionInfo.EstateSettings.Save();
+                    remote_client.SendEstateList(invoice, (int)Constants.EstateAccessCodex.EstateManagers, m_scene.RegionInfo.EstateSettings.EstateManagers, m_scene.RegionInfo.EstateSettings.EstateID);
+                }
+                else
+                {
+                    remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
+                }
+            }
+            if ((estateAccessType & 512) != 0) // Manager remove
+            {
+                if (m_scene.Permissions.CanIssueEstateCommand(remote_client.AgentId, true) || m_scene.Permissions.BypassPermissions())
+                {
+                    m_scene.RegionInfo.EstateSettings.RemoveEstateManager(user);
+                    m_scene.RegionInfo.EstateSettings.Save();
+
+                    remote_client.SendEstateList(invoice, (int)Constants.EstateAccessCodex.EstateManagers, m_scene.RegionInfo.EstateSettings.EstateManagers, m_scene.RegionInfo.EstateSettings.EstateID);
+                }
+                else
+                {
+                    remote_client.SendAlertMessage("Method EstateAccessDelta Failed, you don't have permissions");
+                }
             }
         }
 
@@ -413,9 +474,12 @@ namespace OpenSim.Region.CoreModules.World.Estate
         private void handleEstateTeleportAllUsersHomeRequest(IClientAPI remover_client, UUID invoice, UUID senderID)
         {
             // Get a fresh list that will not change as people get teleported away
-            List<ScenePresence> prescences = m_scene.GetScenePresences(); 
-            foreach (ScenePresence p in prescences)
+            ScenePresence[] presences = m_scene.GetScenePresences();
+
+            for (int i = 0; i < presences.Length; i++)
             {
+                ScenePresence p = presences[i];
+
                 if (p.UUID != senderID)
                 {
                     // make sure they are still there, we could be working down a long list
@@ -467,20 +531,45 @@ namespace OpenSim.Region.CoreModules.World.Estate
             if (terr != null)
             {
                 m_log.Warn("[CLIENT]: Got Request to Send Terrain in region " + m_scene.RegionInfo.RegionName);
-                if (File.Exists(Util.dataDir() + "/terrain.raw"))
-                {
-                    File.Delete(Util.dataDir() + "/terrain.raw");
-                }
+
                 try
                 {
-                    FileStream input = new FileStream(Util.dataDir() + "/terrain.raw", FileMode.CreateNew);
+
+                    string localfilename = "terrain.raw";
+
+                    if (terrainData.Length == 851968)
+                    {
+                        localfilename = Path.Combine(Util.dataDir(),"terrain.raw"); // It's a .LLRAW
+                    }
+
+                    if (terrainData.Length == 196662) // 24-bit 256x256 Bitmap
+                        localfilename = Path.Combine(Util.dataDir(), "terrain.bmp");
+
+                    if (terrainData.Length == 256 * 256 * 4) // It's a .R32
+                        localfilename = Path.Combine(Util.dataDir(), "terrain.r32");
+
+                    if (terrainData.Length == 256 * 256 * 8) // It's a .R64
+                        localfilename = Path.Combine(Util.dataDir(), "terrain.r64");
+
+                    if (File.Exists(localfilename))
+                    {
+                        File.Delete(localfilename);
+                    }
+
+                    FileStream input = new FileStream(localfilename, FileMode.CreateNew);
                     input.Write(terrainData, 0, terrainData.Length);
                     input.Close();
+
+                    FileInfo x = new FileInfo(localfilename);
+
+                    terr.LoadFromFile(localfilename);
+                    remoteClient.SendAlertMessage("Your terrain was loaded as a ." + x.Extension + " file. It may take a few moments to appear.");
+
                 }
                 catch (IOException e)
                 {
                     m_log.ErrorFormat("[TERRAIN]: Error Saving a terrain file uploaded via the estate tools.  It gave us the following error: {0}", e.ToString());
-                    remoteClient.SendAlertMessage("There was an IO Exception loading your terrain.  Please check free space");
+                    remoteClient.SendAlertMessage("There was an IO Exception loading your terrain.  Please check free space.");
 
                     return;
                 }
@@ -498,29 +587,16 @@ namespace OpenSim.Region.CoreModules.World.Estate
 
                     return;
                 }
-
-
-
-
-                try
-                {
-                    terr.LoadFromFile(Util.dataDir() + "/terrain.raw");
-                    remoteClient.SendAlertMessage("Your terrain was loaded. Give it a minute or two to apply");
-                }
                 catch (Exception e)
                 {
                     m_log.ErrorFormat("[TERRAIN]: Error loading a terrain file uploaded via the estate tools.  It gave us the following error: {0}", e.ToString());
                     remoteClient.SendAlertMessage("There was a general error loading your terrain.  Please fix the terrain file and try again");
                 }
-
             }
             else
             {
                 remoteClient.SendAlertMessage("Unable to apply terrain.  Cannot get an instance of the terrain module");
             }
-
-
-
         }
 
         private void handleUploadTerrain(IClientAPI remote_client, string clientFileName)
@@ -668,7 +744,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
                 LookupUUID(uuidNameLookupList);
         }
 
-        private void LookupUUIDSCompleted(IAsyncResult iar)
+        private static void LookupUUIDSCompleted(IAsyncResult iar)
         {
             LookupUUIDS icon = (LookupUUIDS)iar.AsyncState;
             icon.EndInvoke(iar);
@@ -683,7 +759,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
         }
         private void LookupUUIDsAsync(List<UUID> uuidLst)
         {
-            UUID[] uuidarr = new UUID[0];
+            UUID[] uuidarr;
 
             lock (uuidLst)
             {
@@ -707,7 +783,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
 
             for (int i = 0; i < avatars.Count; i++)
             {
-                HandleRegionInfoRequest(avatars[i].ControllingClient); ;
+                HandleRegionInfoRequest(avatars[i].ControllingClient);
             }
         }
 
@@ -755,7 +831,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
 
         public void sendRegionHandshakeToAll()
         {
-            m_scene.Broadcast(sendRegionHandshake);
+            m_scene.ForEachClient(sendRegionHandshake);
         }
 
         public void handleEstateChangeInfo(IClientAPI remoteClient, UUID invoice, UUID senderID, UInt32 parms1, UInt32 parms2)
@@ -768,7 +844,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
             else
             {
                 m_scene.RegionInfo.EstateSettings.UseGlobalTime = false;
-                m_scene.RegionInfo.EstateSettings.SunPosition = (double)(parms2 - 0x1800)/1024.0;
+                m_scene.RegionInfo.EstateSettings.SunPosition = (parms2 - 0x1800)/1024.0;
             }
 
             if ((parms1 & 0x00000010) != 0)
@@ -828,8 +904,108 @@ namespace OpenSim.Region.CoreModules.World.Estate
             m_scene.RegisterModuleInterface<IEstateModule>(this);
             m_scene.EventManager.OnNewClient += EventManager_OnNewClient;
             m_scene.EventManager.OnRequestChangeWaterHeight += changeWaterHeight;
+
+            m_scene.AddCommand(this, "set terrain texture",
+                               "set terrain texture <number> <uuid> [<x>] [<y>]",
+                               "Sets the terrain <number> to <uuid>, if <x> or <y> are specified, it will only " +
+                               "set it on regions with a matching coordinate. Specify -1 in <x> or <y> to wildcard" +
+                               " that coordinate.",
+                               consoleSetTerrainTexture);
+
+            m_scene.AddCommand(this, "set terrain heights",
+                               "set terrain heights <corner> <min> <max> [<x>] [<y>]",
+                               "Sets the terrain texture heights on corner #<corner> to <min>/<max>, if <x> or <y> are specified, it will only " +
+                               "set it on regions with a matching coordinate. Specify -1 in <x> or <y> to wildcard" +
+                               " that coordinate. Corner # SW = 0, NW = 1, SE = 2, NE = 3.",
+                               consoleSetTerrainHeights);
         }
 
+        #region Console Commands
+
+        public void consoleSetTerrainTexture(string module, string[] args)
+        {
+            string num = args[3];
+            string uuid = args[4];
+            int x = (args.Length > 5 ? int.Parse(args[5]) : -1);
+            int y = (args.Length > 6 ? int.Parse(args[6]) : -1);
+
+            if (x == -1 || m_scene.RegionInfo.RegionLocX == x)
+            {
+                if (y == -1 || m_scene.RegionInfo.RegionLocY == y)
+                {
+                    int corner = int.Parse(num);
+                    UUID texture = UUID.Parse(uuid);
+
+                    m_log.Debug("[ESTATEMODULE] Setting terrain textures for " + m_scene.RegionInfo.RegionName +
+                                string.Format(" (C#{0} = {1})", corner, texture));
+
+                    switch (corner)
+                    {
+                        case 0:
+                            m_scene.RegionInfo.RegionSettings.TerrainTexture1 = texture;
+                            break;
+                        case 1:
+                            m_scene.RegionInfo.RegionSettings.TerrainTexture2 = texture;
+                            break;
+                        case 2:
+                            m_scene.RegionInfo.RegionSettings.TerrainTexture3 = texture;
+                            break;
+                        case 3:
+                            m_scene.RegionInfo.RegionSettings.TerrainTexture4 = texture;
+                            break;
+                    }
+                    m_scene.RegionInfo.RegionSettings.Save();
+                    sendRegionInfoPacketToAll();
+
+                }
+            }
+         }
+ 
+        public void consoleSetTerrainHeights(string module, string[] args)
+        {
+            string num = args[3];
+            string min = args[4];
+            string max = args[5];
+            int x = (args.Length > 6 ? int.Parse(args[6]) : -1);
+            int y = (args.Length > 7 ? int.Parse(args[7]) : -1);
+
+            if (x == -1 || m_scene.RegionInfo.RegionLocX == x)
+            {
+                if (y == -1 || m_scene.RegionInfo.RegionLocY == y)
+                {
+                    int corner = int.Parse(num);
+                    float lowValue = float.Parse(min, Culture.NumberFormatInfo);
+                    float highValue = float.Parse(max, Culture.NumberFormatInfo);
+
+                    m_log.Debug("[ESTATEMODULE] Setting terrain heights " + m_scene.RegionInfo.RegionName +
+                                string.Format(" (C{0}, {1}-{2}", corner, lowValue, highValue));
+
+                    switch (corner)
+                    {
+                        case 0:
+                            m_scene.RegionInfo.RegionSettings.Elevation1SW = lowValue;
+                            m_scene.RegionInfo.RegionSettings.Elevation2SW = highValue;
+                            break;
+                        case 1:
+                            m_scene.RegionInfo.RegionSettings.Elevation1NW = lowValue;
+                            m_scene.RegionInfo.RegionSettings.Elevation2NW = highValue;
+                            break;
+                        case 2:
+                            m_scene.RegionInfo.RegionSettings.Elevation1SE = lowValue;
+                            m_scene.RegionInfo.RegionSettings.Elevation2SE = highValue;
+                            break;
+                        case 3:
+                            m_scene.RegionInfo.RegionSettings.Elevation1NE = lowValue;
+                            m_scene.RegionInfo.RegionSettings.Elevation2NE = highValue;
+                            break;
+                    }
+                    m_scene.RegionInfo.RegionSettings.Save();
+                    sendRegionHandshakeToAll();
+                }
+            }
+        }
+
+        #endregion
 
         public void PostInitialise()
         {

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -34,6 +34,7 @@ using OpenSim.Framework;
 using OpenSim.Framework.Communications.Cache;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
 {
@@ -114,10 +115,11 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
             // client.OnAvatarNowWearing -= AvatarIsWearing;
         }
 
-
-        public void SetAppearanceAssets(CachedUserInfo profile, ref AvatarAppearance appearance)
+        public void SetAppearanceAssets(UUID userID, ref AvatarAppearance appearance)
         {
-            if (profile.RootFolder != null)
+            IInventoryService invService = m_scene.InventoryService;
+
+            if (invService.GetRootFolder(userID) != null)
             {
                 for (int i = 0; i < 13; i++)
                 {
@@ -127,7 +129,8 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
                     }
                     else
                     {
-                        InventoryItemBase baseItem = profile.RootFolder.FindItem(appearance.Wearables[i].ItemID);
+                        InventoryItemBase baseItem = new InventoryItemBase(appearance.Wearables[i].ItemID, userID);
+                        baseItem = invService.GetItem(baseItem);
 
                         if (baseItem != null)
                         {
@@ -135,7 +138,10 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
                         }
                         else
                         {
-                            m_log.ErrorFormat("[APPEARANCE]: Can't find inventory item {0}, setting to default", appearance.Wearables[i].ItemID);
+                            m_log.ErrorFormat(
+                                "[APPEARANCE]: Can't find inventory item {0} for {1}, setting to default", 
+                                appearance.Wearables[i].ItemID, (WearableType)i);
+                            
                             appearance.Wearables[i].AssetID = def.Wearables[i].AssetID;
                         }
                     }
@@ -143,7 +149,7 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
             }
             else
             {
-                m_log.Error("[APPEARANCE]: you have no inventory, appearance stuff isn't going to work");
+                m_log.WarnFormat("[APPEARANCE]: user {0} has no inventory, appearance isn't going to work", userID);
             }
         }
 
@@ -163,8 +169,6 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
                 return;
             }
 
-            CachedUserInfo profile = m_scene.CommsManager.UserProfileCacheService.GetUserDetails(clientView.AgentId);
-
             AvatarAppearance avatAppearance = null;
             if (!TryGetAvatarAppearance(clientView.AgentId, out avatAppearance)) 
             {
@@ -174,34 +178,18 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
             
             //m_log.DebugFormat("[APPEARANCE]: Received wearables for {0}", clientView.Name);
             
-            if (profile != null)
+            foreach (AvatarWearingArgs.Wearable wear in e.NowWearing)
             {
-                if (profile.RootFolder != null)
+                if (wear.Type < 13)
                 {
-                    foreach (AvatarWearingArgs.Wearable wear in e.NowWearing)
-                    {
-                        if (wear.Type < 13)
-                        {
-                            avatAppearance.Wearables[wear.Type].ItemID = wear.ItemID;
-                        }
-                    }
-                    
-                    SetAppearanceAssets(profile, ref avatAppearance);
+                    avatAppearance.Wearables[wear.Type].ItemID = wear.ItemID;
+                }
+            }
+            
+            SetAppearanceAssets(avatar.UUID, ref avatAppearance);
 
-                    m_scene.CommsManager.AvatarService.UpdateUserAppearance(clientView.AgentId, avatAppearance);
-                    avatar.Appearance = avatAppearance;
-                }
-                else
-                {
-                    m_log.WarnFormat(
-                        "[APPEARANCE]: Inventory has not yet been received for {0}, cannot set wearables", 
-                        clientView.Name);
-                }
-            }
-            else
-            {
-                m_log.WarnFormat("[APPEARANCE]: Cannot set wearables for {0}, no user profile found", clientView.Name);
-            }
+            m_scene.CommsManager.AvatarService.UpdateUserAppearance(clientView.AgentId, avatAppearance);
+            avatar.Appearance = avatAppearance;
         }
 
         public static void GetDefaultAvatarAppearance(out AvatarWearable[] wearables, out byte[] visualParams)

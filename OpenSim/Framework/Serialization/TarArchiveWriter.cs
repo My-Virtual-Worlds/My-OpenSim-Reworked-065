@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -40,6 +40,7 @@ namespace OpenSim.Framework.Serialization
         //private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         protected static ASCIIEncoding m_asciiEncoding = new ASCIIEncoding();
+        protected static UTF8Encoding m_utf8Encoding = new UTF8Encoding();
 
         /// <summary>
         /// Binary writer for the underlying stream
@@ -71,7 +72,7 @@ namespace OpenSim.Framework.Serialization
         /// <param name="data"></param>
         public void WriteFile(string filePath, string data)
         {
-            WriteFile(filePath, m_asciiEncoding.GetBytes(data));
+            WriteFile(filePath, m_utf8Encoding.GetBytes(data));
         }
 
         /// <summary>
@@ -207,7 +208,9 @@ namespace OpenSim.Framework.Serialization
                 m_bw.Write(header);
     
                 // Write out data
-                m_bw.Write(data);
+                // An IOException occurs if we try to write out an empty array in Mono 2.6
+                if (data.Length > 0)
+                    m_bw.Write(data);
     
                 if (data.Length % 512 != 0)
                 {

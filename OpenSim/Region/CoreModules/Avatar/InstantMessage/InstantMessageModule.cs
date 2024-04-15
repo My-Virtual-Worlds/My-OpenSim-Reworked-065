@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -38,7 +38,7 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
 {
     public class InstantMessageModule : IRegionModule
     {
-        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);        
+        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         /// <value>
         /// Is this module enabled?
@@ -116,7 +116,7 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
         {
             byte dialog = im.dialog;
 
-            if (   dialog != (byte)InstantMessageDialog.MessageFromAgent
+            if (dialog != (byte)InstantMessageDialog.MessageFromAgent
                 && dialog != (byte)InstantMessageDialog.StartTyping
                 && dialog != (byte)InstantMessageDialog.StopTyping
                 && dialog != (byte)InstantMessageDialog.MessageFromObject)
@@ -126,6 +126,8 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
 
             if (m_TransferModule != null)
             {
+                if (client != null)
+                    im.fromAgentName = client.FirstName + " " + client.LastName;
                 m_TransferModule.SendInstantMessage(im,
                     delegate(bool success)
                     {

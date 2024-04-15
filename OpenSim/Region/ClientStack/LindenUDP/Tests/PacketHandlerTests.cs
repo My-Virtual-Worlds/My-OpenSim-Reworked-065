@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -45,7 +45,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
         [Test]
         /// <summary>
         /// More a placeholder, really
-        /// </summary>        
+        /// </summary>
         public void InPacketTest()
         {
             TestHelper.InMethod();
@@ -70,7 +70,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
             
             TestClient testClient = new TestClient(agent, scene);
             
-            ILLPacketHandler packetHandler 
+            LLPacketHandler packetHandler 
                 = new LLPacketHandler(testClient, testLLPacketServer, new ClientStackUserSettings());
             
             packetHandler.InPacket(new AgentAnimationPacket());
@@ -87,20 +87,20 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
         /// <param name="scene"></param>
         /// <param name="testLLUDPServer"></param>
         /// <param name="testPacketServer"></param>
-        /// <param name="acm">Agent circuit manager used in setting up the stack</param>        
+        /// <param name="acm">Agent circuit manager used in setting up the stack</param>
         protected void SetupStack(
             IScene scene, out TestLLUDPServer testLLUDPServer, out TestLLPacketServer testPacketServer, 
             out AgentCircuitManager acm)
         {
             IConfigSource configSource = new IniConfigSource();
             ClientStackUserSettings userSettings = new ClientStackUserSettings();
-            testLLUDPServer = new TestLLUDPServer();             
+            testLLUDPServer = new TestLLUDPServer();
             acm = new AgentCircuitManager();
                                     
-            uint port = 666;            
-            testLLUDPServer.Initialise(null, ref port, 0, false, configSource, null, acm);
+            uint port = 666;
+            testLLUDPServer.Initialise(null, ref port, 0, false, configSource, acm);
             testPacketServer = new TestLLPacketServer(testLLUDPServer, userSettings);
-            testLLUDPServer.LocalScene = scene;            
-        }        
+            testLLUDPServer.LocalScene = scene;
+        }
     }
 }

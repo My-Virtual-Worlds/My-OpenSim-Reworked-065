@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -26,6 +26,7 @@
  */
 
 using System;
+using System.Runtime.Remoting;
 using System.Runtime.Remoting.Lifetime;
 using System.Security.Permissions;
 using System.Threading;
@@ -34,26 +35,24 @@ using System.Collections;
 using System.Collections.Generic;
 using OpenSim.Region.ScriptEngine.Interfaces;
 using OpenSim.Region.ScriptEngine.Shared;
+using OpenSim.Region.ScriptEngine.Shared.Api.Runtime;
 
 namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
 {
     public partial class ScriptBaseClass : MarshalByRefObject, IScript
     {
         private Dictionary<string, MethodInfo> inits = new Dictionary<string, MethodInfo>();
+//        private ScriptSponsor m_sponser;
 
-        // Object expires if we don't keep it alive
-        // sponsor will be added on object load
-        [SecurityPermissionAttribute(SecurityAction.Demand,
-                             Flags = SecurityPermissionFlag.Infrastructure)]
         public override Object InitializeLifetimeService()
         {
             ILease lease = (ILease)base.InitializeLifetimeService();
             if (lease.CurrentState == LeaseState.Initial)
             {
-                lease.InitialLeaseTime = TimeSpan.Zero;
-//                lease.InitialLeaseTime = TimeSpan.FromMinutes(1);
-//                lease.SponsorshipTimeout = TimeSpan.FromMinutes(2);
-//                lease.RenewOnCallTime = TimeSpan.FromSeconds(2);
+                // Infinite
+                lease.InitialLeaseTime = TimeSpan.FromMinutes(0);
+//                lease.RenewOnCallTime = TimeSpan.FromSeconds(10.0);
+//                lease.SponsorshipTimeout = TimeSpan.FromMinutes(1.0);
             }
             return lease;
         }
@@ -65,7 +64,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             GCDummy = true;
         }
 #endif
-
 
         public ScriptBaseClass()
         {
@@ -81,6 +79,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
                     inits[type] = mi;
                 }
             }
+
+//            m_sponser = new ScriptSponsor();
         }
 
         private Executor m_Executor = null;
@@ -112,6 +112,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             if (!inits.ContainsKey(api))
                 return;
 
+            //ILease lease = (ILease)RemotingServices.GetLifetimeService(data as MarshalByRefObject);
+            //RemotingServices.GetLifetimeService(data as MarshalByRefObject);
+//            lease.Register(m_sponser);
+
             MethodInfo mi = inits[api];
 
             Object[] args = new Object[1];
@@ -120,6 +124,15 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             mi.Invoke(this, args);
 
             m_InitialValues = GetVars();
+        }
+
+        public virtual void StateChange(string newState)
+        {
+        }
+
+        public void Close()
+        {
+//            m_sponser.Close();
         }
 
         public Dictionary<string, object> GetVars()

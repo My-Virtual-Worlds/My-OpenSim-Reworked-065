@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -203,7 +203,7 @@ namespace OpenSim.Data.SQLite
         /// </summary>
         /// <param name="profile">The profile to add</param>
         /// <returns>A dataresponse enum indicating success</returns>
-        override public DataResponse AddProfile(RegionProfileData profile)
+        override public DataResponse StoreProfile(RegionProfileData profile)
         {
             if (database.insertRow(profile))
             {
@@ -215,17 +215,11 @@ namespace OpenSim.Data.SQLite
             }
         }
 
-        override public DataResponse UpdateProfile(RegionProfileData profile)
-        {
-            return AddProfile(profile);
-        }
-
-                /// <summary>
+        /// <summary>
         /// Deletes a sim profile from the database
         /// </summary>
         /// <param name="uuid">the sim UUID</param>
         /// <returns>Successful?</returns>
-        //public DataResponse DeleteProfile(RegionProfileData profile)
         override public DataResponse DeleteProfile(string uuid)
         {
             Dictionary<string, string> param = new Dictionary<string, string>();

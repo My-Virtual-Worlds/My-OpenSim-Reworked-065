@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -53,9 +53,9 @@ using OpenSim.Region.ScriptEngine.Interfaces;
 
 namespace OpenSim.Region.ScriptEngine.Shared.Instance
 {
-    public class ScriptInstance : IScriptInstance
+    public class ScriptInstance : MarshalByRefObject, IScriptInstance
     {
-        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        // private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         
         private IScriptEngine m_Engine;
         private IScriptWorkItem m_CurrentResult = null;
@@ -74,28 +74,28 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
         private string m_PrimName;
         private string m_ScriptName;
         private string m_Assembly;
-        private int m_StartParam = 0;
+        private int m_StartParam;
         private string m_CurrentEvent = String.Empty;
-        private bool m_InSelfDelete = false;
+        private bool m_InSelfDelete;
         private int m_MaxScriptQueue;
         private bool m_SaveState = true;
-        private bool m_ShuttingDown = false;
-        private int m_ControlEventsInQueue = 0;
-        private int m_LastControlLevel = 0;
-        private bool m_CollisionInQueue = false;
+        private bool m_ShuttingDown;
+        private int m_ControlEventsInQueue;
+        private int m_LastControlLevel;
+        private bool m_CollisionInQueue;
         private TaskInventoryItem m_thisScriptTask;
         // The following is for setting a minimum delay between events
-        private double m_minEventDelay = 0;
-        private long m_eventDelayTicks = 0;
-        private long m_nextEventTimeTicks = 0;
+        private double m_minEventDelay;
+        private long m_eventDelayTicks;
+        private long m_nextEventTimeTicks;
         private bool m_startOnInit = true;
+        private UUID m_AttachedAvatar;
         private StateSource m_stateSource;
         private bool m_postOnRez;
-        private bool m_startedFromSavedState = false;
-        private string m_CurrentState = String.Empty;
-        private UUID m_RegionID = UUID.Zero;
+        private bool m_startedFromSavedState;
+        private UUID m_CurrentStateHash;
+        private UUID m_RegionID;
 
-        //private ISponsor m_ScriptSponsor;
         private Dictionary<KeyValuePair<int, int>, KeyValuePair<int, int>>
                 m_LineMap;
 
@@ -232,6 +232,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
             m_MaxScriptQueue = maxScriptQueue;
             m_stateSource = stateSource;
             m_postOnRez = postOnRez;
+            m_AttachedAvatar = part.AttachedAvatar;
             m_RegionID = part.ParentGroup.Scene.RegionInfo.RegionID;
 
             if (part != null)
@@ -251,24 +252,27 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
             {
                 m_Apis[api] = am.CreateApi(api);
                 m_Apis[api].Initialize(engine, part, m_LocalID, itemID);
-            }
+        }
 
-            try
-            {
+        try
+        {
+            if (dom != System.AppDomain.CurrentDomain)
                 m_Script = (IScript)dom.CreateInstanceAndUnwrap(
-                    Path.GetFileNameWithoutExtension(assembly),
-                    "SecondLife.Script");
+                        Path.GetFileNameWithoutExtension(assembly),
+                        "SecondLife.Script");
+            else
+                m_Script = (IScript)Assembly.Load(
+                        Path.GetFileNameWithoutExtension(assembly)).CreateInstance(
+                        "SecondLife.Script");
 
-                // Add a sponsor to the script
-//                ISponsor scriptSponsor = new ScriptSponsor();
-//                ILease lease = (ILease)RemotingServices.GetLifetimeService(m_Script as MarshalByRefObject);
-//                lease.Register(scriptSponsor);
-                //m_ScriptSponsor = scriptSponsor;
 
+                //ILease lease = (ILease)RemotingServices.GetLifetimeService(m_Script as ScriptBaseClass);
+                //RemotingServices.GetLifetimeService(m_Script as ScriptBaseClass);
+//                lease.Register(this);
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                m_log.ErrorFormat("[Script] Error loading assembly {0}\n"+e.ToString(), assembly);
+                // m_log.ErrorFormat("[Script] Error loading assembly {0}\n"+e.ToString(), assembly);
             }
 
             try
@@ -278,14 +282,14 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                     m_Script.InitApi(kv.Key, kv.Value);
                 }
 
-//                m_log.Debug("[Script] Script instance created");
+//                // m_log.Debug("[Script] Script instance created");
 
                 part.SetScriptEvents(m_ItemID,
                                      (int)m_Script.GetStateEventFlags(State));
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                m_log.Error("[Script] Error loading script instance\n"+e.ToString());
+                // m_log.Error("[Script] Error loading script instance\n"+e.ToString());
                 return;
             }
 
@@ -300,14 +304,14 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                 try
                 {
                     FileInfo fi = new FileInfo(savedState);
-                    int size=(int)fi.Length;
+                    int size = (int)fi.Length;
                     if (size < 512000)
                     {
                         using (FileStream fs = File.Open(savedState,
                                                          FileMode.Open, FileAccess.Read, FileShare.None))
                         {
-                            System.Text.ASCIIEncoding enc =
-                                new System.Text.ASCIIEncoding();
+                            System.Text.UTF8Encoding enc =
+                                new System.Text.UTF8Encoding();
 
                             Byte[] data = new Byte[size];
                             fs.Read(data, 0, size);
@@ -347,23 +351,22 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                     }
                     else
                     {
-                        m_log.Error("[Script] Unable to load script state: Memory limit exceeded");
+                        // m_log.Error("[Script] Unable to load script state: Memory limit exceeded");
                     }
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
-                    m_log.ErrorFormat("[Script] Unable to load script state from xml: {0}\n"+e.ToString(), xml);
+                    // m_log.ErrorFormat("[Script] Unable to load script state from xml: {0}\n"+e.ToString(), xml);
                 }
             }
-            else
-            {
-                ScenePresence presence = m_Engine.World.GetScenePresence(part.OwnerID);
+//            else
+//            {
+//                ScenePresence presence = m_Engine.World.GetScenePresence(part.OwnerID);
 
-                if (presence != null && (!postOnRez))
-                    presence.ControllingClient.SendAgentAlertMessage("Compile successful", false);
+//                if (presence != null && (!postOnRez))
+//                    presence.ControllingClient.SendAgentAlertMessage("Compile successful", false);
 
-//                m_log.ErrorFormat("[Script] Unable to load script state, file not found");
-            }
+//            }
         }
 
         public void Init()
@@ -379,7 +382,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                         new Object[] {new LSL_Types.LSLInteger(m_StartParam)}, new DetectParams[0]));
                 }
 
-                if (m_stateSource == StateSource.NewRez)
+                if (m_stateSource == StateSource.AttachedRez)
+                {
+                    PostEvent(new EventParams("attach",
+                        new object[] { new LSL_Types.LSLString(m_AttachedAvatar.ToString()) }, new DetectParams[0]));
+                }
+                else if (m_stateSource == StateSource.NewRez)
                 {
 //                    m_log.Debug("[Script] Posted changed(CHANGED_REGION_RESTART) to script");
                     PostEvent(new EventParams("changed",
@@ -403,6 +411,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                         new Object[] {new LSL_Types.LSLInteger(m_StartParam)}, new DetectParams[0]));
                 }
 
+                if (m_stateSource == StateSource.AttachedRez)
+                {
+                    PostEvent(new EventParams("attach",
+                        new object[] { new LSL_Types.LSLString(m_AttachedAvatar.ToString()) }, new DetectParams[0]));
+                }
+
             }
         }
 
@@ -421,7 +435,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
 
                     permsGranter = part.TaskInventory[m_ItemID].PermsGranter;
                     permsMask = part.TaskInventory[m_ItemID].PermsMask;
-                }                                        
+                }
 
                 if ((permsMask & ScriptBaseClass.PERMISSION_TAKE_CONTROLS) != 0)
                 {
@@ -454,11 +468,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
 
         public void VarDump(Dictionary<string, object> vars)
         {
-            m_log.Info("Variable dump for script "+ m_ItemID.ToString());
-            foreach (KeyValuePair<string, object> v in vars)
-            {
-                m_log.Info("Variable: "+v.Key+" = "+v.Value.ToString());
-            }
+            // m_log.Info("Variable dump for script "+ m_ItemID.ToString());
+            // foreach (KeyValuePair<string, object> v in vars)
+            // {
+                // m_log.Info("Variable: "+v.Key+" = "+v.Value.ToString());
+            // }
         }
 
         public void Start()
@@ -474,8 +488,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                 {
                     if (m_CurrentResult == null)
                         m_CurrentResult = m_Engine.QueueEventHandler(this);
-                    else
-                        m_log.Error("[Script] Tried to start a script that was already queued");
+                    // else
+                        // m_log.Error("[Script] Tried to start a script that was already queued");
                 }
             }
         }
@@ -527,7 +541,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                 m_CurrentResult = null;
             }
 
-            return true;
+            return false;
         }
 
         public void SetState(string state)
@@ -621,7 +635,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
         /// <summary>
         /// Process the next event queued for this script
         /// </summary>
-        /// <returns></returns>        
+        /// <returns></returns>
         public object EventProcessor()
         {
             lock (m_Script)
@@ -727,15 +741,18 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                                                            part.AbsolutePosition,
                                                            part.Name, part.UUID, false);
                                 }
-                                catch (Exception e2) // LEGIT: User Scripting
+                                catch (Exception)
                                 {
-                                    m_log.Error("[SCRIPT]: "+
-                                                "Error displaying error in-world: " +
-                                                e2.ToString());
-                                    m_log.Error("[SCRIPT]: " +
-                                                "Errormessage: Error compiling script:\r\n" +
-                                                e.ToString());
                                 }
+                                // catch (Exception e2) // LEGIT: User Scripting
+                                // {
+                                    // m_log.Error("[SCRIPT]: "+
+                                      //           "Error displaying error in-world: " +
+                                        //         e2.ToString());
+                                 //    m_log.Error("[SCRIPT]: " +
+                                   //              "Errormessage: Error compiling script:\r\n" +
+                                     //            e.ToString());
+                                // }
                             }
                             else if ((e is TargetInvocationException) && (e.InnerException is SelfDeleteException))
                             {
@@ -868,6 +885,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
 
         public void SaveState(string assembly)
         {
+
+
             // If we're currently in an event, just tell it to save upon return
             //
             if (m_InEvent)
@@ -880,25 +899,29 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
 
             string xml = ScriptSerializer.Serialize(this);
 
-            if (m_CurrentState != xml)
+            // Compare hash of the state we just just created with the state last written to disk
+            // If the state is different, update the disk file.
+            UUID hash = UUID.Parse(Utils.MD5String(xml));
+
+            if (hash != m_CurrentStateHash)
             {
                 try
                 {
                     FileStream fs = File.Create(Path.Combine(Path.GetDirectoryName(assembly), m_ItemID.ToString() + ".state"));
-                    System.Text.ASCIIEncoding enc = new System.Text.ASCIIEncoding();
+                    System.Text.UTF8Encoding enc = new System.Text.UTF8Encoding();
                     Byte[] buf = enc.GetBytes(xml);
                     fs.Write(buf, 0, buf.Length);
                     fs.Close();
                 }
-                catch(Exception e)
+                catch(Exception)
                 {
-                    m_log.Error("Unable to save xml\n"+e.ToString());
+                    // m_log.Error("Unable to save xml\n"+e.ToString());
                 }
                 //if (!File.Exists(Path.Combine(Path.GetDirectoryName(assembly), m_ItemID.ToString() + ".state")))
                 //{
                 //    throw new Exception("Completed persistence save, but no file was created");
                 //}
-                m_CurrentState = xml;
+                m_CurrentStateHash = hash;
             }
         }
 
@@ -911,7 +934,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
         
         public override string ToString()
         {
-            return String.Format("{0} {1} on {2}", m_ScriptName, m_ItemID, m_PrimName);   
+            return String.Format("{0} {1} on {2}", m_ScriptName, m_ItemID, m_PrimName);
         }
 
         string FormatException(Exception e)
@@ -944,7 +967,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                             if (col == 0)
                                 col++;
                             message = string.Format("Runtime error:\n" +
-                                    "Line ({0}): {1}", scriptLine - 1,
+                                    "({0}): {1}", scriptLine - 1,
                                     e.InnerException.Message);
 
                             System.Console.WriteLine(e.ToString()+"\n");
@@ -954,8 +977,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
                 }
             }
 
-            m_log.ErrorFormat("Scripting exception:");
-            m_log.ErrorFormat(e.ToString());
+            // m_log.ErrorFormat("Scripting exception:");
+            // m_log.ErrorFormat(e.ToString());
 
             return e.ToString();
         }
@@ -968,7 +991,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
         public string GetXMLState()
         {
             bool run = Running;
-            Stop(100);
+            bool stopped = Stop(100);
             Running = run;
 
             // We should not be doing this, but since we are about to
@@ -979,6 +1002,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
 
             // Force an update of the in-memory plugin data
             //
+            if (!stopped)
+                return String.Empty;
+
             PluginData = AsyncCommandManager.GetSerializationData(m_Engine, m_ItemID);
 
             return ScriptSerializer.Serialize(this);

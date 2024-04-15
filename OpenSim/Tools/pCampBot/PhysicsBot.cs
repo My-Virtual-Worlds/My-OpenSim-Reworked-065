@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -27,10 +27,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.IO;
 using System.Threading;
 using System.Timers;
 using OpenMetaverse;
+using OpenMetaverse.Assets;
 using Nini.Config;
 using OpenSim.Framework;
 using OpenSim.Framework.Console;
@@ -47,13 +49,14 @@ namespace pCampBot
         public string lastname;
         public string password;
         public string loginURI;
+        public string saveDir;
+        public string wear;
 
         public event AnEvent OnConnected;
         public event AnEvent OnDisconnected;
 
         protected Timer m_action; // Action Timer
         protected List<uint> objectIDs = new List<uint>();
-
 
         protected Random somthing = new Random(Environment.TickCount);// We do stuff randomly here
 
@@ -79,9 +82,6 @@ namespace pCampBot
         {
             while (true)
             {
-                //client.Appearance.ForceRebakeAvatarTextures();
-                //client.Appearance.SetPreviousAppearance();
-
                 int walkorrun = somthing.Next(4); // Randomize between walking and running. The greater this number,
                                                   // the greater the bot's chances to walk instead of run.
                 client.Self.Jump(false);
@@ -98,14 +98,6 @@ namespace pCampBot
                 Vector3 newpos = new Vector3(somthing.Next(255), somthing.Next(255), somthing.Next(255));
                 client.Self.Movement.TurnToward(newpos);
 
-                /*
-                // Why does it need to keep setting it true? Changing to just let it walk =)
-                for (int i = 0; i < 2000; i++)
-                {
-                    client.Self.Movement.AtPos = true;
-                    Thread.Sleep(somthing.Next(25, 75)); // Makes sure the bots keep walking for this time.
-                }
-                */
                 client.Self.Movement.AtPos = true;
                 Thread.Sleep(somthing.Next(3000,13000));
                 client.Self.Movement.AtPos = false;
@@ -128,6 +120,7 @@ namespace pCampBot
             lastname = startupConfig.GetString("lastname", "random");
             password = startupConfig.GetString("password", "12345");
             loginURI = startupConfig.GetString("loginuri");
+            wear = startupConfig.GetString("wear","no");
         }
 
         /// <summary>
@@ -150,7 +143,7 @@ namespace pCampBot
             client.Settings.SEND_AGENT_THROTTLE = true;
             client.Settings.SEND_PINGS = true;
             client.Settings.STORE_LAND_PATCHES = false;
-            client.Settings.USE_TEXTURE_CACHE = false;
+            client.Settings.USE_ASSET_CACHE = false;
             client.Settings.MULTIPLE_SIMS = true;
             client.Throttle.Asset = 100000;
             client.Throttle.Land = 100000;
@@ -158,11 +151,11 @@ namespace pCampBot
             client.Throttle.Texture = 100000;
             client.Throttle.Wind = 100000;
             client.Throttle.Total = 400000;
-            client.Network.OnConnected += new NetworkManager.ConnectedCallback(this.Network_OnConnected);
-            client.Network.OnSimConnected += new NetworkManager.SimConnectedCallback(this.Network_OnConnected);
-            client.Network.OnDisconnected += new NetworkManager.DisconnectedCallback(this.Network_OnDisconnected);
-            client.Objects.OnNewPrim += Objects_NewPrim;
-            client.Assets.OnImageReceived += Asset_TextureCallback;
+            client.Network.LoginProgress += this.Network_LoginProgress;
+            client.Network.SimConnected += this.Network_SimConnected;
+            client.Network.Disconnected += this.Network_OnDisconnected;
+            client.Objects.ObjectUpdate += Objects_NewPrim;
+            //client.Assets.OnAssetReceived += Asset_ReceivedCallback;
             if (client.Network.Login(firstname, lastname, password, "pCampBot", "Your name"))
             {
                 if (OnConnected != null)
@@ -173,12 +166,21 @@ namespace pCampBot
                     m_action.Elapsed += new ElapsedEventHandler(m_action_Elapsed);
                     m_action.Start();
                     OnConnected(this, EventType.CONNECTED);
+                    if (wear == "save")
+                    {
+                        client.Appearance.SetPreviousAppearance();
+                        SaveDefaultAppearance();
+                    }
+                    else if (wear != "no")
+                    {
+                        MakeDefaultAppearance(wear);
+                    }
                     client.Self.Jump(true);
                 }
             }
             else
             {
-                MainConsole.Instance.Error(firstname + " " + lastname, "Can't login: " + client.Network.LoginMessage);
+                MainConsole.Instance.Output(firstname + " " + lastname + " Can't login: " + client.Network.LoginMessage);
                 if (OnDisconnected != null)
                 {
                     OnDisconnected(this, EventType.DISCONNECTED);
@@ -186,19 +188,183 @@ namespace pCampBot
             }
         }
 
-        public void Network_OnConnected(object sender)
+        public void SaveDefaultAppearance()
         {
-            if (OnConnected != null)
+            saveDir = "MyAppearance/" + firstname + "_" + lastname;
+            if (!Directory.Exists(saveDir))
             {
-                OnConnected(this, EventType.CONNECTED);
+                Directory.CreateDirectory(saveDir);
+            }
+
+            Array wtypes = Enum.GetValues(typeof(WearableType));
+            foreach (WearableType wtype in wtypes)
+            {
+                UUID wearable = client.Appearance.GetWearableAsset(wtype);
+                if (wearable != UUID.Zero)
+                {
+                    client.Assets.RequestAsset(wearable, AssetType.Clothing, false, Asset_ReceivedCallback);
+                    client.Assets.RequestAsset(wearable, AssetType.Bodypart, false, Asset_ReceivedCallback);
+                }
             }
         }
 
-        public void Simulator_Connected(object sender)
+        public void SaveAsset(AssetWearable asset)
+        {
+            if (asset != null)
+            {
+                try
+                {
+                    if (asset.Decode())
+                    {
+                       File.WriteAllBytes(Path.Combine(saveDir, String.Format("{1}.{0}",
+                        asset.AssetType.ToString().ToLower(),
+                        asset.WearableType)), asset.AssetData);
+                    }
+                    else
+                    {
+                        MainConsole.Instance.Output(String.Format("Failed to decode {0} asset {1}", asset.AssetType, asset.AssetID));
+                    }
+                }
+                catch (Exception e)
+                {
+                    MainConsole.Instance.Output(String.Format("Exception: {0}",e.ToString()));
+                }
+            }
+        }
+
+        public WearableType GetWearableType(string path)
+        {
+            string type = ((((path.Split('/'))[2]).Split('.'))[0]).Trim();
+            switch (type)
+            {
+                case "Eyes":
+                    return WearableType.Eyes;
+                case "Hair":
+                    return WearableType.Hair;
+                case "Pants":
+                    return WearableType.Pants;
+                case "Shape":
+                    return WearableType.Shape;
+                case "Shirt":
+                    return WearableType.Shirt;
+                case "Skin":
+                    return WearableType.Skin;
+                default:
+                    return WearableType.Shape;
+            }
+        }
+
+        public void MakeDefaultAppearance(string wear)
+        {
+            try
+            {
+                if (wear == "yes")
+                {
+                    //TODO: Implement random outfit picking
+                    MainConsole.Instance.Output("Picks a random outfit. Not yet implemented.");
+                }
+                else if (wear != "save")
+                    saveDir = "MyAppearance/" + wear;
+                saveDir = saveDir + "/";
+
+                string[] clothing = Directory.GetFiles(saveDir, "*.clothing", SearchOption.TopDirectoryOnly);
+                string[] bodyparts = Directory.GetFiles(saveDir, "*.bodypart", SearchOption.TopDirectoryOnly);
+                InventoryFolder clothfolder = FindClothingFolder();
+                UUID transid = UUID.Random();
+                List<InventoryBase> listwearables = new List<InventoryBase>();
+                
+                for (int i = 0; i < clothing.Length; i++)
+                {
+                    UUID assetID = UUID.Random();
+                    AssetClothing asset = new AssetClothing(assetID, File.ReadAllBytes(clothing[i]));
+                    asset.Decode();
+                    asset.Owner = client.Self.AgentID;
+                    asset.WearableType = GetWearableType(clothing[i]);
+                    asset.Encode();
+                    transid = client.Assets.RequestUpload(asset,true);
+                    client.Inventory.RequestCreateItem(clothfolder.UUID, "MyClothing" + i.ToString(), "MyClothing", AssetType.Clothing,
+                         transid, InventoryType.Wearable, asset.WearableType, PermissionMask.All, delegate(bool success, InventoryItem item)
+                    {
+                        if (success)
+                        {
+                            listwearables.Add(item);
+                        }
+                        else
+                            MainConsole.Instance.Output(String.Format("Failed to create item {0}",item.Name));
+                    }
+                    );
+                }
+
+                for (int i = 0; i < bodyparts.Length; i++)
+                {
+                    UUID assetID = UUID.Random();
+                    AssetBodypart asset = new AssetBodypart(assetID, File.ReadAllBytes(bodyparts[i]));
+                    asset.Decode();
+                    asset.Owner = client.Self.AgentID;
+                    asset.WearableType = GetWearableType(bodyparts[i]);
+                    asset.Encode();
+                    transid = client.Assets.RequestUpload(asset,true);
+                    client.Inventory.RequestCreateItem(clothfolder.UUID, "MyBodyPart" + i.ToString(), "MyBodyPart", AssetType.Bodypart,
+                         transid, InventoryType.Wearable, asset.WearableType, PermissionMask.All, delegate(bool success, InventoryItem item)
+                    {
+                        if (success)
+                        {
+                            listwearables.Add(item);
+                        }
+                        else
+                            MainConsole.Instance.Output(String.Format("Failed to create item {0}",item.Name));
+                    }
+                    );
+                }
+
+                Thread.Sleep(1000);
+
+                if (listwearables == null || listwearables.Count == 0)
+                    MainConsole.Instance.Output("Nothing to send on this folder!");
+                else
+                {
+                    MainConsole.Instance.Output(String.Format("Sending {0} wearables...",listwearables.Count));
+                    client.Appearance.WearOutfit(listwearables, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        }
+
+        public InventoryFolder FindClothingFolder()
+        {
+            UUID rootfolder = client.Inventory.Store.RootFolder.UUID;
+            List<InventoryBase> listfolders = client.Inventory.Store.GetContents(rootfolder);
+            InventoryFolder clothfolder = new InventoryFolder(UUID.Random());
+            foreach (InventoryBase folder in listfolders)
+            {
+                if (folder.Name == "Clothing")
+                {
+                    clothfolder = (InventoryFolder)folder;
+                    break;
+                }
+            }
+            return clothfolder;
+        }
+
+        public void Network_LoginProgress(object sender, LoginProgressEventArgs args)
+        {
+            if (args.Status == LoginStatus.Success)
+            {
+                if (OnConnected != null)
+                {
+                    OnConnected(this, EventType.CONNECTED);
+                }
+            }
+        }
+
+        public void Network_SimConnected(object sender, SimConnectedEventArgs args)
         {
         }
 
-        public void Network_OnDisconnected(NetworkManager.DisconnectType reason, string message)
+        public void Network_OnDisconnected(object sender, DisconnectedEventArgs args)
         {
             if (OnDisconnected != null)
             {
@@ -206,23 +372,25 @@ namespace pCampBot
             }
         }
 
-        public void Objects_NewPrim(Simulator simulator, Primitive prim, ulong regionHandle, ushort timeDilation)
+        public void Objects_NewPrim(object sender, PrimEventArgs args)
         {
+            Primitive prim = args.Prim;
+
             if (prim != null)
             {
                 if (prim.Textures != null)
                 {
                     if (prim.Textures.DefaultTexture.TextureID != UUID.Zero)
                     {
-                        client.Assets.RequestImage(prim.Textures.DefaultTexture.TextureID, ImageType.Normal);
+                        client.Assets.RequestImage(prim.Textures.DefaultTexture.TextureID, ImageType.Normal, Asset_TextureCallback_Texture);
                     }
-                    for (int i = 0; i < prim.Textures.FaceTextures.Length; i++ )
+                    for (int i = 0; i < prim.Textures.FaceTextures.Length; i++)
                     {
                         if (prim.Textures.FaceTextures[i] != null)
                         {
                             if (prim.Textures.FaceTextures[i].TextureID != UUID.Zero)
                             {
-                                client.Assets.RequestImage(prim.Textures.FaceTextures[i].TextureID, ImageType.Normal);
+                                client.Assets.RequestImage(prim.Textures.FaceTextures[i].TextureID, ImageType.Normal, Asset_TextureCallback_Texture);
                             }
 
                         }
@@ -230,13 +398,23 @@ namespace pCampBot
                 }
                 if (prim.Sculpt.SculptTexture != UUID.Zero)
                 {
-                    client.Assets.RequestImage(prim.Sculpt.SculptTexture, ImageType.Normal);
+                    client.Assets.RequestImage(prim.Sculpt.SculptTexture, ImageType.Normal, Asset_TextureCallback_Texture);
                 }
             }
-
         }
-        public void Asset_TextureCallback(ImageDownload image, AssetTexture asset)
+
+        
+        public void Asset_TextureCallback_Texture(TextureRequestState state, AssetTexture assetTexture)
         {
+            //TODO: Implement texture saving and applying
+        }
+        
+        public void Asset_ReceivedCallback(AssetDownload transfer,Asset asset)
+        {
+            if (wear == "save")
+            {
+                SaveAsset((AssetWearable) asset);
+            }
         }
 
         public string[] readexcuses()

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -28,6 +28,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net;
 using System.Reflection;
 using System.Threading;
 using log4net;
@@ -109,7 +110,7 @@ namespace OpenSim.Region.CoreModules.Scripting.XMLRPC
 
                 try
                 {
-                    m_remoteDataPort = config.Configs["Network"].GetInt("remoteDataPort", m_remoteDataPort);
+                    m_remoteDataPort = config.Configs["XMLRPC"].GetInt("XmlRpcPort", m_remoteDataPort);
                 }
                 catch (Exception)
                 {
@@ -130,8 +131,8 @@ namespace OpenSim.Region.CoreModules.Scripting.XMLRPC
             {
                 // Start http server
                 // Attach xmlrpc handlers
-                m_log.Info("[REMOTE_DATA]: " +
-                           "Starting XMLRPC Server on port " + m_remoteDataPort + " for llRemoteData commands.");
+                m_log.Info("[XML RPC MODULE]: " +
+                           "Starting up XMLRPC Server on port " + m_remoteDataPort + " for llRemoteData commands.");
                 BaseHttpServer httpServer = new BaseHttpServer((uint) m_remoteDataPort);
                 httpServer.AddXmlRPCHandler("llRemoteData", XmlRpcRemoteData);
                 httpServer.Start();
@@ -191,7 +192,7 @@ namespace OpenSim.Region.CoreModules.Scripting.XMLRPC
             // This should no longer happen, but the check is reasonable anyway
             if (null == m_openChannels)
             {
-                m_log.Warn("[RemoteDataReply] Attempt to open channel before initialization is complete");
+                m_log.Warn("[XML RPC MODULE]: Attempt to open channel before initialization is complete");
                 return newChannel;
             }
 
@@ -278,7 +279,7 @@ namespace OpenSim.Region.CoreModules.Scripting.XMLRPC
             }
             else
             {
-                m_log.Warn("[RemoteDataReply]: Channel or message_id not found");
+                m_log.Warn("[XML RPC MODULE]: Channel or message_id not found");
             }
         }
 
@@ -339,7 +340,7 @@ namespace OpenSim.Region.CoreModules.Scripting.XMLRPC
                 }
                 else
                 {
-                    m_log.Error("UNABLE TO REMOVE COMPLETED REQUEST");
+                    m_log.Error("[XML RPC MODULE]: UNABLE TO REMOVE COMPLETED REQUEST");
                 }
             }
         }
@@ -404,7 +405,7 @@ namespace OpenSim.Region.CoreModules.Scripting.XMLRPC
 
         #endregion
 
-        public XmlRpcResponse XmlRpcRemoteData(XmlRpcRequest request)
+        public XmlRpcResponse XmlRpcRemoteData(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
 
@@ -638,7 +639,6 @@ namespace OpenSim.Region.CoreModules.Scripting.XMLRPC
             httpThread.IsBackground = true;
             _finished = false;
             httpThread.Start();
-            ThreadTracker.Add(httpThread);
         }
 
         /*
@@ -689,7 +689,7 @@ namespace OpenSim.Region.CoreModules.Scripting.XMLRPC
                         }
                         if (respParms.Contains("IntValue"))
                         {
-                            Idata = Convert.ToInt32((string) respParms["IntValue"]);
+                            Idata = Convert.ToInt32(respParms["IntValue"]);
                         }
                         if (respParms.Contains("faultString"))
                         {

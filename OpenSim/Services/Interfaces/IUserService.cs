@@ -25,9 +25,79 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+using System.Collections.Generic;
+using OpenMetaverse;
+
 namespace OpenSim.Services.Interfaces
 {
-    public interface IUserService
+    public class UserAccount
     {
+        public UserAccount()
+        {
+        }
+
+        public UserAccount(UUID userID, UUID homeRegionID, float homePositionX,
+                float homePositionY, float homePositionZ, float homeLookAtX,
+                float homeLookAtY, float homeLookAtZ)
+        {
+            UserID = userID;
+            HomeRegionID = homeRegionID;
+            HomePositionX = homePositionX;
+            HomePositionY = homePositionY;
+            HomePositionZ = homePositionZ;
+            HomeLookAtX = homeLookAtX;
+            HomeLookAtY = homeLookAtY;
+            HomeLookAtZ = homeLookAtZ;
+        }
+
+        public string FirstName;
+        public string LastName;
+        public UUID UserID;
+        public UUID ScopeID;
+
+        // For informational purposes only!
+        //
+        public string HomeRegionName;
+
+        public UUID HomeRegionID;
+        public float HomePositionX;
+        public float HomePositionY;
+        public float HomePositionZ;
+        public float HomeLookAtX;
+        public float HomeLookAtY;
+        public float HomeLookAtZ;
+
+        // These are here because they
+        // concern the account rather than
+        // the profile. They just happen to
+        // be used in the Linden profile as well
+        //
+        public int GodLevel;
+        public int UserFlags;
+        public string AccountType;
+
+    };
+
+    public interface IUserAccountService
+    {
+        UserAccount GetUserAccount(UUID scopeID, UUID userID);
+        UserAccount GetUserAccount(UUID scopeID, string FirstName, string LastName);
+        // Returns the list of avatars that matches both the search
+        // criterion and the scope ID passed
+        //
+        List<UserAccount> GetUserAccount(UUID scopeID, string query);
+
+
+        // This will set only the home region portion of the data!
+        // Can't be used to set god level, flags, type or change the name!
+        //
+        bool SetHomePosition(UserAccount data, UUID RegionID, UUID RegionSecret);
+
+        // Update all updatable fields
+        //
+        bool SetUserAccount(UserAccount data, UUID PrincipalID, string token);
+        
+        // Creates a user data record
+        bool CreateUserAccount(UserAccount data, UUID PrincipalID, string token);
     }
 }

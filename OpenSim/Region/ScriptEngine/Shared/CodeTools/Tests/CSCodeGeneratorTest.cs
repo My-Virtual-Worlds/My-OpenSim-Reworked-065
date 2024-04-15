@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -125,6 +125,32 @@ state another_state
                 "\n        public void default_event_touch_start(LSL_Types.LSLInteger num_detected)" +
                 "\n        {" +
                 "\n            LSL_Types.LSLInteger x = new LSL_Types.LSLInteger(0);" +
+                "\n        }\n";
+
+            CSCodeGenerator cg = new CSCodeGenerator();
+            string output = cg.Convert(input);
+            Assert.AreEqual(expected, output);
+        }
+
+        [Test]
+        public void TestLoneIdent()
+        {
+            // A lone ident should be removed completely as it's an error in C#
+            // (MONO at least).
+            string input = @"default
+{
+    touch_start(integer num_detected)
+    {
+        integer x;
+        x;
+    }
+}
+";
+            string expected =
+                "\n        public void default_event_touch_start(LSL_Types.LSLInteger num_detected)" +
+                "\n        {" +
+                "\n            LSL_Types.LSLInteger x = new LSL_Types.LSLInteger(0);" +
+                "\n            ;" +
                 "\n        }\n";
 
             CSCodeGenerator cg = new CSCodeGenerator();
@@ -1516,6 +1542,56 @@ default
         }
 
         [Test]
+        public void TestForLoopWithNoAssignment()
+        {
+            string input = @"default
+{
+    state_entry()
+    {
+        integer x = 4;
+        for (; 1<0; x += 2);
+    }
+}";
+
+            string expected =
+                "\n        public void default_event_state_entry()" +
+                "\n        {" +
+                "\n            LSL_Types.LSLInteger x = new LSL_Types.LSLInteger(4);" +
+                "\n            for (; new LSL_Types.LSLInteger(1) < new LSL_Types.LSLInteger(0); x += new LSL_Types.LSLInteger(2))" +
+                "\n                ;" +
+                "\n        }\n";
+
+            CSCodeGenerator cg = new CSCodeGenerator();
+            string output = cg.Convert(input);
+            Assert.AreEqual(expected, output);
+        }
+
+        [Test]
+        public void TestForLoopWithOnlyIdentInAssignment()
+        {
+            string input = @"default
+{
+    state_entry()
+    {
+        integer x = 4;
+        for (x; 1<0; x += 2);
+    }
+}";
+
+            string expected =
+                "\n        public void default_event_state_entry()" +
+                "\n        {" +
+                "\n            LSL_Types.LSLInteger x = new LSL_Types.LSLInteger(4);" +
+                "\n            for (; new LSL_Types.LSLInteger(1) < new LSL_Types.LSLInteger(0); x += new LSL_Types.LSLInteger(2))" +
+                "\n                ;" +
+                "\n        }\n";
+
+            CSCodeGenerator cg = new CSCodeGenerator();
+            string output = cg.Convert(input);
+            Assert.AreEqual(expected, output);
+        }
+
+        [Test]
         public void TestAssignmentInIfWhileDoWhile()
         {
             string input = @"default
@@ -1597,7 +1673,7 @@ default
             {
                 // The syntax error is on line 6, char 5 (expected ';', found
                 // '}').
-                Assert.AreEqual("Line (4,4) syntax error", e.Message);
+                Assert.AreEqual("(4,4) syntax error", e.Message);
                 throw;
             }
         }
@@ -1622,7 +1698,7 @@ default
             catch (System.Exception e)
             {
                 // The syntax error is on line 5, char 14 (Syntax error)
-                Assert.AreEqual("Line (3,13) syntax error", e.Message);
+                Assert.AreEqual("(3,13) syntax error", e.Message);
 
                 throw;
             }

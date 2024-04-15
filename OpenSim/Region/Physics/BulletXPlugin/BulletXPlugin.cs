@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -52,14 +52,14 @@ namespace OpenSim.Region.Physics.BulletXPlugin
         //private static readonly log4net.ILog m_log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
         //Vector3
-        public static Vector3 PhysicsVectorToXnaVector3(PhysicsVector physicsVector)
+        public static Vector3 PhysicsVectorToXnaVector3(OpenMetaverse.Vector3 physicsVector)
         {
             return new Vector3(physicsVector.X, physicsVector.Y, physicsVector.Z);
         }
 
-        public static PhysicsVector XnaVector3ToPhysicsVector(Vector3 xnaVector3)
+        public static OpenMetaverse.Vector3 XnaVector3ToPhysicsVector(Vector3 xnaVector3)
         {
-            return new PhysicsVector(xnaVector3.X, xnaVector3.Y, xnaVector3.Z);
+            return new OpenMetaverse.Vector3(xnaVector3.X, xnaVector3.Y, xnaVector3.Z);
         }
 
         //Quaternion
@@ -347,14 +347,16 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             {
                 indexBase = mesh.getIndexListAsInt();
                 vertexBase = new Vector3[iVertexCount];
+                
                 for (int i = 0; i < iVertexCount; i++)
                 {
-                    PhysicsVector v = mesh.getVertexList()[i];
+                    OpenMetaverse.Vector3 v = mesh.getVertexList()[i];
                     if (v != null) // Note, null has special meaning. See meshing code for details
                         vertexBase[i] = BulletXMaths.PhysicsVectorToXnaVector3(v);
                     else
                         vertexBase[i] = Vector3.Zero;
                 }
+                
                 for (int ix = 0; ix < iIndexCount; ix += 3)
                 {
                     int ia = indexBase[ix + 0];
@@ -392,7 +394,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
         private int preCheckCollision(BulletXActor actA, Vector3 vNormal, float fDist)
         {
             float fstartSide;
-            PhysicsVector v = actA.Position;
+            OpenMetaverse.Vector3 v = actA.Position;
             Vector3 v3 = BulletXMaths.PhysicsVectorToXnaVector3(v);
 
             fstartSide = Vector3.Dot(vNormal, v3) - fDist;
@@ -404,7 +406,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
         {
             Vector3 perPlaneNormal;
             float fPerPlaneDist;
-            PhysicsVector v = actA.Position;
+            OpenMetaverse.Vector3 v = actA.Position;
             Vector3 v3 = BulletXMaths.PhysicsVectorToXnaVector3(v);
             //check AB
             Vector3 v1;
@@ -498,6 +500,18 @@ namespace OpenSim.Region.Physics.BulletXPlugin
         public BulletXScene(String sceneIdentifier)
         {
             //identifier = sceneIdentifier;
+            cDispatcher = new CollisionDispatcherLocal(this);
+            Vector3 worldMinDim = new Vector3((float)minXY, (float)minXY, (float)minZ);
+            Vector3 worldMaxDim = new Vector3((float)maxXY, (float)maxXY, (float)maxZ);
+            opCache = new AxisSweep3(worldMinDim, worldMaxDim, maxHandles);
+            sicSolver = new SequentialImpulseConstraintSolver();
+
+            lock (BulletXLock)
+            {
+                ddWorld = new DiscreteDynamicsWorld(cDispatcher, opCache, sicSolver);
+                ddWorld.Gravity = new Vector3(0, 0, -gravity);
+            }
+            //this._heightmap = new float[65536];
         }
 
         public static float Gravity
@@ -573,19 +587,19 @@ namespace OpenSim.Region.Physics.BulletXPlugin
 
         }
 
-        public override PhysicsActor AddAvatar(string avName, PhysicsVector position, PhysicsVector size, bool isFlying)
+        public override PhysicsActor AddAvatar(string avName, OpenMetaverse.Vector3 position, OpenMetaverse.Vector3 size, bool isFlying)
         {
-            PhysicsVector pos = new PhysicsVector();
+            OpenMetaverse.Vector3 pos = OpenMetaverse.Vector3.Zero;
             pos.X = position.X;
             pos.Y = position.Y;
             pos.Z = position.Z + 20;
             BulletXCharacter newAv = null;
-            newAv.Flying = isFlying;
             lock (BulletXLock)
             {
                 newAv = new BulletXCharacter(avName, this, pos);
                 _characters.Add(newAv.RigidBody, newAv);
             }
+            newAv.Flying = isFlying;
             return newAv;
         }
 
@@ -611,14 +625,14 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             }
         }
 
-        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                  PhysicsVector size, OpenMetaverse.Quaternion rotation)
+        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, OpenMetaverse.Vector3 position,
+                                                  OpenMetaverse.Vector3 size, OpenMetaverse.Quaternion rotation)
         {
             return AddPrimShape(primName, pbs, position, size, rotation, false);
         }
 
-        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                  PhysicsVector size, OpenMetaverse.Quaternion rotation, bool isPhysical)
+        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, OpenMetaverse.Vector3 position,
+                                                  OpenMetaverse.Vector3 size, OpenMetaverse.Quaternion rotation, bool isPhysical)
         {
             PhysicsActor result;
 
@@ -645,7 +659,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             return result;
         }
 
-        public PhysicsActor AddPrim(String name, PhysicsVector position, PhysicsVector size, OpenMetaverse.Quaternion rotation,
+        public PhysicsActor AddPrim(String name, OpenMetaverse.Vector3 position, OpenMetaverse.Vector3 size, OpenMetaverse.Quaternion rotation,
                                     IMesh mesh, PrimitiveBaseShape pbs, bool isPhysical)
         {
             BulletXPrim newPrim = null;
@@ -817,8 +831,13 @@ namespace OpenSim.Region.Physics.BulletXPlugin
                 GC.Collect();
                 BulletXMessage("Terrain erased!", false);
             }
+
+            
+
             //this._heightmap = null;
         }
+
+        
 
         internal void AddForgottenRigidBody(RigidBody forgottenRigidBody)
         {
@@ -874,12 +893,12 @@ namespace OpenSim.Region.Physics.BulletXPlugin
     {
         protected bool flying = false;
         protected bool _physical = false;
-        protected PhysicsVector _position;
-        protected PhysicsVector _velocity;
-        protected PhysicsVector _size;
-        protected PhysicsVector _acceleration;
+        protected OpenMetaverse.Vector3 _position;
+        protected OpenMetaverse.Vector3 _velocity;
+        protected OpenMetaverse.Vector3 _size;
+        protected OpenMetaverse.Vector3 _acceleration;
         protected OpenMetaverse.Quaternion _orientation;
-        protected PhysicsVector m_rotationalVelocity = PhysicsVector.Zero;
+        protected OpenMetaverse.Vector3 m_rotationalVelocity;
         protected RigidBody rigidBody;
         protected int m_PhysicsActorType;
         private Boolean iscolliding = false;
@@ -895,7 +914,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             get { return false; }
         }
 
-        public override PhysicsVector Position
+        public override OpenMetaverse.Vector3 Position
         {
             get { return _position; }
             set
@@ -908,13 +927,13 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             }
         }
 
-        public override PhysicsVector RotationalVelocity
+        public override OpenMetaverse.Vector3 RotationalVelocity
         {
             get { return m_rotationalVelocity; }
             set { m_rotationalVelocity = value; }
         }
 
-        public override PhysicsVector Velocity
+        public override OpenMetaverse.Vector3 Velocity
         {
             get { return _velocity; }
             set
@@ -929,7 +948,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
                     }
                     else
                     {
-                        _velocity = new PhysicsVector();
+                        _velocity = OpenMetaverse.Vector3.Zero;
                     }
                 }
             }
@@ -939,7 +958,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             get { return 0f; }
             set { }
         }
-        public override PhysicsVector Size
+        public override OpenMetaverse.Vector3 Size
         {
             get { return _size; }
             set
@@ -951,9 +970,9 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             }
         }
 
-        public override PhysicsVector Force
+        public override OpenMetaverse.Vector3 Force
         {
-            get { return PhysicsVector.Zero; }
+            get { return OpenMetaverse.Vector3.Zero; }
             set { return; }
         }
 
@@ -968,12 +987,17 @@ namespace OpenSim.Region.Physics.BulletXPlugin
 
         }
 
-        public override void VehicleVectorParam(int param, PhysicsVector value)
+        public override void VehicleVectorParam(int param, OpenMetaverse.Vector3 value)
         {
 
         }
         
         public override void VehicleRotationParam(int param, OpenMetaverse.Quaternion rotation)
+        {
+
+        }
+        
+        public override void VehicleFlags(int param, bool remove)
         {
 
         }
@@ -983,14 +1007,14 @@ namespace OpenSim.Region.Physics.BulletXPlugin
 
         }
 
-        public override PhysicsVector CenterOfMass
+        public override OpenMetaverse.Vector3 CenterOfMass
         {
-            get { return PhysicsVector.Zero; }
+            get { return OpenMetaverse.Vector3.Zero; }
         }
 
-        public override PhysicsVector GeometricCenter
+        public override OpenMetaverse.Vector3 GeometricCenter
         {
-            get { return PhysicsVector.Zero; }
+            get { return OpenMetaverse.Vector3.Zero; }
         }
 
         public override PrimitiveBaseShape Shape
@@ -1004,7 +1028,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             set { return; }
         }
 
-        public override PhysicsVector Acceleration
+        public override OpenMetaverse.Vector3 Acceleration
         {
             get { return _acceleration; }
         }
@@ -1031,7 +1055,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
 
         }
 
-        public override void LockAngularMotion(PhysicsVector axis)
+        public override void LockAngularMotion(OpenMetaverse.Vector3 axis)
         {
 
         }
@@ -1124,7 +1148,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             set { return; }
         }
 
-        public virtual void SetAcceleration(PhysicsVector accel)
+        public virtual void SetAcceleration(OpenMetaverse.Vector3 accel)
         {
             lock (BulletXScene.BulletXLock)
             {
@@ -1138,19 +1162,19 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             set { }
         }
 
-        public override void AddForce(PhysicsVector force, bool pushforce)
+        public override void AddForce(OpenMetaverse.Vector3 force, bool pushforce)
         {
         }
-        public override PhysicsVector Torque
+        public override OpenMetaverse.Vector3 Torque
         {
-            get { return PhysicsVector.Zero; }
+            get { return OpenMetaverse.Vector3.Zero; }
             set { return; }
         }
-        public override void AddAngularForce(PhysicsVector force, bool pushforce)
+        public override void AddAngularForce(OpenMetaverse.Vector3 force, bool pushforce)
         {
         }
 
-        public override void SetMomentum(PhysicsVector momentum)
+        public override void SetMomentum(OpenMetaverse.Vector3 momentum)
         {
         }
 
@@ -1169,7 +1193,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             Translate(_position);
         }
 
-        protected internal void Translate(PhysicsVector _newPos)
+        protected internal void Translate(OpenMetaverse.Vector3 _newPos)
         {
             Vector3 _translation;
             _translation = BulletXMaths.PhysicsVectorToXnaVector3(_newPos) - rigidBody.CenterOfMassPosition;
@@ -1181,7 +1205,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             Speed(_velocity);
         }
 
-        protected internal void Speed(PhysicsVector _newSpeed)
+        protected internal void Speed(OpenMetaverse.Vector3 _newSpeed)
         {
             Vector3 _speed;
             _speed = BulletXMaths.PhysicsVectorToXnaVector3(_newSpeed);
@@ -1207,7 +1231,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             ReSize(_size);
         }
 
-        protected internal virtual void ReSize(PhysicsVector _newSize)
+        protected internal virtual void ReSize(OpenMetaverse.Vector3 _newSize)
         {
         }
 
@@ -1222,7 +1246,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
         {
 
         }
-        public override PhysicsVector PIDTarget { set { return; } }
+        public override OpenMetaverse.Vector3 PIDTarget { set { return; } }
         public override bool PIDActive { set { return; } }
         public override float PIDTau { set { return; } }
 
@@ -1230,6 +1254,26 @@ namespace OpenSim.Region.Physics.BulletXPlugin
         public override bool PIDHoverActive { set { return; } }
         public override PIDHoverType PIDHoverType { set { return; } }
         public override float PIDHoverTau { set { return; } }
+
+        public override OpenMetaverse.Quaternion APIDTarget
+        {
+            set { return; }
+        }
+
+        public override bool APIDActive
+        {
+            set { return; }
+        }
+
+        public override float APIDStrength
+        {
+            set { return; }
+        }
+
+        public override float APIDDamping
+        {
+            set { return; }
+        }
 
 
         public override void SubscribeEvents(int ms)
@@ -1251,19 +1295,19 @@ namespace OpenSim.Region.Physics.BulletXPlugin
     /// </summary>
     public class BulletXCharacter : BulletXActor
     {
-        public BulletXCharacter(BulletXScene parent_scene, PhysicsVector pos)
+        public BulletXCharacter(BulletXScene parent_scene, OpenMetaverse.Vector3 pos)
             : this(String.Empty, parent_scene, pos)
         {
         }
 
-        public BulletXCharacter(String avName, BulletXScene parent_scene, PhysicsVector pos)
-            : this(avName, parent_scene, pos, new PhysicsVector(), new PhysicsVector(), new PhysicsVector(),
+        public BulletXCharacter(String avName, BulletXScene parent_scene, OpenMetaverse.Vector3 pos)
+            : this(avName, parent_scene, pos, OpenMetaverse.Vector3.Zero, OpenMetaverse.Vector3.Zero, OpenMetaverse.Vector3.Zero,
                    OpenMetaverse.Quaternion.Identity)
         {
         }
 
-        public BulletXCharacter(String avName, BulletXScene parent_scene, PhysicsVector pos, PhysicsVector velocity,
-                                PhysicsVector size, PhysicsVector acceleration, OpenMetaverse.Quaternion orientation)
+        public BulletXCharacter(String avName, BulletXScene parent_scene, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 velocity,
+                                OpenMetaverse.Vector3 size, OpenMetaverse.Vector3 acceleration, OpenMetaverse.Quaternion orientation)
             : base(avName)
         {
             //This fields will be removed. They're temporal
@@ -1318,25 +1362,25 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             set { return; }
         }
 
-        public override PhysicsVector Position
+        public override OpenMetaverse.Vector3 Position
         {
             get { return base.Position; }
             set { base.Position = value; }
         }
 
-        public override PhysicsVector Velocity
+        public override OpenMetaverse.Vector3 Velocity
         {
             get { return base.Velocity; }
             set { base.Velocity = value; }
         }
 
-        public override PhysicsVector Size
+        public override OpenMetaverse.Vector3 Size
         {
             get { return base.Size; }
             set { base.Size = value; }
         }
 
-        public override PhysicsVector Acceleration
+        public override OpenMetaverse.Vector3 Acceleration
         {
             get { return base.Acceleration; }
         }
@@ -1365,17 +1409,17 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             set { base.Kinematic = value; }
         }
 
-        public override void SetAcceleration(PhysicsVector accel)
+        public override void SetAcceleration(OpenMetaverse.Vector3 accel)
         {
             base.SetAcceleration(accel);
         }
 
-        public override void AddForce(PhysicsVector force, bool pushforce)
+        public override void AddForce(OpenMetaverse.Vector3 force, bool pushforce)
         {
             base.AddForce(force, pushforce);
         }
 
-        public override void SetMomentum(PhysicsVector momentum)
+        public override void SetMomentum(OpenMetaverse.Vector3 momentum)
         {
             base.SetMomentum(momentum);
         }
@@ -1425,7 +1469,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
                 m.Translation = v3;
                 rigidBody.WorldTransform = m;
                 //When an Avie touch the ground it's vertical velocity it's reduced to ZERO
-                Speed(new PhysicsVector(rigidBody.LinearVelocity.X, rigidBody.LinearVelocity.Y, 0.0f));
+                Speed(new OpenMetaverse.Vector3(rigidBody.LinearVelocity.X, rigidBody.LinearVelocity.Y, 0.0f));
             }
         }
 
@@ -1447,7 +1491,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
         //For now all prims have the same density, all prims are made of water. Be water my friend! :D
         private const float _density = 1000.0f;
         private BulletXScene _parent_scene;
-        private PhysicsVector m_prev_position = new PhysicsVector(0, 0, 0);
+        private OpenMetaverse.Vector3 m_prev_position;
         private bool m_lastUpdateSent = false;
         //added by jed zhu
         private IMesh _mesh;
@@ -1455,17 +1499,17 @@ namespace OpenSim.Region.Physics.BulletXPlugin
 
 
 
-        public BulletXPrim(String primName, BulletXScene parent_scene, PhysicsVector pos, PhysicsVector size,
+        public BulletXPrim(String primName, BulletXScene parent_scene, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 size,
                            OpenMetaverse.Quaternion rotation, IMesh mesh, PrimitiveBaseShape pbs, bool isPhysical)
             : this(
-                primName, parent_scene, pos, new PhysicsVector(), size, new PhysicsVector(), rotation, mesh, pbs,
+                primName, parent_scene, pos, OpenMetaverse.Vector3.Zero, size, OpenMetaverse.Vector3.Zero, rotation, mesh, pbs,
                 isPhysical)
         {
         }
 
-        public BulletXPrim(String primName, BulletXScene parent_scene, PhysicsVector pos, PhysicsVector velocity,
-                           PhysicsVector size,
-                           PhysicsVector acceleration, OpenMetaverse.Quaternion rotation, IMesh mesh, PrimitiveBaseShape pbs,
+        public BulletXPrim(String primName, BulletXScene parent_scene, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 velocity,
+                           OpenMetaverse.Vector3 size,
+                           OpenMetaverse.Vector3 acceleration, OpenMetaverse.Quaternion rotation, IMesh mesh, PrimitiveBaseShape pbs,
                            bool isPhysical)
             : base(primName)
         {
@@ -1476,7 +1520,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
 
             _position = pos;
             _physical = isPhysical;
-            _velocity = _physical ? velocity : new PhysicsVector();
+            _velocity = _physical ? velocity : OpenMetaverse.Vector3.Zero;
             _size = size;
             _acceleration = acceleration;
             _orientation = rotation;
@@ -1492,19 +1536,19 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             set { return; }
         }
 
-        public override PhysicsVector Position
+        public override OpenMetaverse.Vector3 Position
         {
             get { return base.Position; }
             set { base.Position = value; }
         }
 
-        public override PhysicsVector Velocity
+        public override OpenMetaverse.Vector3 Velocity
         {
             get { return base.Velocity; }
             set { base.Velocity = value; }
         }
 
-        public override PhysicsVector Size
+        public override OpenMetaverse.Vector3 Size
         {
             get { return _size; }
             set
@@ -1517,7 +1561,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             }
         }
 
-        public override PhysicsVector Acceleration
+        public override OpenMetaverse.Vector3 Acceleration
         {
             get { return base.Acceleration; }
         }
@@ -1578,7 +1622,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             set { base.Kinematic = value; }
         }
 
-        public override void SetAcceleration(PhysicsVector accel)
+        public override void SetAcceleration(OpenMetaverse.Vector3 accel)
         {
             lock (BulletXScene.BulletXLock)
             {
@@ -1586,12 +1630,12 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             }
         }
 
-        public override void AddForce(PhysicsVector force, bool pushforce)
+        public override void AddForce(OpenMetaverse.Vector3 force, bool pushforce)
         {
             base.AddForce(force,pushforce);
         }
 
-        public override void SetMomentum(PhysicsVector momentum)
+        public override void SetMomentum(OpenMetaverse.Vector3 momentum)
         {
             base.SetMomentum(momentum);
         }
@@ -1608,7 +1652,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
                 //When a Prim touch the ground it's vertical velocity it's reduced to ZERO
                 //Static objects don't have linear velocity
                 if (_physical)
-                    Speed(new PhysicsVector(rigidBody.LinearVelocity.X, rigidBody.LinearVelocity.Y, 0.0f));
+                    Speed(new OpenMetaverse.Vector3(rigidBody.LinearVelocity.X, rigidBody.LinearVelocity.Y, 0.0f));
             }
         }
 
@@ -1627,7 +1671,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
                 {
                     if (!m_lastUpdateSent)
                     {
-                        _velocity = new PhysicsVector(0, 0, 0);
+                        _velocity = OpenMetaverse.Vector3.Zero;
                         base.ScheduleTerseUpdate();
                         m_lastUpdateSent = true;
                     }
@@ -1649,8 +1693,8 @@ namespace OpenSim.Region.Physics.BulletXPlugin
 
         #region Methods for updating values of RigidBody
 
-        protected internal void CreateRigidBody(BulletXScene parent_scene, IMesh mesh, PhysicsVector pos,
-                                                PhysicsVector size)
+        protected internal void CreateRigidBody(BulletXScene parent_scene, IMesh mesh, OpenMetaverse.Vector3 pos,
+                                                OpenMetaverse.Vector3 size)
         {
             //For RigidBody Constructor. The next values might change
             float _linearDamping = 0.0f;
@@ -1678,7 +1722,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
                     Vector3[] v3Vertices = new Vector3[iVertexCount];
                     for (int i = 0; i < iVertexCount; i++)
                     {
-                        PhysicsVector v = mesh.getVertexList()[i];
+                        OpenMetaverse.Vector3 v = mesh.getVertexList()[i];
                         if (v != null) // Note, null has special meaning. See meshing code for details
                             v3Vertices[i] = BulletXMaths.PhysicsVectorToXnaVector3(v);
                         else
@@ -1704,7 +1748,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             }
         }
 
-        protected internal void ReCreateRigidBody(PhysicsVector size)
+        protected internal void ReCreateRigidBody(OpenMetaverse.Vector3 size)
         {
             //There is a bug when trying to remove a rigidBody that is colliding with something..
             try
@@ -1724,7 +1768,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
             GC.Collect();
         }
 
-        protected internal override void ReSize(PhysicsVector _newSize)
+        protected internal override void ReSize(OpenMetaverse.Vector3 _newSize)
         {
             //I wonder to know how to resize with a simple instruction in BulletX. It seems that for now there isn't
             //so i have to do it manually. That's recreating rigidbody
@@ -1739,8 +1783,8 @@ namespace OpenSim.Region.Physics.BulletXPlugin
     /// </summary>
     internal class BulletXPlanet
     {
-        private PhysicsVector _staticPosition;
-//         private PhysicsVector _staticVelocity;
+        private OpenMetaverse.Vector3 _staticPosition;
+//         private Vector3 _staticVelocity;
 //         private OpenMetaverse.Quaternion _staticOrientation;
         private float _mass;
         // private BulletXScene _parentscene;
@@ -1754,7 +1798,7 @@ namespace OpenSim.Region.Physics.BulletXPlugin
 
         internal BulletXPlanet(BulletXScene parent_scene, float[] heightField)
         {
-            _staticPosition = new PhysicsVector(BulletXScene.MaxXY/2, BulletXScene.MaxXY/2, 0);
+            _staticPosition = new OpenMetaverse.Vector3(BulletXScene.MaxXY / 2, BulletXScene.MaxXY / 2, 0);
 //             _staticVelocity = new PhysicsVector();
 //             _staticOrientation = OpenMetaverse.Quaternion.Identity;
             _mass = 0; //No active

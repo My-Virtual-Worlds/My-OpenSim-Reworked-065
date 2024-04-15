@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -37,7 +37,7 @@ namespace OpenSim.Region.Framework.Interfaces
     {
         #region Agents
 
-        bool SendCreateChildAgent(ulong regionHandle, AgentCircuitData aCircuit, out string reason);
+        bool SendCreateChildAgent(ulong regionHandle, AgentCircuitData aCircuit, uint teleportFlags, out string reason);
 
         /// <summary>
         /// Full child agent update.
@@ -100,11 +100,6 @@ namespace OpenSim.Region.Framework.Interfaces
 
         #endregion Objects
 
-        #region Regions
-
-        bool SendHelloNeighbour(ulong regionHandle, RegionInfo thisRegion);
-
-        #endregion Regions
     }
 
     // This may not be needed, but having it here for now.

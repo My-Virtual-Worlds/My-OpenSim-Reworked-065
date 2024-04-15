@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -32,7 +32,7 @@ using System.Drawing;
 using System.IO;
 using System.Reflection;
 using log4net;
-using Mono.Data.SqliteClient;
+using Mono.Data.Sqlite;
 using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
@@ -87,119 +87,151 @@ namespace OpenSim.Data.SQLite
         /// <param name="connectionString">the connection string</param>
         public void Initialise(string connectionString)
         {
-            m_connectionString = connectionString;
-
-            ds = new DataSet();
-
-            m_log.Info("[REGION DB]: Sqlite - connecting: " + connectionString);
-            m_conn = new SqliteConnection(m_connectionString);
-            m_conn.Open();
-
-
-
-            SqliteCommand primSelectCmd = new SqliteCommand(primSelect, m_conn);
-            primDa = new SqliteDataAdapter(primSelectCmd);
-            //            SqliteCommandBuilder primCb = new SqliteCommandBuilder(primDa);
-
-            SqliteCommand shapeSelectCmd = new SqliteCommand(shapeSelect, m_conn);
-            shapeDa = new SqliteDataAdapter(shapeSelectCmd);
-            // SqliteCommandBuilder shapeCb = new SqliteCommandBuilder(shapeDa);
-
-            SqliteCommand itemsSelectCmd = new SqliteCommand(itemsSelect, m_conn);
-            itemsDa = new SqliteDataAdapter(itemsSelectCmd);
-
-            SqliteCommand terrainSelectCmd = new SqliteCommand(terrainSelect, m_conn);
-            terrainDa = new SqliteDataAdapter(terrainSelectCmd);
-
-            SqliteCommand landSelectCmd = new SqliteCommand(landSelect, m_conn);
-            landDa = new SqliteDataAdapter(landSelectCmd);
-
-            SqliteCommand landAccessListSelectCmd = new SqliteCommand(landAccessListSelect, m_conn);
-            landAccessListDa = new SqliteDataAdapter(landAccessListSelectCmd);
-
-            SqliteCommand regionSettingsSelectCmd = new SqliteCommand(regionSettingsSelect, m_conn);
-            regionSettingsDa = new SqliteDataAdapter(regionSettingsSelectCmd);
-            // This actually does the roll forward assembly stuff
-            Assembly assem = GetType().Assembly;
-            Migration m = new Migration(m_conn, assem, "RegionStore");
-            m.Update();
-
-            lock (ds)
+            try
             {
-                ds.Tables.Add(createPrimTable());
-                setupPrimCommands(primDa, m_conn);
-                primDa.Fill(ds.Tables["prims"]);
+                m_connectionString = connectionString;
 
-                ds.Tables.Add(createShapeTable());
-                setupShapeCommands(shapeDa, m_conn);
+                ds = new DataSet("Region");
 
-                ds.Tables.Add(createItemsTable());
-                setupItemsCommands(itemsDa, m_conn);
-                itemsDa.Fill(ds.Tables["primitems"]);
+                m_log.Info("[SQLITE REGION DB]: Sqlite - connecting: " + connectionString);
+                m_conn = new SqliteConnection(m_connectionString);
+                m_conn.Open();
 
-                ds.Tables.Add(createTerrainTable());
-                setupTerrainCommands(terrainDa, m_conn);
+                SqliteCommand primSelectCmd = new SqliteCommand(primSelect, m_conn);
+                primDa = new SqliteDataAdapter(primSelectCmd);
 
-                ds.Tables.Add(createLandTable());
-                setupLandCommands(landDa, m_conn);
+                SqliteCommand shapeSelectCmd = new SqliteCommand(shapeSelect, m_conn);
+                shapeDa = new SqliteDataAdapter(shapeSelectCmd);
+                // SqliteCommandBuilder shapeCb = new SqliteCommandBuilder(shapeDa);
 
-                ds.Tables.Add(createLandAccessListTable());
-                setupLandAccessCommands(landAccessListDa, m_conn);
+                SqliteCommand itemsSelectCmd = new SqliteCommand(itemsSelect, m_conn);
+                itemsDa = new SqliteDataAdapter(itemsSelectCmd);
 
-                ds.Tables.Add(createRegionSettingsTable());
-                
-                setupRegionSettingsCommands(regionSettingsDa, m_conn);
+                SqliteCommand terrainSelectCmd = new SqliteCommand(terrainSelect, m_conn);
+                terrainDa = new SqliteDataAdapter(terrainSelectCmd);
 
-                // WORKAROUND: This is a work around for sqlite on
-                // windows, which gets really unhappy with blob columns
-                // that have no sample data in them.  At some point we
-                // need to actually find a proper way to handle this.
-                try
+                SqliteCommand landSelectCmd = new SqliteCommand(landSelect, m_conn);
+                landDa = new SqliteDataAdapter(landSelectCmd);
+
+                SqliteCommand landAccessListSelectCmd = new SqliteCommand(landAccessListSelect, m_conn);
+                landAccessListDa = new SqliteDataAdapter(landAccessListSelectCmd);
+
+                SqliteCommand regionSettingsSelectCmd = new SqliteCommand(regionSettingsSelect, m_conn);
+                regionSettingsDa = new SqliteDataAdapter(regionSettingsSelectCmd);
+                // This actually does the roll forward assembly stuff
+                Assembly assem = GetType().Assembly;
+                Migration m = new Migration(m_conn, assem, "RegionStore");
+                m.Update();
+
+                lock (ds)
                 {
-                    shapeDa.Fill(ds.Tables["primshapes"]);
-                }
-                catch (Exception)
-                {
-                    m_log.Info("[REGION DB]: Caught fill error on primshapes table");
-                }
+                    ds.Tables.Add(createPrimTable());
+                    setupPrimCommands(primDa, m_conn);
 
-                try
-                {
-                    terrainDa.Fill(ds.Tables["terrain"]);
-                }
-                catch (Exception)
-                {
-                    m_log.Info("[REGION DB]: Caught fill error on terrain table");
-                }
+                    ds.Tables.Add(createShapeTable());
+                    setupShapeCommands(shapeDa, m_conn);
 
-                try
-                {
-                    landDa.Fill(ds.Tables["land"]);
-                }
-                catch (Exception)
-                {
-                    m_log.Info("[REGION DB]: Caught fill error on land table");
-                }
+                    ds.Tables.Add(createItemsTable());
+                    setupItemsCommands(itemsDa, m_conn);
 
-                try
-                {
-                    landAccessListDa.Fill(ds.Tables["landaccesslist"]);
-                }
-                catch (Exception)
-                {
-                    m_log.Info("[REGION DB]: Caught fill error on landaccesslist table");
-                }
+                    ds.Tables.Add(createTerrainTable());
+                    setupTerrainCommands(terrainDa, m_conn);
 
-                try
-                {
-                    regionSettingsDa.Fill(ds.Tables["regionsettings"]);
+                    ds.Tables.Add(createLandTable());
+                    setupLandCommands(landDa, m_conn);
+
+                    ds.Tables.Add(createLandAccessListTable());
+                    setupLandAccessCommands(landAccessListDa, m_conn);
+
+                    ds.Tables.Add(createRegionSettingsTable());
+                    setupRegionSettingsCommands(regionSettingsDa, m_conn);
+
+                    // WORKAROUND: This is a work around for sqlite on
+                    // windows, which gets really unhappy with blob columns
+                    // that have no sample data in them.  At some point we
+                    // need to actually find a proper way to handle this.
+                    try
+                    {
+                        primDa.Fill(ds.Tables["prims"]);
+                    }
+                    catch (Exception)
+                    {
+                        m_log.Info("[SQLITE REGION DB]: Caught fill error on prims table");
+                    }
+
+                    try
+                    {
+                        shapeDa.Fill(ds.Tables["primshapes"]);
+                    }
+                    catch (Exception)
+                    {
+                        m_log.Info("[SQLITE REGION DB]: Caught fill error on primshapes table");
+                    }
+
+                    try
+                    {
+                        itemsDa.Fill(ds.Tables["primitems"]);
+                    }
+                    catch (Exception)
+                    {
+                        m_log.Info("[SQLITE REGION DB]: Caught fill error on primitems table");
+                    }
+					
+                    try
+                    {
+                        terrainDa.Fill(ds.Tables["terrain"]);
+                    }
+                    catch (Exception)
+                    {
+                        m_log.Info("[SQLITE REGION DB]: Caught fill error on terrain table");
+                    }
+
+                    try
+                    {
+                        landDa.Fill(ds.Tables["land"]);
+                    }
+                    catch (Exception)
+                    {
+                        m_log.Info("[SQLITE REGION DB]: Caught fill error on land table");
+                    }
+
+                    try
+                    {
+                        landAccessListDa.Fill(ds.Tables["landaccesslist"]);
+                    }
+                    catch (Exception)
+                    {
+                        m_log.Info("[SQLITE REGION DB]: Caught fill error on landaccesslist table");
+                    }
+
+                    try
+                    {
+                        regionSettingsDa.Fill(ds.Tables["regionsettings"]);
+                    }
+                    catch (Exception)
+                    {
+                        m_log.Info("[SQLITE REGION DB]: Caught fill error on regionsettings table");
+                    }
+
+                    // We have to create a data set mapping for every table, otherwise the IDataAdaptor.Update() will not populate rows with values!
+                    // Not sure exactly why this is - this kind of thing was not necessary before - justincc 20100409
+                    // Possibly because we manually set up our own DataTables before connecting to the database
+                    CreateDataSetMapping(primDa, "prims");
+                    CreateDataSetMapping(shapeDa, "primshapes");
+                    CreateDataSetMapping(itemsDa, "primitems");
+                    CreateDataSetMapping(terrainDa, "terrain");
+                    CreateDataSetMapping(landDa, "land");
+                    CreateDataSetMapping(landAccessListDa, "landaccesslist");
+                    CreateDataSetMapping(regionSettingsDa, "regionsettings");
                 }
-                catch (Exception)
-                {
-                    m_log.Info("[REGION DB]: Caught fill error on regionsettings table");
-                }
-                return;
             }
+            catch (Exception e)
+            {
+              m_log.Error(e);
+              Environment.Exit(23);
+            }
+
+            return;
         }
 
         public void Dispose()
@@ -307,26 +339,21 @@ namespace OpenSim.Data.SQLite
         /// <param name="regionUUID">the region UUID</param>
         public void StoreObject(SceneObjectGroup obj, UUID regionUUID)
         {
+            uint flags = obj.RootPart.GetEffectiveObjectFlags();
+
+            // Eligibility check
+            //
+            if ((flags & (uint)PrimFlags.Temporary) != 0)
+                return;
+            if ((flags & (uint)PrimFlags.TemporaryOnRez) != 0)
+                return;
+
             lock (ds)
             {
                 foreach (SceneObjectPart prim in obj.Children.Values)
                 {
-                    if ((prim.GetEffectiveObjectFlags() & (uint)PrimFlags.Temporary) == 0
-                        && (prim.GetEffectiveObjectFlags() & (uint)PrimFlags.TemporaryOnRez) == 0)
-                    {
-                        m_log.Info("[REGION DB]: Adding obj: " + obj.UUID + " to region: " + regionUUID);
-                        addPrim(prim, obj.UUID, regionUUID);
-                    }
-                    else if (prim.Stopped)
-                    {
-                        //m_log.Info("[DATASTORE]: " +
-                                                 //"Adding stopped obj: " + obj.UUID + " to region: " + regionUUID);
-                        //addPrim(prim, obj.UUID.ToString(), regionUUID.ToString());
-                    }
-                    else
-                    {
-                        // m_log.Info("[DATASTORE]: Ignoring Physical obj: " + obj.UUID + " in region: " + regionUUID);
-                    }
+                    m_log.Info("[REGION DB]: Adding obj: " + obj.UUID + " to region: " + regionUUID);
+                    addPrim(prim, obj.UUID, regionUUID);
                 }
             }
 
@@ -341,7 +368,7 @@ namespace OpenSim.Data.SQLite
         /// <param name="regionUUID">the region UUID</param>
         public void RemoveObject(UUID obj, UUID regionUUID)
         {
-            m_log.InfoFormat("[REGION DB]: Removing obj: {0} from region: {1}", obj.Guid, regionUUID);
+            // m_log.InfoFormat("[REGION DB]: Removing obj: {0} from region: {1}", obj.Guid, regionUUID);
 
             DataTable prims = ds.Tables["prims"];
             DataTable shapes = ds.Tables["primshapes"];
@@ -407,7 +434,7 @@ namespace OpenSim.Data.SQLite
             lock (ds)
             {
                 DataRow[] primsForRegion = prims.Select(byRegion);
-                m_log.Info("[REGION DB]: Loaded " + primsForRegion.Length + " prims for region: " + regionUUID);
+//                m_log.Info("[SQLITE REGION DB]: Loaded " + primsForRegion.Length + " prims for region: " + regionUUID);
                 
                 // First, create all groups 
                 foreach (DataRow primRow in primsForRegion)
@@ -421,7 +448,6 @@ namespace OpenSim.Data.SQLite
                         
                         if (uuid == objID) //is new SceneObjectGroup ?
                         {
-                            SceneObjectGroup group = new SceneObjectGroup();
                             prim = buildPrim(primRow);
                             DataRow shapeRow = shapes.Rows.Find(prim.UUID.ToString());
                             if (shapeRow != null)
@@ -430,12 +456,12 @@ namespace OpenSim.Data.SQLite
                             }
                             else
                             {
-                                m_log.Info(
-                                    "[REGION DB]: No shape found for prim in storage, so setting default box shape");
+                                m_log.Warn(
+                                    "[SQLITE REGION DB]: No shape found for prim in storage, so setting default box shape");
                                 prim.Shape = PrimitiveBaseShape.Default;
                             }
                             
-                            group.SetRootPart(prim);
+                            SceneObjectGroup group = new SceneObjectGroup(prim);
                             createdObjects.Add(group.UUID, group);
                             retvals.Add(group);
                             LoadItems(prim);
@@ -443,11 +469,11 @@ namespace OpenSim.Data.SQLite
                     }
                     catch (Exception e)
                     {
-                        m_log.Error("[REGION DB]: Failed create prim object in new group, exception and data follows");
-                        m_log.Info("[REGION DB]: " + e.ToString());
+                        m_log.Error("[SQLITE REGION DB]: Failed create prim object in new group, exception and data follows");
+                        m_log.Error("[SQLITE REGION DB]: ", e);
                         foreach (DataColumn col in prims.Columns)
                         {
-                            m_log.Info("[REGION DB]: Col: " + col.ColumnName + " => " + primRow[col]);
+                            m_log.Error("[SQLITE REGION DB]: Col: " + col.ColumnName + " => " + primRow[col]);
                         }
                     }
                 }
@@ -472,7 +498,7 @@ namespace OpenSim.Data.SQLite
                             else
                             {
                                 m_log.Warn(
-                                    "[REGION DB]: No shape found for prim in storage, so setting default box shape");
+                                    "[SQLITE REGION DB]: No shape found for prim in storage, so setting default box shape");
                                 prim.Shape = PrimitiveBaseShape.Default;
                             }
                             
@@ -482,11 +508,11 @@ namespace OpenSim.Data.SQLite
                     }
                     catch (Exception e)
                     {
-                        m_log.Error("[REGION DB]: Failed create prim object in group, exception and data follows");
-                        m_log.Info("[REGION DB]: " + e.ToString());
+                        m_log.Error("[SQLITE REGION DB]: Failed create prim object in group, exception and data follows");
+                        m_log.Error("[SQLITE REGION DB]: ", e);
                         foreach (DataColumn col in prims.Columns)
                         {
-                            m_log.Info("[REGION DB]: Col: " + col.ColumnName + " => " + primRow[col]);
+                            m_log.Error("[SQLITE REGION DB]: Col: " + col.ColumnName + " => " + primRow[col]);
                         }
                     }
                 }
@@ -499,20 +525,23 @@ namespace OpenSim.Data.SQLite
         /// </summary>
         /// <param name="prim">the prim</param>
         private void LoadItems(SceneObjectPart prim)
-        {
-            //m_log.DebugFormat("[DATASTORE]: Loading inventory for {0}, {1}", prim.Name, prim.UUID);
-    
-            DataTable dbItems = ds.Tables["primitems"];          
-            String sql = String.Format("primID = '{0}'", prim.UUID.ToString());
+        {                			
+//			m_log.DebugFormat("[SQLITE REGION DB]: Loading inventory for {0} {1}", prim.Name, prim.UUID);
+			
+            DataTable dbItems = ds.Tables["primitems"];
+            String sql = String.Format("primID = '{0}'", prim.UUID.ToString());			
             DataRow[] dbItemRows = dbItems.Select(sql);
             IList<TaskInventoryItem> inventory = new List<TaskInventoryItem>();
 
+//			m_log.DebugFormat(
+//			    "[SQLITE REGION DB]: Found {0} items for {1} {2}", dbItemRows.Length, prim.Name, prim.UUID);
+			
             foreach (DataRow row in dbItemRows)
             {
                 TaskInventoryItem item = buildItem(row);
                 inventory.Add(item);
 
-                //m_log.DebugFormat("[DATASTORE]: Restored item {0}, {1}", item.Name, item.ItemID);
+//                m_log.DebugFormat("[SQLITE REGION DB]: Restored item {0} {1}", item.Name, item.ItemID);
             }
 
             prim.Inventory.RestoreInventoryItems(inventory);
@@ -548,7 +577,7 @@ namespace OpenSim.Data.SQLite
 
                 // the following is an work around for .NET.  The perf
                 // issues associated with it aren't as bad as you think.
-                m_log.Info("[REGION DB]: Storing terrain revision r" + revision.ToString());
+                m_log.Debug("[SQLITE REGION DB]: Storing terrain revision r" + revision.ToString());
                 String sql = "insert into terrain(RegionUUID, Revision, Heightfield)" +
                              " values(:RegionUUID, :Revision, :Heightfield)";
 
@@ -571,7 +600,7 @@ namespace OpenSim.Data.SQLite
         {
             lock (ds)
             {
-                double[,] terret = new double[256,256];
+                double[,] terret = new double[(int)Constants.RegionSize, (int)Constants.RegionSize];
                 terret.Initialize();
 
                 String sql = "select RegionUUID, Revision, Heightfield from terrain" +
@@ -587,24 +616,28 @@ namespace OpenSim.Data.SQLite
                         if (row.Read())
                         {
                             // TODO: put this into a function
-                            MemoryStream str = new MemoryStream((byte[]) row["Heightfield"]);
-                            BinaryReader br = new BinaryReader(str);
-                            for (int x = 0; x < 256; x++)
+                            using (MemoryStream str = new MemoryStream((byte[])row["Heightfield"]))
                             {
-                                for (int y = 0; y < 256; y++)
+                                using (BinaryReader br = new BinaryReader(str))
                                 {
-                                    terret[x, y] = br.ReadDouble();
+                                    for (int x = 0; x < (int)Constants.RegionSize; x++)
+                                    {
+                                        for (int y = 0; y < (int)Constants.RegionSize; y++)
+                                        {
+                                            terret[x, y] = br.ReadDouble();
+                                        }
+                                    }
                                 }
                             }
-                            rev = (int) row["Revision"];
+                            rev = Convert.ToInt32(row["Revision"]);
                         }
                         else
                         {
-                            m_log.Info("[REGION DB]: No terrain found for region");
+                            m_log.Warn("[SQLITE REGION DB]: No terrain found for region");
                             return null;
                         }
 
-                        m_log.Info("[REGION DB]: Loaded terrain revision r" + rev.ToString());
+                        m_log.Debug("[SQLITE REGION DB]: Loaded terrain revision r" + rev.ToString());
                     }
                 }
                 return terret;
@@ -619,18 +652,42 @@ namespace OpenSim.Data.SQLite
         {
             lock (ds)
             {
-                using (SqliteCommand cmd = new SqliteCommand("delete from land where UUID=:UUID", m_conn))
+                // Can't use blanket SQL statements when using SqlAdapters unless you re-read the data into the adapter
+                // after you're done.
+                // replaced below code with the SqliteAdapter version.
+                //using (SqliteCommand cmd = new SqliteCommand("delete from land where UUID=:UUID", m_conn))
+                //{
+                //    cmd.Parameters.Add(new SqliteParameter(":UUID", globalID.ToString()));
+                //    cmd.ExecuteNonQuery();
+                //}
+
+                //using (SqliteCommand cmd = new SqliteCommand("delete from landaccesslist where LandUUID=:UUID", m_conn))
+                //{
+                //   cmd.Parameters.Add(new SqliteParameter(":UUID", globalID.ToString()));
+                //    cmd.ExecuteNonQuery();
+                //}
+
+                DataTable land = ds.Tables["land"];
+                DataTable landaccesslist = ds.Tables["landaccesslist"];
+                DataRow landRow = land.Rows.Find(globalID.ToString());
+                if (landRow != null)
                 {
-                    cmd.Parameters.Add(new SqliteParameter(":UUID", globalID.ToString()));
-                    cmd.ExecuteNonQuery();
+                    land.Rows.Remove(landRow);
+                }
+                List<DataRow> rowsToDelete = new List<DataRow>();
+                foreach (DataRow rowToCheck in landaccesslist.Rows)
+                {
+                    if (rowToCheck["LandUUID"].ToString() == globalID.ToString())
+                        rowsToDelete.Add(rowToCheck);
+                }
+                for (int iter = 0; iter < rowsToDelete.Count; iter++)
+                {
+                    landaccesslist.Rows.Remove(rowsToDelete[iter]);
                 }
 
-                using (SqliteCommand cmd = new SqliteCommand("delete from landaccesslist where LandUUID=:UUID", m_conn))
-                {
-                    cmd.Parameters.Add(new SqliteParameter(":UUID", globalID.ToString()));
-                    cmd.ExecuteNonQuery();
-                }
+               
             }
+            Commit();
         }
 
         /// <summary>
@@ -644,29 +701,44 @@ namespace OpenSim.Data.SQLite
                 DataTable land = ds.Tables["land"];
                 DataTable landaccesslist = ds.Tables["landaccesslist"];
 
-                DataRow landRow = land.Rows.Find(parcel.landData.GlobalID.ToString());
+                DataRow landRow = land.Rows.Find(parcel.LandData.GlobalID.ToString());
                 if (landRow == null)
                 {
                     landRow = land.NewRow();
-                    fillLandRow(landRow, parcel.landData, parcel.regionUUID);
+                    fillLandRow(landRow, parcel.LandData, parcel.RegionUUID);
                     land.Rows.Add(landRow);
                 }
                 else
                 {
-                    fillLandRow(landRow, parcel.landData, parcel.regionUUID);
+                    fillLandRow(landRow, parcel.LandData, parcel.RegionUUID);
                 }
 
                 // I know this caused someone issues before, but OpenSim is unusable if we leave this stuff around
-                using (SqliteCommand cmd = new SqliteCommand("delete from landaccesslist where LandUUID=:LandUUID", m_conn))
-                {
-                    cmd.Parameters.Add(new SqliteParameter(":LandUUID", parcel.landData.GlobalID.ToString()));
-                    cmd.ExecuteNonQuery();
-                }
+                //using (SqliteCommand cmd = new SqliteCommand("delete from landaccesslist where LandUUID=:LandUUID", m_conn))
+                //{
+                //    cmd.Parameters.Add(new SqliteParameter(":LandUUID", parcel.LandData.GlobalID.ToString()));
+                //    cmd.ExecuteNonQuery();
 
-                foreach (ParcelManager.ParcelAccessEntry entry in parcel.landData.ParcelAccessList)
+//                }
+
+                // This is the slower..  but more appropriate thing to do
+
+                // We can't modify the table with direct queries before calling Commit() and re-filling them.
+                List<DataRow> rowsToDelete = new List<DataRow>();
+                foreach (DataRow rowToCheck in landaccesslist.Rows)
+                {
+                    if (rowToCheck["LandUUID"].ToString() == parcel.LandData.GlobalID.ToString())
+                        rowsToDelete.Add(rowToCheck);
+                }
+                for (int iter = 0; iter < rowsToDelete.Count; iter++)
+                {
+                    landaccesslist.Rows.Remove(rowsToDelete[iter]);
+                }
+                rowsToDelete.Clear();
+                foreach (ParcelManager.ParcelAccessEntry entry in parcel.LandData.ParcelAccessList)
                 {
                     DataRow newAccessRow = landaccesslist.NewRow();
-                    fillLandAccessRow(newAccessRow, entry, parcel.landData.GlobalID);
+                    fillLandAccessRow(newAccessRow, entry, parcel.LandData.GlobalID);
                     landaccesslist.Rows.Add(newAccessRow);
                 }
             }
@@ -709,6 +781,7 @@ namespace OpenSim.Data.SQLite
         /// </summary>
         public void Commit()
         {
+            //m_log.Debug("[SQLITE]: Starting commit");
             lock (ds)
             {
                 primDa.Update(ds, "prims");
@@ -719,7 +792,16 @@ namespace OpenSim.Data.SQLite
                 terrainDa.Update(ds, "terrain");
                 landDa.Update(ds, "land");
                 landAccessListDa.Update(ds, "landaccesslist");
-                regionSettingsDa.Update(ds, "regionsettings");
+                try
+                {
+                    regionSettingsDa.Update(ds, "regionsettings");
+                } 
+                catch (SqliteException SqlEx)
+                {
+                    throw new Exception(
+                        "There was a SQL error or connection string configuration error when saving the region settings.  This could be a bug, it could also happen if ConnectionString is defined in the [DatabaseService] section of StandaloneCommon.ini in the config_include folder.  This could also happen if the config_include folder doesn't exist or if the OpenSim.ini [Architecture] section isn't set.  If this is your first time running OpenSimulator, please restart the simulator and bug a developer to fix this!",
+                        SqlEx);
+                }
                 ds.AcceptChanges();
             }
         }
@@ -739,6 +821,15 @@ namespace OpenSim.Data.SQLite
          *  This should be db agnostic as we define them in ADO.NET terms
          *
          **********************************************************************/
+
+        protected void CreateDataSetMapping(IDataAdapter da, string tableName)
+        {
+            ITableMapping dbMapping = da.TableMappings.Add(tableName, tableName);
+            foreach (DataColumn col in ds.Tables[tableName].Columns)
+            {
+                dbMapping.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+            }
+        }
 
         /// <summary>
         ///
@@ -1114,7 +1205,7 @@ namespace OpenSim.Data.SQLite
             // explicit conversion of integers is required, which sort
             // of sucks.  No idea if there is a shortcut here or not.
             prim.CreationDate = Convert.ToInt32(row["CreationDate"]);
-            prim.Name = (String) row["Name"];
+            prim.Name = row["Name"] == DBNull.Value ? string.Empty : (string)row["Name"];
             // various text fields
             prim.Text = (String) row["Text"];
             prim.Color = Color.FromArgb(Convert.ToInt32(row["ColorA"]),
@@ -1199,7 +1290,7 @@ namespace OpenSim.Data.SQLite
             if (!row.IsNull("ParticleSystem"))
                 prim.ParticleSystem = Convert.FromBase64String(row["ParticleSystem"].ToString());
 
-            prim.RotationalVelocity = new Vector3(
+            prim.AngularVelocity = new Vector3(
                 Convert.ToSingle(row["OmegaX"]),
                 Convert.ToSingle(row["OmegaY"]),
                 Convert.ToSingle(row["OmegaZ"])
@@ -1298,13 +1389,13 @@ namespace OpenSim.Data.SQLite
             newData.IsGroupOwned = (Boolean) row["IsGroupOwned"];
             newData.Area = Convert.ToInt32(row["Area"]);
             newData.AuctionID = Convert.ToUInt32(row["AuctionID"]); //Unemplemented
-            newData.Category = (Parcel.ParcelCategory) Convert.ToInt32(row["Category"]);
+            newData.Category = (ParcelCategory) Convert.ToInt32(row["Category"]);
                 //Enum OpenMetaverse.Parcel.ParcelCategory
             newData.ClaimDate = Convert.ToInt32(row["ClaimDate"]);
             newData.ClaimPrice = Convert.ToInt32(row["ClaimPrice"]);
             newData.GroupID = new UUID((String) row["GroupUUID"]);
             newData.SalePrice = Convert.ToInt32(row["SalePrice"]);
-            newData.Status = (Parcel.ParcelStatus) Convert.ToInt32(row["LandStatus"]);
+            newData.Status = (ParcelStatus) Convert.ToInt32(row["LandStatus"]);
                 //Enum. OpenMetaverse.Parcel.ParcelStatus
             newData.Flags = Convert.ToUInt32(row["LandFlags"]);
             newData.LandingType = (Byte) row["LandingType"];
@@ -1328,7 +1419,7 @@ namespace OpenSim.Data.SQLite
             }
             catch (InvalidCastException)
             {
-                m_log.ErrorFormat("[PARCEL]: unable to get parcel telehub settings for {1}", newData.Name);
+                m_log.ErrorFormat("[SQLITE REGION DB]: unable to get parcel telehub settings for {1}", newData.Name);
                 newData.UserLocation = Vector3.Zero;
                 newData.UserLookAt = Vector3.Zero;
             }
@@ -1411,12 +1502,12 @@ namespace OpenSim.Data.SQLite
         /// <returns></returns>
         private static Array serializeTerrain(double[,] val)
         {
-            MemoryStream str = new MemoryStream(65536*sizeof (double));
+            MemoryStream str = new MemoryStream(((int)Constants.RegionSize * (int)Constants.RegionSize) *sizeof (double));
             BinaryWriter bw = new BinaryWriter(str);
 
             // TODO: COMPATIBILITY - Add byte-order conversions
-            for (int x = 0; x < 256; x++)
-                for (int y = 0; y < 256; y++)
+            for (int x = 0; x < (int)Constants.RegionSize; x++)
+                for (int y = 0; y < (int)Constants.RegionSize; y++)
                     bw.Write(val[x, y]);
 
             return str.ToArray();
@@ -1427,12 +1518,12 @@ namespace OpenSim.Data.SQLite
 //             row["RegionUUID"] = regionUUID;
 //             row["Revision"] = rev;
 
-//             MemoryStream str = new MemoryStream(65536*sizeof (double));
+        //             MemoryStream str = new MemoryStream(((int)Constants.RegionSize * (int)Constants.RegionSize)*sizeof (double));
 //             BinaryWriter bw = new BinaryWriter(str);
 
 //             // TODO: COMPATIBILITY - Add byte-order conversions
-//             for (int x = 0; x < 256; x++)
-//                 for (int y = 0; y < 256; y++)
+        //             for (int x = 0; x < (int)Constants.RegionSize; x++)
+        //                 for (int y = 0; y < (int)Constants.RegionSize; y++)
 //                     bw.Write(val[x, y]);
 
 //             row["Heightfield"] = str.ToArray();
@@ -1516,9 +1607,9 @@ namespace OpenSim.Data.SQLite
             row["TextureAnimation"] = Convert.ToBase64String(prim.TextureAnimation);
             row["ParticleSystem"] = Convert.ToBase64String(prim.ParticleSystem);
 
-            row["OmegaX"] = prim.RotationalVelocity.X;
-            row["OmegaY"] = prim.RotationalVelocity.Y;
-            row["OmegaZ"] = prim.RotationalVelocity.Z;
+            row["OmegaX"] = prim.AngularVelocity.X;
+            row["OmegaY"] = prim.AngularVelocity.Y;
+            row["OmegaZ"] = prim.AngularVelocity.Z;
 
             row["CameraEyeOffsetX"] = prim.GetCameraEyeOffset().X;
             row["CameraEyeOffsetY"] = prim.GetCameraEyeOffset().Y;
@@ -1582,10 +1673,10 @@ namespace OpenSim.Data.SQLite
         /// <param name="taskItem"></param>
         private static void fillItemRow(DataRow row, TaskInventoryItem taskItem)
         {
-            row["itemID"] = taskItem.ItemID;
-            row["primID"] = taskItem.ParentPartID;
-            row["assetID"] = taskItem.AssetID;
-            row["parentFolderID"] = taskItem.ParentID;
+            row["itemID"] = taskItem.ItemID.ToString();
+            row["primID"] = taskItem.ParentPartID.ToString();
+            row["assetID"] = taskItem.AssetID.ToString();
+            row["parentFolderID"] = taskItem.ParentID.ToString();
 
             row["invType"] = taskItem.InvType;
             row["assetType"] = taskItem.Type;
@@ -1593,10 +1684,10 @@ namespace OpenSim.Data.SQLite
             row["name"] = taskItem.Name;
             row["description"] = taskItem.Description;
             row["creationDate"] = taskItem.CreationDate;
-            row["creatorID"] = taskItem.CreatorID;
-            row["ownerID"] = taskItem.OwnerID;
-            row["lastOwnerID"] = taskItem.LastOwnerID;
-            row["groupID"] = taskItem.GroupID;
+            row["creatorID"] = taskItem.CreatorID.ToString();
+            row["ownerID"] = taskItem.OwnerID.ToString();
+            row["lastOwnerID"] = taskItem.LastOwnerID.ToString();
+            row["groupID"] = taskItem.GroupID.ToString();
             row["nextPermissions"] = taskItem.NextPermissions;
             row["currentPermissions"] = taskItem.CurrentPermissions;
             row["basePermissions"] = taskItem.BasePermissions;
@@ -1697,7 +1788,7 @@ namespace OpenSim.Data.SQLite
             row["terrain_raise_limit"] = settings.TerrainRaiseLimit;
             row["terrain_lower_limit"] = settings.TerrainLowerLimit;
             row["use_estate_sun"] = settings.UseEstateSun;
-            row["sandbox"] = settings.Sandbox;
+            row["Sandbox"] = settings.Sandbox; // database uses upper case S for sandbox
             row["sunvectorx"] = settings.SunVector.X;
             row["sunvectory"] = settings.SunVector.Y;
             row["sunvectorz"] = settings.SunVector.Z;
@@ -1799,6 +1890,7 @@ namespace OpenSim.Data.SQLite
         /// <param name="regionUUID"></param>
         private void addPrim(SceneObjectPart prim, UUID sceneGroupID, UUID regionUUID)
         {
+
             DataTable prims = ds.Tables["prims"];
             DataTable shapes = ds.Tables["primshapes"];
 
@@ -1834,7 +1926,7 @@ namespace OpenSim.Data.SQLite
         /// <param name="items"></param>
         public void StorePrimInventory(UUID primID, ICollection<TaskInventoryItem> items)
         {
-            m_log.InfoFormat("[REGION DB]: Entered StorePrimInventory with prim ID {0}", primID);
+//            m_log.DebugFormat("[SQLITE REGION DB]: Entered StorePrimInventory with prim ID {0}", primID);
 
             DataTable dbItems = ds.Tables["primitems"];
 
@@ -1901,6 +1993,7 @@ namespace OpenSim.Data.SQLite
             sql += ") values (:";
             sql += String.Join(", :", cols);
             sql += ")";
+            //m_log.DebugFormat("[SQLITE]: Created insert command {0}", sql);
             SqliteCommand cmd = new SqliteCommand(sql);
 
             // this provides the binding for all our parameters, so
@@ -1935,6 +2028,40 @@ namespace OpenSim.Data.SQLite
             }
             sql += subsql;
             sql += " where " + pk;
+            SqliteCommand cmd = new SqliteCommand(sql);
+
+            // this provides the binding for all our parameters, so
+            // much less code than it used to be
+
+            foreach (DataColumn col in dt.Columns)
+            {
+                cmd.Parameters.Add(createSqliteParameter(col.ColumnName, col.DataType));
+            }
+            return cmd;
+        }
+
+        /// <summary>
+        /// create an update command
+        /// </summary>
+        /// <param name="table">table name</param>
+        /// <param name="pk"></param>
+        /// <param name="dt"></param>
+        /// <returns>the created command</returns>
+        private static SqliteCommand createUpdateCommand(string table, string pk1, string pk2, DataTable dt)
+        {
+            string sql = "update " + table + " set ";
+            string subsql = String.Empty;
+            foreach (DataColumn col in dt.Columns)
+            {
+                if (subsql.Length > 0)
+                {
+                    // a map function would rock so much here
+                    subsql += ", ";
+                }
+                subsql += col.ColumnName + "= :" + col.ColumnName;
+            }
+            sql += subsql;
+            sql += " where " + pk1 + " and " + pk2;
             SqliteCommand cmd = new SqliteCommand(sql);
 
             // this provides the binding for all our parameters, so
@@ -2065,6 +2192,11 @@ namespace OpenSim.Data.SQLite
 
             da.UpdateCommand = createUpdateCommand("land", "UUID=:UUID", ds.Tables["land"]);
             da.UpdateCommand.Connection = conn;
+
+            SqliteCommand delete = new SqliteCommand("delete from land where UUID=:UUID");
+            delete.Parameters.Add(createSqliteParameter("UUID", typeof(String)));
+            da.DeleteCommand = delete;
+            da.DeleteCommand.Connection = conn;
         }
 
         /// <summary>
@@ -2076,6 +2208,16 @@ namespace OpenSim.Data.SQLite
         {
             da.InsertCommand = createInsertCommand("landaccesslist", ds.Tables["landaccesslist"]);
             da.InsertCommand.Connection = conn;
+
+            da.UpdateCommand = createUpdateCommand("landaccesslist", "LandUUID=:landUUID", "AccessUUID=:AccessUUID", ds.Tables["landaccesslist"]);
+            da.UpdateCommand.Connection = conn;
+
+            SqliteCommand delete = new SqliteCommand("delete from landaccesslist where LandUUID= :LandUUID and AccessUUID= :AccessUUID");
+            delete.Parameters.Add(createSqliteParameter("LandUUID", typeof(String)));
+            delete.Parameters.Add(createSqliteParameter("AccessUUID", typeof(String)));
+            da.DeleteCommand = delete;
+            da.DeleteCommand.Connection = conn;
+            
         }
 
         private void setupRegionSettingsCommands(SqliteDataAdapter da, SqliteConnection conn)
@@ -2146,6 +2288,36 @@ namespace OpenSim.Data.SQLite
             {
                 return DbType.String;
             }
+        }
+        
+        static void PrintDataSet(DataSet ds)
+        {
+          // Print out any name and extended properties.
+          Console.WriteLine("DataSet is named: {0}", ds.DataSetName);
+          foreach (System.Collections.DictionaryEntry de in ds.ExtendedProperties)
+          {
+            Console.WriteLine("Key = {0}, Value = {1}", de.Key, de.Value);
+          }
+          Console.WriteLine();
+          foreach (DataTable dt in ds.Tables)
+          {
+            Console.WriteLine("=> {0} Table:", dt.TableName);
+            // Print out the column names.
+            for (int curCol = 0; curCol < dt.Columns.Count; curCol++)
+            {
+              Console.Write(dt.Columns[curCol].ColumnName + "\t");
+            }
+            Console.WriteLine("\n----------------------------------");
+            // Print the DataTable.
+            for (int curRow = 0; curRow < dt.Rows.Count; curRow++)
+            {
+              for (int curCol = 0; curCol < dt.Columns.Count; curCol++)
+              {
+                Console.Write(dt.Rows[curRow][curCol].ToString() + "\t");
+              }
+              Console.WriteLine();
+            }
+          }
         }
 
     }

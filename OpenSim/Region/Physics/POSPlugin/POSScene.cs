@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -56,17 +56,13 @@ namespace OpenSim.Region.Physics.POSPlugin
         {
         }
 
-        public override PhysicsActor AddAvatar(string avName, PhysicsVector position, PhysicsVector size, bool isFlying)
+        public override PhysicsActor AddAvatar(string avName, Vector3 position, Vector3 size, bool isFlying)
         {
             POSCharacter act = new POSCharacter();
             act.Position = position;
             act.Flying = isFlying;
             _characters.Add(act);
             return act;
-        }
-
-        public override void SetWaterLevel(float baseheight)
-        {
         }
 
         public override void RemovePrim(PhysicsActor prim)
@@ -88,20 +84,20 @@ namespace OpenSim.Region.Physics.POSPlugin
         }
 
 /*
-        public override PhysicsActor AddPrim(PhysicsVector position, PhysicsVector size, Quaternion rotation)
+        public override PhysicsActor AddPrim(Vector3 position, Vector3 size, Quaternion rotation)
         {
             return null;
         }
 */
 
-        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                  PhysicsVector size, Quaternion rotation)
+        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                  Vector3 size, Quaternion rotation)
         {
             return AddPrimShape(primName, pbs, position, size, rotation, false);
         }
 
-        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                  PhysicsVector size, Quaternion rotation, bool isPhysical)
+        public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                  Vector3 size, Quaternion rotation, bool isPhysical)
         {
             POSPrim prim = new POSPrim();
             prim.Position = position;
@@ -117,20 +113,16 @@ namespace OpenSim.Region.Physics.POSPlugin
                                              c.Position.Z - p.Position.Z) * Quaternion.Inverse(p.Orientation);
             Vector3 avatarSize = new Vector3(c.Size.X, c.Size.Y, c.Size.Z) * Quaternion.Inverse(p.Orientation);
 
-            if (Math.Abs(rotatedPos.X) >= (p.Size.X*0.5 + Math.Abs(avatarSize.X)) ||
-                Math.Abs(rotatedPos.Y) >= (p.Size.Y*0.5 + Math.Abs(avatarSize.Y)) ||
-                Math.Abs(rotatedPos.Z) >= (p.Size.Z*0.5 + Math.Abs(avatarSize.Z)))
-            {
-                return false;
-            }
-            return true;
+            return (Math.Abs(rotatedPos.X) < (p.Size.X*0.5 + Math.Abs(avatarSize.X)) &&
+                    Math.Abs(rotatedPos.Y) < (p.Size.Y*0.5 + Math.Abs(avatarSize.Y)) &&
+                    Math.Abs(rotatedPos.Z) < (p.Size.Z*0.5 + Math.Abs(avatarSize.Z)));
         }
 
         private bool isCollidingWithPrim(POSCharacter c)
         {
-            for (int i = 0; i < _prims.Count; ++i)
+            foreach (POSPrim p in _prims)
             {
-                if (isColliding(c, _prims[i]))
+                if (isColliding(c, p))
                 {
                     return true;
                 }
@@ -160,23 +152,25 @@ namespace OpenSim.Region.Physics.POSPlugin
                     character._target_velocity.Z += gravity * timeStep;
                 }
 
-                character.Position.X += character._target_velocity.X * timeStep;
-                character.Position.Y += character._target_velocity.Y * timeStep;
+                Vector3 characterPosition = character.Position;
 
-                character.Position.X = Util.Clamp(character.Position.X, 0.01f, Constants.RegionSize - 0.01f);
-                character.Position.Y = Util.Clamp(character.Position.Y, 0.01f, Constants.RegionSize - 0.01f);
+                characterPosition.X += character._target_velocity.X * timeStep;
+                characterPosition.Y += character._target_velocity.Y * timeStep;
+
+                characterPosition.X = Util.Clamp(character.Position.X, 0.01f, Constants.RegionSize - 0.01f);
+                characterPosition.Y = Util.Clamp(character.Position.Y, 0.01f, Constants.RegionSize - 0.01f);
 
                 bool forcedZ = false;
 
                 float terrainheight = _heightMap[(int)character.Position.Y * Constants.RegionSize + (int)character.Position.X];
                 if (character.Position.Z + (character._target_velocity.Z * timeStep) < terrainheight + 2)
                 {
-                    character.Position.Z = terrainheight + character.Size.Z;
+                    characterPosition.Z = terrainheight + character.Size.Z;
                     forcedZ = true;
                 }
                 else
                 {
-                    character.Position.Z += character._target_velocity.Z*timeStep;
+                    characterPosition.Z += character._target_velocity.Z*timeStep;
                 }
 
                 /// this is it -- the magic you've all been waiting for!  Ladies and gentlemen --
@@ -185,29 +179,29 @@ namespace OpenSim.Region.Physics.POSPlugin
 
                 if (isCollidingWithPrim(character))
                 {
-                    character.Position.Z = oldposZ; //  first try Z axis
+                    characterPosition.Z = oldposZ; //  first try Z axis
                     if (isCollidingWithPrim(character))
                     {
-                        character.Position.Z = oldposZ + character.Size.Z / 4.4f; // try harder
+                        characterPosition.Z = oldposZ + character.Size.Z / 4.4f; // try harder
                         if (isCollidingWithPrim(character))
                         {
-                            character.Position.Z = oldposZ + character.Size.Z / 2.2f; // try very hard
+                            characterPosition.Z = oldposZ + character.Size.Z / 2.2f; // try very hard
                             if (isCollidingWithPrim(character))
                             {
-                                character.Position.X = oldposX;
-                                character.Position.Y = oldposY;
-                                character.Position.Z = oldposZ;
+                                characterPosition.X = oldposX;
+                                characterPosition.Y = oldposY;
+                                characterPosition.Z = oldposZ;
 
-                                character.Position.X += character._target_velocity.X * timeStep;
+                                characterPosition.X += character._target_velocity.X * timeStep;
                                 if (isCollidingWithPrim(character))
                                 {
-                                    character.Position.X = oldposX;
+                                    characterPosition.X = oldposX;
                                 }
 
-                                character.Position.Y += character._target_velocity.Y * timeStep;
+                                characterPosition.Y += character._target_velocity.Y * timeStep;
                                 if (isCollidingWithPrim(character))
                                 {
-                                    character.Position.Y = oldposY;
+                                    characterPosition.Y = oldposY;
                                 }
                             }
                             else
@@ -226,8 +220,10 @@ namespace OpenSim.Region.Physics.POSPlugin
                     }
                 }
 
-                character.Position.X = Util.Clamp(character.Position.X, 0.01f, Constants.RegionSize - 0.01f);
-                character.Position.Y = Util.Clamp(character.Position.Y, 0.01f, Constants.RegionSize - 0.01f);
+                characterPosition.X = Util.Clamp(character.Position.X, 0.01f, Constants.RegionSize - 0.01f);
+                characterPosition.Y = Util.Clamp(character.Position.Y, 0.01f, Constants.RegionSize - 0.01f);
+
+                character.Position = characterPosition;
 
                 character._velocity.X = (character.Position.X - oldposX)/timeStep;
                 character._velocity.Y = (character.Position.Y - oldposY)/timeStep;
@@ -264,6 +260,10 @@ namespace OpenSim.Region.Physics.POSPlugin
         }
 
         public override void DeleteTerrain()
+        {
+        }
+
+        public override void SetWaterLevel(float baseheight)
         {
         }
 

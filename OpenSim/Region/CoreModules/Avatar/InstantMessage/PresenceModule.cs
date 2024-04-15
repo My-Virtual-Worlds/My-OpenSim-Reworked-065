@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -35,6 +35,7 @@ using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
 {
@@ -171,7 +172,10 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
                             {
                                 // TODO this is the old messaging-server protocol; only the regionHandle is available.
                                 // Fetch region-info to get the id
-                                RegionInfo regionInfo = m_initialScene.RequestNeighbouringRegionInfo(info.regionHandle);
+                                uint x = 0, y = 0;
+                                Utils.LongToUInts(info.regionHandle, out x, out y);
+                                GridRegion regionInfo = m_initialScene.GridService.GetRegionByPosition(m_initialScene.RegionInfo.ScopeID,
+                                    (int)x, (int)y);
                                 regionID = regionInfo.RegionID;
                             }
                             result[indices[i]] = new PresenceInfo(uuids[i], regionID);
@@ -270,8 +274,14 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
                 }
                 m_RootAgents[agentID] = scene;
             }
+
             // inform messaging server that agent changed the region
-            NotifyMessageServerOfAgentLocation(agentID, scene.RegionInfo.RegionID, scene.RegionInfo.RegionHandle);
+            Util.FireAndForget(
+                delegate(object o)
+                {
+                    NotifyMessageServerOfAgentLocation(agentID, scene.RegionInfo.RegionID, scene.RegionInfo.RegionHandle);
+                }
+            );
         }
 
         private void OnEconomyDataRequest(UUID agentID)
@@ -349,6 +359,9 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
 
         private void NotifyMessageServerOfShutdown(Scene scene)
         {
+            if (m_Scenes[0].CommsManager.NetworkServersInfo.MessagingURL == string.Empty)
+                return;
+            
             Hashtable xmlrpcdata = new Hashtable();
             xmlrpcdata["RegionUUID"] = scene.RegionInfo.RegionID.ToString();
             ArrayList SendParams = new ArrayList();
@@ -372,6 +385,9 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
 
         private void NotifyMessageServerOfAgentLocation(UUID agentID, UUID region, ulong regionHandle)
         {
+            if (m_Scenes[0].CommsManager.NetworkServersInfo.MessagingURL == string.Empty)
+                return;
+
             Hashtable xmlrpcdata = new Hashtable();
             xmlrpcdata["AgentID"] = agentID.ToString();
             xmlrpcdata["RegionUUID"] = region.ToString();
@@ -397,6 +413,9 @@ namespace OpenSim.Region.CoreModules.Avatar.InstantMessage
 
         private void NotifyMessageServerOfAgentLeaving(UUID agentID, UUID region, ulong regionHandle)
         {
+            if (m_Scenes[0].CommsManager.NetworkServersInfo.MessagingURL == string.Empty)
+                return;
+
             Hashtable xmlrpcdata = new Hashtable();
             xmlrpcdata["AgentID"] = agentID.ToString();
             xmlrpcdata["RegionUUID"] = region.ToString();

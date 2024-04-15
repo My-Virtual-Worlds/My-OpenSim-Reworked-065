@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,6 +33,7 @@ using log4net;
 using Nini.Config;
 using OpenMetaverse;
 using OpenMetaverse.Imaging;
+using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 
@@ -97,27 +98,29 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
             }
             terrainRenderer.Initialise(m_scene, m_config);
 
-            Bitmap mapbmp = new Bitmap(256, 256);
-            //long t = System.Environment.TickCount;
-            //for (int i = 0; i < 10; ++i) {
+            using (Bitmap mapbmp = new Bitmap((int)Constants.RegionSize, (int)Constants.RegionSize))
+            {
+                //long t = System.Environment.TickCount;
+                //for (int i = 0; i < 10; ++i) {
                 terrainRenderer.TerrainToBitmap(mapbmp);
-            //}
-            //t = System.Environment.TickCount - t;
-            //m_log.InfoFormat("[MAPTILE] generation of 10 maptiles needed {0} ms", t);
+                //}
+                //t = System.Environment.TickCount - t;
+                //m_log.InfoFormat("[MAPTILE] generation of 10 maptiles needed {0} ms", t);
 
 
-            if (drawPrimVolume)
-            {
-                DrawObjectVolume(m_scene, mapbmp);
-            }
+                if (drawPrimVolume)
+                {
+                    DrawObjectVolume(m_scene, mapbmp);
+                }
 
-            try
-            {
-                imageData = OpenJPEG.EncodeFromImage(mapbmp, true);
-            }
-            catch (Exception e) // LEGIT: Catching problems caused by OpenJPEG p/invoke
-            {
-                m_log.Error("Failed generating terrain map: " + e);
+                try
+                {
+                    imageData = OpenJPEG.EncodeFromImage(mapbmp, true);
+                }
+                catch (Exception e) // LEGIT: Catching problems caused by OpenJPEG p/invoke
+                {
+                    m_log.Error("Failed generating terrain map: " + e);
+                }
             }
 
             return imageData;
@@ -330,9 +333,9 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
                                     int mapdrawendY = (int)(pos.Y + scale.Y);
 
                                     // If object is beyond the edge of the map, don't draw it to avoid errors
-                                    if (mapdrawstartX < 0 || mapdrawstartX > 255 || mapdrawendX < 0 || mapdrawendX > 255
-                                                          || mapdrawstartY < 0 || mapdrawstartY > 255 || mapdrawendY < 0
-                                                          || mapdrawendY > 255)
+                                    if (mapdrawstartX < 0 || mapdrawstartX > ((int)Constants.RegionSize - 1) || mapdrawendX < 0 || mapdrawendX > ((int)Constants.RegionSize - 1)
+                                                          || mapdrawstartY < 0 || mapdrawstartY > ((int)Constants.RegionSize - 1) || mapdrawendY < 0
+                                                          || mapdrawendY > ((int)Constants.RegionSize - 1))
                                         continue;
 
 #region obb face reconstruction part duex
@@ -511,7 +514,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
                     if (z_sort.ContainsKey(sortedlocalIds[s]))
                     {
                         DrawStruct rectDrawStruct = z_sort[sortedlocalIds[s]];
-                        for (int r = 0; r < rectDrawStruct.trns.Length; r++ )
+                        for (int r = 0; r < rectDrawStruct.trns.Length; r++)
                         {
                             g.FillPolygon(rectDrawStruct.brush,rectDrawStruct.trns[r].pts);
                         }
@@ -536,7 +539,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
            // float z = -point3d.z - topos.z;
 
             returnpt.X = (int)point3d.X;//(int)((topos.x - point3d.x) / z * d);
-            returnpt.Y = (int)(255 - point3d.Y);//(int)(255 - (((topos.y - point3d.y) / z * d)));
+            returnpt.Y = (int)(((int)Constants.RegionSize - 1) - point3d.Y);//(int)(255 - (((topos.y - point3d.y) / z * d)));
 
             return returnpt;
         }

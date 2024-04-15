@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -43,6 +43,7 @@ using OpenSim.Framework.Statistics;
 using OpenSim.Grid.Communications.OGS1;
 using OpenSim.Grid.Framework;
 using OpenSim.Grid.UserServer.Modules;
+using Nini.Config;
 
 namespace OpenSim.Grid.UserServer
 {
@@ -71,8 +72,27 @@ namespace OpenSim.Grid.UserServer
         protected UserServerCommandModule m_consoleCommandModule;
         protected UserServerEventDispatchModule m_eventDispatcher;
 
+        protected AvatarCreationModule m_appearanceModule;
+
+        protected static string m_consoleType = "local";
+        protected static IConfigSource m_config = null;
+        protected static string m_configFile = "UserServer_Config.xml";
+
         public static void Main(string[] args)
         {
+            ArgvConfigSource argvSource = new ArgvConfigSource(args);
+            argvSource.AddSwitch("Startup", "console", "c");
+            argvSource.AddSwitch("Startup", "xmlfile", "x");
+
+            IConfig startupConfig = argvSource.Configs["Startup"];
+            if (startupConfig != null)
+            {
+                m_consoleType = startupConfig.GetString("console", "local");
+                m_configFile = startupConfig.GetString("xmlfile", "UserServer_Config.xml");
+            }
+
+            m_config = argvSource;
+
             XmlConfigurator.Configure();
 
             m_log.Info("Launching UserServer...");
@@ -85,13 +105,24 @@ namespace OpenSim.Grid.UserServer
 
         public OpenUser_Main()
         {
-            m_console = new LocalConsole("User");
+            switch (m_consoleType)
+            {
+            case "rest":
+                m_console = new RemoteConsole("User");
+                break;
+            case "basic":
+                m_console = new CommandConsole("User");
+                break;
+            default:
+                m_console = new LocalConsole("User");
+                break;
+            }
             MainConsole.Instance = m_console;
         }
 
         public void Work()
         {
-            m_console.Notice("Enter help for a list of commands\n");
+            m_console.Output("Enter help for a list of commands\n");
 
             while (true)
             {
@@ -123,9 +154,19 @@ namespace OpenSim.Grid.UserServer
 
         protected virtual IInterServiceInventoryServices StartupCoreComponents()
         {
-            Cfg = new UserConfig("USER SERVER", (Path.Combine(Util.configDir(), "UserServer_Config.xml")));
+            Cfg = new UserConfig("USER SERVER", (Path.Combine(Util.configDir(), m_configFile)));
 
             m_httpServer = new BaseHttpServer(Cfg.HttpPort);
+
+            if (m_console is RemoteConsole)
+            {
+                RemoteConsole c = (RemoteConsole)m_console;
+                c.SetServer(m_httpServer);
+                IConfig netConfig = m_config.AddConfig("Network");
+                netConfig.Set("ConsoleUser", Cfg.ConsoleUser);
+                netConfig.Set("ConsolePass", Cfg.ConsolePass);
+                c.ReadConfig(m_config);
+            }
 
             RegisterInterface<CommandConsole>(m_console);
             RegisterInterface<UserConfig>(Cfg);
@@ -146,13 +187,13 @@ namespace OpenSim.Grid.UserServer
         /// <param name="inventoryService"></param>
         protected virtual void StartupUserServerModules()
         {
-            m_log.Info("[STARTUP]: Establishing data connection");                        
+            m_log.Info("[STARTUP]: Establishing data connection");
             
             //we only need core components so we can request them from here
             IInterServiceInventoryServices inventoryService;
             TryGet<IInterServiceInventoryServices>(out inventoryService);
             
-            CommunicationsManager commsManager = new UserServerCommsManager(inventoryService);            
+            CommunicationsManager commsManager = new UserServerCommsManager(inventoryService);
 
             //setup database access service, for now this has to be created before the other modules.
             m_userDataBaseService = new UserDataBaseService(commsManager);
@@ -180,6 +221,9 @@ namespace OpenSim.Grid.UserServer
 
         protected virtual void StartOtherComponents(IInterServiceInventoryServices inventoryService)
         {
+            m_appearanceModule = new AvatarCreationModule(m_userDataBaseService, Cfg, inventoryService);
+            m_appearanceModule.Initialise(this);
+
             StartupLoginService(inventoryService);
             //
             // Get the minimum defaultLevel to access to the grid
@@ -280,7 +324,7 @@ namespace OpenSim.Grid.UserServer
 
         public void TestResponse(List<InventoryFolderBase> resp)
         {
-            m_console.Notice("response got");
+            m_console.Output("response got");
         }
     }
 }

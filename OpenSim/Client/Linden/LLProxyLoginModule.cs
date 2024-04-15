@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -48,23 +48,16 @@ namespace OpenSim.Client.Linden
     /// <summary>
     /// Handles login user (expect user) and logoff user messages from the remote LL login server
     /// </summary>
-    public class LLProxyLoginModule : IRegionModule
+    public class LLProxyLoginModule : ISharedRegionModule
     {
+        private uint m_port = 0;
+
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        protected bool RegionLoginsEnabled
+        public LLProxyLoginModule(uint port)
         {
-            get
-            {
-                if (m_firstScene != null)
-                {
-                    return m_firstScene.CommsManager.GridService.RegionLoginsEnabled;
-                }
-                else
-                {
-                    return false;
-                }
-            }
+            m_log.DebugFormat("[CLIENT]: LLProxyLoginModule port {0}", port);
+            m_port = port;
         }
 
         protected List<Scene> m_scenes = new List<Scene>();
@@ -74,17 +67,20 @@ namespace OpenSim.Client.Linden
 
         #region IRegionModule Members
 
-        public void Initialise(Scene scene, IConfigSource source)
+        public void Initialise(IConfigSource source)
+        {
+            IConfig startupConfig = source.Configs["Modules"];
+            if (startupConfig != null)
+            {
+                m_enabled = startupConfig.GetBoolean("LLProxyLoginModule", false);
+            }
+        }
+
+        public void AddRegion(Scene scene)
         {
             if (m_firstScene == null)
             {
                 m_firstScene = scene;
-
-                IConfig startupConfig = source.Configs["Startup"];
-                if (startupConfig != null)
-                {
-                    m_enabled = startupConfig.GetBoolean("gridmode", false);
-                }
 
                 if (m_enabled)
                 {
@@ -96,6 +92,15 @@ namespace OpenSim.Client.Linden
             {
                 AddScene(scene);
             }
+
+        }
+
+        public void RemoveRegion(Scene scene)
+        {
+            if (m_enabled)
+            {
+                RemoveScene(scene);
+            }
         }
 
         public void PostInitialise()
@@ -106,6 +111,16 @@ namespace OpenSim.Client.Linden
         public void Close()
         {
 
+        }
+
+        public void RegionLoaded(Scene scene)
+        {
+
+        }
+
+        public Type ReplaceableInterface 
+        {
+            get { return null; }
         }
 
         public string Name
@@ -126,8 +141,8 @@ namespace OpenSim.Client.Linden
         protected void AddHttpHandlers()
         {
             //we will add our handlers to the first scene we received, as all scenes share a http server. But will this ever change?
-            m_firstScene.CommsManager.HttpServer.AddXmlRPCHandler("expect_user", ExpectUser);
-            m_firstScene.CommsManager.HttpServer.AddXmlRPCHandler("logoff_user", LogOffUser);
+            MainServer.GetHttpServer(m_port).AddXmlRPCHandler("expect_user", ExpectUser, false);
+            MainServer.GetHttpServer(m_port).AddXmlRPCHandler("logoff_user", LogOffUser, false);
         }
 
         protected void AddScene(Scene scene)
@@ -140,6 +155,17 @@ namespace OpenSim.Client.Linden
                 }
             }
         }
+
+        protected void RemoveScene(Scene scene)
+        {
+            lock (m_scenes)
+            {
+                if (m_scenes.Contains(scene))
+                {
+                    m_scenes.Remove(scene);
+                }
+            }
+        }
         /// <summary>
         /// Received from the user server when a user starts logging in.  This call allows
         /// the region to prepare for direct communication from the client.  Sends back an empty
@@ -147,60 +173,60 @@ namespace OpenSim.Client.Linden
         /// </summary>
         /// <param name="request"></param>
         /// <returns></returns>
-        public XmlRpcResponse ExpectUser(XmlRpcRequest request)
+        public XmlRpcResponse ExpectUser(XmlRpcRequest request, IPEndPoint remoteClient)
         {
-            Hashtable requestData = (Hashtable)request.Params[0];
-            AgentCircuitData agentData = new AgentCircuitData();
-            agentData.SessionID = new UUID((string)requestData["session_id"]);
-            agentData.SecureSessionID = new UUID((string)requestData["secure_session_id"]);
-            agentData.firstname = (string)requestData["firstname"];
-            agentData.lastname = (string)requestData["lastname"];
-            agentData.AgentID = new UUID((string)requestData["agent_id"]);
-            agentData.circuitcode = Convert.ToUInt32(requestData["circuit_code"]);
-            agentData.CapsPath = (string)requestData["caps_path"];
-            ulong regionHandle = Convert.ToUInt64((string)requestData["regionhandle"]);
-
-            // Appearance
-            if (requestData["appearance"] != null)
-                agentData.Appearance = new AvatarAppearance((Hashtable)requestData["appearance"]);
-
-            m_log.DebugFormat(
-                "[CLIENT]: Told by user service to prepare for a connection from {0} {1} {2}, circuit {3}",
-                agentData.firstname, agentData.lastname, agentData.AgentID, agentData.circuitcode);
-
-            if (requestData.ContainsKey("child_agent") && requestData["child_agent"].Equals("1"))
-            {
-                //m_log.Debug("[CLIENT]: Child agent detected");
-                agentData.child = true;
-            }
-            else
-            {
-                //m_log.Debug("[CLIENT]: Main agent detected");
-                agentData.startpos =
-                    new Vector3((float)Convert.ToDecimal((string)requestData["startpos_x"]),
-                                  (float)Convert.ToDecimal((string)requestData["startpos_y"]),
-                                  (float)Convert.ToDecimal((string)requestData["startpos_z"]));
-                agentData.child = false;
-            }
-
             XmlRpcResponse resp = new XmlRpcResponse();
 
-            if (!RegionLoginsEnabled)
+            try
             {
-                m_log.InfoFormat(
-                    "[CLIENT]: Denying access for user {0} {1} because region login is currently disabled",
-                    agentData.firstname, agentData.lastname);
+                ulong regionHandle = 0;
+                Hashtable requestData = (Hashtable)request.Params[0];
+                AgentCircuitData agentData = new AgentCircuitData();
+                if (requestData.ContainsKey("session_id"))
+                    agentData.SessionID = new UUID((string)requestData["session_id"]);
+                if (requestData.ContainsKey("secure_session_id"))
+                    agentData.SecureSessionID = new UUID((string)requestData["secure_session_id"]);
+                if (requestData.ContainsKey("firstname"))
+                    agentData.firstname = (string)requestData["firstname"];
+                if (requestData.ContainsKey("lastname"))
+                    agentData.lastname = (string)requestData["lastname"];
+                if (requestData.ContainsKey("agent_id"))
+                    agentData.AgentID = new UUID((string)requestData["agent_id"]);
+                if (requestData.ContainsKey("circuit_code"))
+                    agentData.circuitcode = Convert.ToUInt32(requestData["circuit_code"]);
+                if (requestData.ContainsKey("caps_path"))
+                    agentData.CapsPath = (string)requestData["caps_path"];
+                if (requestData.ContainsKey("regionhandle"))
+                    regionHandle = Convert.ToUInt64((string)requestData["regionhandle"]);
+                else
+                    m_log.Warn("[CLIENT]: request from login server did not contain regionhandle");
 
-                Hashtable respdata = new Hashtable();
-                respdata["success"] = "FALSE";
-                respdata["reason"] = "region login currently disabled";
-                resp.Value = respdata;
-            }
-            else
-            {
+                // Appearance
+                if (requestData.ContainsKey("appearance"))
+                    agentData.Appearance = new AvatarAppearance((Hashtable)requestData["appearance"]);
+
+                m_log.DebugFormat(
+                    "[CLIENT]: Told by user service to prepare for a connection from {0} {1} {2}, circuit {3}",
+                    agentData.firstname, agentData.lastname, agentData.AgentID, agentData.circuitcode);
+
+                if (requestData.ContainsKey("child_agent") && requestData["child_agent"].Equals("1"))
+                {
+                    //m_log.Debug("[CLIENT]: Child agent detected");
+                    agentData.child = true;
+                }
+                else
+                {
+                    //m_log.Debug("[CLIENT]: Main agent detected");
+                    agentData.startpos =
+                        new Vector3((float)Convert.ToDecimal((string)requestData["startpos_x"], Culture.NumberFormatInfo),
+                                      (float)Convert.ToDecimal((string)requestData["startpos_y"], Culture.NumberFormatInfo),
+                                      (float)Convert.ToDecimal((string)requestData["startpos_z"], Culture.NumberFormatInfo));
+                    agentData.child = false;
+                }
+
                 bool success = false;
                 string denyMess = "";
-        
+
                 Scene scene;
                 if (TryGetRegion(regionHandle, out scene))
                 {
@@ -214,7 +240,7 @@ namespace OpenSim.Client.Linden
                     else
                     {
                         string reason;
-                        if (scene.NewUserConnection(agentData, out reason))
+                        if (scene.NewUserConnection(agentData, (uint)TeleportFlags.ViaLogin, out reason))
                         {
                             success = true;
                         }
@@ -226,7 +252,7 @@ namespace OpenSim.Client.Linden
                                 agentData.firstname, agentData.lastname);
                         }
                     }
-                    
+
                 }
                 else
                 {
@@ -247,6 +273,14 @@ namespace OpenSim.Client.Linden
                     resp.Value = respdata;
                 }
             }
+            catch (Exception e)
+            {
+                m_log.WarnFormat("[CLIENT]: Unable to receive user. Reason: {0} ({1})", e, e.StackTrace);
+                Hashtable respdata = new Hashtable();
+                respdata["success"] = "FALSE";
+                respdata["reason"] = "Exception occurred";
+                resp.Value = respdata;
+            }
 
             return resp;
         }
@@ -257,7 +291,7 @@ namespace OpenSim.Client.Linden
         /// </summary>
         /// <param name="request"></param>
         /// <returns></returns>
-        public XmlRpcResponse LogOffUser(XmlRpcRequest request)
+        public XmlRpcResponse LogOffUser(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             m_log.Debug("[CONNECTION DEBUGGING]: LogOff User Called");
 

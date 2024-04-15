@@ -49,22 +49,19 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 
         public UUID SaveBitmap(Bitmap data, bool lossless, bool temporary)
         {
-            AssetBase asset = new AssetBase();
-            asset.FullID = UUID.Random();
+            AssetBase asset = new AssetBase(UUID.Random(), "MRMDynamicImage", (sbyte)AssetType.Texture);
             asset.Data = OpenJPEG.EncodeFromImage(data, lossless);
-            asset.Name = "MRMDynamicImage";
-            asset.Type = 0;
             asset.Description = "MRM Image";
             asset.Local = false;
             asset.Temporary = temporary;
-            m_scene.CommsManager.AssetCache.AddAsset(asset);
+            m_scene.AssetService.Store(asset);
 
             return asset.FullID;
         }
 
         public Bitmap LoadBitmap(UUID assetID)
         {
-            AssetBase bmp = m_scene.CommsManager.AssetCache.GetAsset(assetID, true);
+            AssetBase bmp = m_scene.AssetService.Get(assetID.ToString());
             ManagedImage outimg;
             Image img;
             OpenJPEG.DecodeToImage(bmp.Data, out outimg, out img);

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -35,7 +35,7 @@ using OpenSim.Region.Framework.Interfaces;
 namespace OpenSim.Region.Framework.Scenes
 {
     #region Delegates
-    public delegate uint GenerateClientFlagsHandler(UUID userID, UUID objectIDID);
+    public delegate uint GenerateClientFlagsHandler(UUID userID, UUID objectID);
     public delegate void SetBypassPermissionsHandler(bool value);
     public delegate bool BypassPermissionsHandler();
     public delegate bool PropagatePermissionsHandler();
@@ -56,6 +56,7 @@ namespace OpenSim.Region.Framework.Scenes
     public delegate bool EditScriptHandler(UUID script, UUID objectID, UUID user, Scene scene);
     public delegate bool EditNotecardHandler(UUID notecard, UUID objectID, UUID user, Scene scene);
     public delegate bool RunScriptHandler(UUID script, UUID objectID, UUID user, Scene scene);
+    public delegate bool CompileScriptHandler(UUID ownerUUID, int scriptType, Scene scene);
     public delegate bool StartScriptHandler(UUID script, UUID user, Scene scene);
     public delegate bool StopScriptHandler(UUID script, UUID user, Scene scene);
     public delegate bool ResetScriptHandler(UUID prim, UUID script, UUID user, Scene scene);
@@ -114,6 +115,7 @@ namespace OpenSim.Region.Framework.Scenes
         public event EditScriptHandler OnEditScript;
         public event EditNotecardHandler OnEditNotecard;
         public event RunScriptHandler OnRunScript;
+        public event CompileScriptHandler OnCompileScript;
         public event StartScriptHandler OnStartScript;
         public event StopScriptHandler OnStopScript;
         public event ResetScriptHandler OnResetScript;
@@ -145,28 +147,28 @@ namespace OpenSim.Region.Framework.Scenes
 
         public uint GenerateClientFlags(UUID userID, UUID objectID)
         {
-            SceneObjectPart part=m_scene.GetSceneObjectPart(objectID);
+            // libomv will moan about PrimFlags.ObjectYouOfficer being
+            // obsolete...
+#pragma warning disable 0612
+            const PrimFlags DEFAULT_FLAGS =
+                PrimFlags.ObjectModify |
+                PrimFlags.ObjectCopy |
+                PrimFlags.ObjectMove |
+                PrimFlags.ObjectTransfer |
+                PrimFlags.ObjectYouOwner |
+                PrimFlags.ObjectAnyOwner |
+                PrimFlags.ObjectOwnerModify |
+                PrimFlags.ObjectYouOfficer;
+#pragma warning restore 0612
+
+            SceneObjectPart part = m_scene.GetSceneObjectPart(objectID);
 
             if (part == null)
                 return 0;
 
-            // libomv will moan about PrimFlags.ObjectYouOfficer being
-            // obsolete...
-            #pragma warning disable 0612
-            uint perms=part.GetEffectiveObjectFlags() |
-                (uint)PrimFlags.ObjectModify |
-                (uint)PrimFlags.ObjectCopy |
-                (uint)PrimFlags.ObjectMove |
-                (uint)PrimFlags.ObjectTransfer |
-                (uint)PrimFlags.ObjectYouOwner |
-                (uint)PrimFlags.ObjectAnyOwner |
-                (uint)PrimFlags.ObjectOwnerModify |
-                (uint)PrimFlags.ObjectYouOfficer;
-            #pragma warning restore 0612
+            uint perms = part.GetEffectiveObjectFlags() | (uint)DEFAULT_FLAGS;
 
-            GenerateClientFlagsHandler handlerGenerateClientFlags =
-                    OnGenerateClientFlags;
-
+            GenerateClientFlagsHandler handlerGenerateClientFlags = OnGenerateClientFlags;
             if (handlerGenerateClientFlags != null)
             {
                 Delegate[] list = handlerGenerateClientFlags.GetInvocationList();
@@ -512,6 +514,24 @@ namespace OpenSim.Region.Framework.Scenes
 
         #endregion
 
+        #region COMPILE SCRIPT (When Script needs to get (re)compiled)
+        public bool CanCompileScript(UUID ownerUUID, int scriptType)
+        {
+            CompileScriptHandler handler = OnCompileScript;
+            if (handler != null)
+            {
+                Delegate[] list = handler.GetInvocationList();
+                foreach (CompileScriptHandler h in list)
+                {
+                    if (h(ownerUUID, scriptType, m_scene) == false)
+                        return false;
+                }
+            }
+            return true;
+        }
+
+        #endregion
+
         #region START SCRIPT (When Script run box is Checked after placed in object)
         public bool CanStartScript(UUID script, UUID user)
         {
@@ -785,7 +805,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// <param name="invType"></param>
         /// <param name="objectID"></param>
         /// <param name="userID"></param>
-        /// <returns></returns>         
+        /// <returns></returns>
         public bool CanCreateObjectInventory(int invType, UUID objectID, UUID userID)
         {
             CreateObjectInventoryHandler handler = OnCreateObjectInventory;
@@ -836,7 +856,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         /// <param name="invType"></param>
         /// <param name="userID"></param>
-        /// <returns></returns>         
+        /// <returns></returns>
         public bool CanCreateUserInventory(int invType, UUID userID)
         {
             CreateUserInventoryHandler handler = OnCreateUserInventory;
@@ -857,7 +877,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         /// <param name="itemID"></param>
         /// <param name="userID"></param>
-        /// <returns></returns>         
+        /// <returns></returns>
         public bool CanEditUserInventory(UUID itemID, UUID userID)
         {
             EditUserInventoryHandler handler = OnEditUserInventory;
@@ -871,14 +891,14 @@ namespace OpenSim.Region.Framework.Scenes
                 }
             }
             return true;
-        }         
+        }
         
         /// <summary>
         /// Check whether the specified user is allowed to copy the given inventory item from their own inventory.
         /// </summary>
         /// <param name="itemID"></param>
         /// <param name="userID"></param>
-        /// <returns></returns>         
+        /// <returns></returns>
         public bool CanCopyUserInventory(UUID itemID, UUID userID)
         {
             CopyUserInventoryHandler handler = OnCopyUserInventory;
@@ -892,14 +912,14 @@ namespace OpenSim.Region.Framework.Scenes
                 }
             }
             return true;
-        }         
+        }
         
         /// <summary>
         /// Check whether the specified user is allowed to edit the given inventory item within their own inventory.
         /// </summary>
         /// <param name="itemID"></param>
         /// <param name="userID"></param>
-        /// <returns></returns>         
+        /// <returns></returns>
         public bool CanDeleteUserInventory(UUID itemID, UUID userID)
         {
             DeleteUserInventoryHandler handler = OnDeleteUserInventory;
@@ -913,7 +933,7 @@ namespace OpenSim.Region.Framework.Scenes
                 }
             }
             return true;
-        }         
+        }
         
         public bool CanTeleport(UUID userID)
         {

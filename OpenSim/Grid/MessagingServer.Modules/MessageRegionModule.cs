@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -39,18 +39,24 @@ using OpenSim.Data;
 using OpenSim.Framework;
 using OpenSim.Grid.Framework;
 using Timer = System.Timers.Timer;
+using OpenSim.Services.Interfaces;
+using OpenSim.Services.Connectors;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
+
 
 namespace OpenSim.Grid.MessagingServer.Modules
 {
     public class MessageRegionModule : IMessageRegionLookup
     {
-        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+//        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private MessageServerConfig m_cfg;
 
         private IInterServiceUserService m_userServerModule;
 
         private IGridServiceCore m_messageCore;
+
+        private IGridService m_GridService;
 
         // a dictionary of all current regions this server knows about
         private Dictionary<ulong, RegionProfileData> m_regionInfoCache = new Dictionary<ulong, RegionProfileData>();
@@ -59,6 +65,8 @@ namespace OpenSim.Grid.MessagingServer.Modules
         {
             m_cfg = config;
             m_messageCore = messageCore;
+
+            m_GridService = new GridServicesConnector(m_cfg.GridServerURL);
         }
 
         public void Initialise()
@@ -134,54 +142,33 @@ namespace OpenSim.Grid.MessagingServer.Modules
         /// <returns></returns>
         public RegionProfileData RequestRegionInfo(ulong regionHandle)
         {
-            RegionProfileData regionProfile = null;
-            try
-            {
-                Hashtable requestData = new Hashtable();
-                requestData["region_handle"] = regionHandle.ToString();
-                requestData["authkey"] = m_cfg.GridSendKey;
+            uint x = 0, y = 0;
+            Utils.LongToUInts(regionHandle, out x, out y);
+            GridRegion region = m_GridService.GetRegionByPosition(UUID.Zero, (int)x, (int)y);
 
-                ArrayList SendParams = new ArrayList();
-                SendParams.Add(requestData);
+            if (region != null)
+                return GridRegionToRegionProfile(region);
 
-                XmlRpcRequest GridReq = new XmlRpcRequest("simulator_data_request", SendParams);
-
-                XmlRpcResponse GridResp = GridReq.Send(m_cfg.GridServerURL, 3000);
-
-                Hashtable responseData = (Hashtable)GridResp.Value;
-
-                if (responseData.ContainsKey("error"))
-                {
-                    m_log.Error("[GRID]: error received from grid server" + responseData["error"]);
-                    return null;
-                }
-
-                uint regX = Convert.ToUInt32((string)responseData["region_locx"]);
-                uint regY = Convert.ToUInt32((string)responseData["region_locy"]);
-                string internalIpStr = (string)responseData["sim_ip"];
-
-                regionProfile = new RegionProfileData();
-                regionProfile.httpPort = (uint)Convert.ToInt32((string)responseData["http_port"]);
-                regionProfile.httpServerURI = "http://" + internalIpStr + ":" + regionProfile.httpPort + "/";
-                regionProfile.regionHandle = Utils.UIntsToLong((regX * Constants.RegionSize), (regY * Constants.RegionSize));
-                regionProfile.regionLocX = regX;
-                regionProfile.regionLocY = regY;
-
-                regionProfile.remotingPort = Convert.ToUInt32((string)responseData["remoting_port"]);
-                regionProfile.UUID = new UUID((string)responseData["region_UUID"]);
-                regionProfile.regionName = (string)responseData["region_name"];
-            }
-            catch (WebException)
-            {
-                m_log.Error("[GRID]: " +
-                            "Region lookup failed for: " + regionHandle.ToString() +
-                            " - Is the GridServer down?");
-            }
-
-            return regionProfile;
+            else
+                return null;
         }
 
-        public XmlRpcResponse RegionStartup(XmlRpcRequest request)
+        private RegionProfileData GridRegionToRegionProfile(GridRegion region)
+        {
+            RegionProfileData rprofile = new RegionProfileData();
+            rprofile.httpPort = region.HttpPort;
+            rprofile.httpServerURI = region.ServerURI;
+            rprofile.regionLocX = (uint)(region.RegionLocX / Constants.RegionSize);
+            rprofile.regionLocY = (uint)(region.RegionLocY / Constants.RegionSize);
+            rprofile.RegionName = region.RegionName;
+            rprofile.ServerHttpPort = region.HttpPort;
+            rprofile.ServerIP = region.ExternalHostName;
+            rprofile.ServerPort = (uint)region.ExternalEndPoint.Port;
+            rprofile.Uuid = region.RegionID;
+            return rprofile;
+        }
+
+        public XmlRpcResponse RegionStartup(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();
@@ -195,7 +182,7 @@ namespace OpenSim.Grid.MessagingServer.Modules
             return response;
         }
 
-        public XmlRpcResponse RegionShutdown(XmlRpcRequest request)
+        public XmlRpcResponse RegionShutdown(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();

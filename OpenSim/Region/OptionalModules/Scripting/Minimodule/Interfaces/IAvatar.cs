@@ -34,6 +34,18 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 {
     public interface IAvatar : IEntity
     {
-        
+
+        bool IsChildAgent { get; }
+
+        //// <value>
+        /// Array of worn attachments, empty but not null, if no attachments are worn
+        /// </value>
+
+        IAvatarAttachment[] Attachments { get; }
+
+        /// <summary>
+        /// Request to open an url clientside
+        /// </summary>
+        void LoadUrl(IObject sender, string message, string url);
     }
 }

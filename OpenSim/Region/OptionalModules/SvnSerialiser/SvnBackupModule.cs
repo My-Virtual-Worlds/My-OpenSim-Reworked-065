@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -45,13 +45,13 @@ namespace OpenSim.Region.Modules.SvnSerialiser
     public class SvnBackupModule : IRegionModule
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        private readonly List<Scene> m_scenes = new List<Scene>();
-        private readonly Timer m_timer = new Timer();
 
-        private bool m_enabled = false;
-        private bool m_installBackupOnLoad = false;
+        private List<Scene> m_scenes;
+        private Timer m_timer;
+        private bool m_enabled;
+        private bool m_installBackupOnLoad;
         private IRegionSerialiserModule m_serialiser;
-        private bool m_svnAutoSave = false;
+        private bool m_svnAutoSave;
         private SvnClient m_svnClient;
         private string m_svndir = "SVNmodule" + Slash.DirectorySeparatorChar + "repo";
         private string m_svnpass = "password";
@@ -117,23 +117,23 @@ namespace OpenSim.Region.Modules.SvnSerialiser
         public void LoadRegion(Scene scene)
         {
             IRegionSerialiserModule serialiser = scene.RequestModuleInterface<IRegionSerialiserModule>();
-            if (serialiser != null)   
+            if (serialiser != null)
             {
                 serialiser.LoadPrimsFromXml2(
                     scene,
-                    m_svndir + Slash.DirectorySeparatorChar + scene.RegionInfo.RegionID 
+                    m_svndir + Slash.DirectorySeparatorChar + scene.RegionInfo.RegionID
                         + Slash.DirectorySeparatorChar + "objects.xml");
-            
+
                 scene.RequestModuleInterface<ITerrainModule>().LoadFromFile(
-                    m_svndir + Slash.DirectorySeparatorChar + scene.RegionInfo.RegionID 
+                    m_svndir + Slash.DirectorySeparatorChar + scene.RegionInfo.RegionID
                         + Slash.DirectorySeparatorChar + "heightmap.r32");
-            
+
                 m_log.Info("[SVNBACKUP]: Region load successful (" + scene.RegionInfo.RegionName + ").");
             }
             else
             {
                 m_log.ErrorFormat(
-                    "[SVNBACKUP]: Region load of {0} failed - no serialisation module available", 
+                    "[SVNBACKUP]: Region load of {0} failed - no serialisation module available",
                     scene.RegionInfo.RegionName);
             }
         }
@@ -204,6 +204,9 @@ namespace OpenSim.Region.Modules.SvnSerialiser
 
         public void Initialise(Scene scene, IConfigSource source)
         {
+            m_scenes = new List<Scene>();
+            m_timer = new Timer();
+
             try
             {
                 if (!source.Configs["SVN"].GetBoolean("Enabled", false))

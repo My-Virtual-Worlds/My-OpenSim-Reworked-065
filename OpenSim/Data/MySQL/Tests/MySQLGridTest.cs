@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -31,6 +31,7 @@ using OpenSim.Data.Tests;
 using log4net;
 using System.Reflection;
 using OpenSim.Tests.Common;
+using MySql.Data.MySqlClient;
 
 namespace OpenSim.Data.MySQL.Tests
 {
@@ -62,11 +63,22 @@ namespace OpenSim.Data.MySQL.Tests
                 m_log.Error("Exception {0}", e);
                 Assert.Ignore();
             }
+
+            // This actually does the roll forward assembly stuff
+            Assembly assem = GetType().Assembly;
+
+            using (MySqlConnection dbcon = new MySqlConnection(connect))
+            {
+                dbcon.Open();
+                Migration m = new Migration(dbcon, assem, "AssetStore");
+                m.Update();
+            }
         }
 
         [TestFixtureTearDown]
         public void Cleanup()
         {
+            m_log.Warn("Cleaning up.");
             if (db != null)
             {
                 db.Dispose();
@@ -74,6 +86,7 @@ namespace OpenSim.Data.MySQL.Tests
             // if a new table is added, it has to be dropped here
             if (database != null)
             {
+                database.ExecuteSql("drop table migrations");
                 database.ExecuteSql("drop table regions");
             }
         }

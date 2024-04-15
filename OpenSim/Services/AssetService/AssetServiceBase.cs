@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -42,18 +42,36 @@ namespace OpenSim.Services.AssetService
 
         public AssetServiceBase(IConfigSource config) : base(config)
         {
+            string dllName = String.Empty;
+            string connString = String.Empty;
+
+            //
+            // Try reading the [AssetService] section first, if it exists
+            //
             IConfig assetConfig = config.Configs["AssetService"];
-            if (assetConfig == null)
-                throw new Exception("No AssetService configuration");
+            if (assetConfig != null)
+            {
+                dllName = assetConfig.GetString("StorageProvider", dllName);
+                connString = assetConfig.GetString("ConnectionString", connString);
+            }
 
-            string dllName = assetConfig.GetString("StorageProvider",
-                    String.Empty);
+            //
+            // Try reading the [DatabaseService] section, if it exists
+            //
+            IConfig dbConfig = config.Configs["DatabaseService"];
+            if (dbConfig != null)
+            {
+                if (dllName == String.Empty)
+                    dllName = dbConfig.GetString("StorageProvider", String.Empty);
+                if (connString == String.Empty)
+                    connString = dbConfig.GetString("ConnectionString", String.Empty);
+            }
 
-            if (dllName == String.Empty)
+            //
+            // We tried, but this doesn't exist. We can't proceed.
+            //
+            if (dllName.Equals(String.Empty))
                 throw new Exception("No StorageProvider configured");
-
-            string connString = assetConfig.GetString("ConnectionString",
-                    String.Empty);
 
             m_Database = LoadPlugin<IAssetDataPlugin>(dllName);
             if (m_Database == null)

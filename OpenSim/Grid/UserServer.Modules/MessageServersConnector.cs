@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -78,8 +78,6 @@ namespace OpenSim.Grid.UserServer.Modules
         private OpenSim.Framework.BlockingQueue<PresenceNotification> m_NotifyQueue =
                 new OpenSim.Framework.BlockingQueue<PresenceNotification>();
 
-        Thread m_NotifyThread;
-
         private IGridServiceCore m_core;
 
         public event AgentLocationDelegate OnAgentLocation;
@@ -96,8 +94,8 @@ namespace OpenSim.Grid.UserServer.Modules
         {
             m_core = core;
             m_core.RegisterInterface<MessageServersConnector>(this);
-            m_NotifyThread = new Thread(new ThreadStart(NotifyQueueRunner));
-            m_NotifyThread.Start();
+
+            Watchdog.StartThread(NotifyQueueRunner, "NotifyQueueRunner", ThreadPriority.Normal, true);
         }
 
         public void PostInitialise()
@@ -166,7 +164,7 @@ namespace OpenSim.Grid.UserServer.Modules
             }
 
         }
-        public XmlRpcResponse XmlRPCRegisterMessageServer(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCRegisterMessageServer(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -187,7 +185,7 @@ namespace OpenSim.Grid.UserServer.Modules
             }
             return response;
         }
-        public XmlRpcResponse XmlRPCDeRegisterMessageServer(XmlRpcRequest request)
+        public XmlRpcResponse XmlRPCDeRegisterMessageServer(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -203,7 +201,8 @@ namespace OpenSim.Grid.UserServer.Modules
             }
             return response;
         }
-        public XmlRpcResponse XmlRPCUserMovedtoRegion(XmlRpcRequest request)
+        
+        public XmlRpcResponse XmlRPCUserMovedtoRegion(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
             Hashtable requestData = (Hashtable)request.Params[0];
@@ -427,10 +426,12 @@ namespace OpenSim.Grid.UserServer.Modules
                 {
                     TellMessageServersAboutUserLogoffInternal(presence.agentID);
                 }
+
+                Watchdog.UpdateThread();
             }
         }
 
-        public XmlRpcResponse RegionStartup(XmlRpcRequest request)
+        public XmlRpcResponse RegionStartup(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();
@@ -449,7 +450,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return response;
         }
 
-        public XmlRpcResponse RegionShutdown(XmlRpcRequest request)
+        public XmlRpcResponse RegionShutdown(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();
@@ -468,7 +469,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return response;
         }
 
-        public XmlRpcResponse AgentLocation(XmlRpcRequest request)
+        public XmlRpcResponse AgentLocation(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();
@@ -489,7 +490,7 @@ namespace OpenSim.Grid.UserServer.Modules
             return response;
         }
 
-        public XmlRpcResponse AgentLeaving(XmlRpcRequest request)
+        public XmlRpcResponse AgentLeaving(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -94,14 +94,24 @@ namespace OpenSim.ApplicationPlugins.LoadRegions
                 regionLoader = new RegionLoaderWebServer();
             }
 
+            m_log.Info("[LOADREGIONSPLUGIN]: Loading region configurations...");
+
             regionLoader.SetIniConfigSource(m_openSim.ConfigSource.Source);
             RegionInfo[] regionsToLoad = regionLoader.LoadRegions();
 
+            m_log.Info("[LOADREGIONSPLUGIN]: Loading specific shared modules...");
+            m_log.Info("[LOADREGIONSPLUGIN]: DynamicTextureModule...");
             m_openSim.ModuleLoader.LoadDefaultSharedModule(new DynamicTextureModule());
+            m_log.Info("[LOADREGIONSPLUGIN]: InstantMessageModule...");
             m_openSim.ModuleLoader.LoadDefaultSharedModule(new InstantMessageModule());
+            m_log.Info("[LOADREGIONSPLUGIN]: LoadImageURLModule...");
             m_openSim.ModuleLoader.LoadDefaultSharedModule(new LoadImageURLModule());
+            m_log.Info("[LOADREGIONSPLUGIN]: XMLRPCModule...");
             m_openSim.ModuleLoader.LoadDefaultSharedModule(new XMLRPCModule());
+            m_log.Info("[LOADREGIONSPLUGIN]: AssetTransactionModule...");
             m_openSim.ModuleLoader.LoadDefaultSharedModule(new AssetTransactionModule());
+            m_log.Info("[LOADREGIONSPLUGIN]: Done.");
+
             if (!CheckRegionsForSanity(regionsToLoad))
             {
                 m_log.Error("[LOADREGIONS]: Halting startup due to conflicts in region configurations");

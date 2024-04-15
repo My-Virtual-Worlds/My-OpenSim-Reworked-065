@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -48,6 +48,10 @@ namespace OpenSim.Region.Communications.OGS1
 
         protected CommunicationsManager m_commsManager;
 
+        public OGS1UserDataPlugin()
+        {
+        }
+
         public OGS1UserDataPlugin(CommunicationsManager commsManager)
         {
             m_log.DebugFormat("[OGS1 USER SERVICES]: {0} initialized", Name);
@@ -77,7 +81,7 @@ namespace OpenSim.Region.Communications.OGS1
         public virtual void AddTemporaryUserProfile(UserProfileData userProfile)
         {
             // Not interested
-        }        
+        }
         
         public UserProfileData GetUserByUri(Uri uri)
         {
@@ -108,7 +112,7 @@ namespace OpenSim.Region.Communications.OGS1
                 parameters.Add(param);
                 XmlRpcRequest req = new XmlRpcRequest("get_agent_by_uuid", parameters);
 
-                XmlRpcResponse resp = req.Send(GetUserServerURL(userId), 6000);
+                XmlRpcResponse resp = req.Send(m_commsManager.NetworkServersInfo.UserURL, 6000);
                 Hashtable respData = (Hashtable)resp.Value;
                 if (respData.Contains("error_type"))
                 {
@@ -603,7 +607,7 @@ namespace OpenSim.Region.Communications.OGS1
                     {
                         if ((string)respData["returnString"] == "TRUE")
                         {
-
+                            m_log.DebugFormat("[OGS1 USER SERVICES]: Updated user appearance in {0}", GetUserServerURL(user));
                         }
                         else
                         {
@@ -622,8 +626,8 @@ namespace OpenSim.Region.Communications.OGS1
             }
             catch (WebException e)
             {
-                m_log.Warn("[OGS1 USER SERVICES]: Error when trying to update Avatar's appearance: " +
-                           e.Message);
+                m_log.WarnFormat("[OGS1 USER SERVICES]: Error when trying to update Avatar's appearance in {0}: {1}",
+                           GetUserServerURL(user), e.Message);
                 // Return Empty list (no friends)
             }
         }
@@ -637,21 +641,26 @@ namespace OpenSim.Region.Communications.OGS1
         {
             if (data.Contains("error_type"))
             {
-                m_log.Warn("[GRID]: " +
-                           "Error sent by user server when trying to get user profile: (" +
-                           data["error_type"] +
-                           "): " + data["error_desc"]);
+                //m_log.Warn("[GRID]: " +
+                //           "Error sent by user server when trying to get user profile: (" +
+                //           data["error_type"] +
+                //           "): " + data["error_desc"]);
                 return null;
             }
 
             UserProfileData userData = new UserProfileData();
             userData.FirstName = (string)data["firstname"];
             userData.SurName = (string)data["lastname"];
+            if (data["email"] != null)
+                userData.Email = (string)data["email"];
             userData.ID = new UUID((string)data["uuid"]);
             userData.Created = Convert.ToInt32(data["profile_created"]);
-            userData.UserInventoryURI = (string)data["server_inventory"];
-            userData.UserAssetURI = (string)data["server_asset"];
-            userData.FirstLifeAboutText = (string)data["profile_firstlife_about"];
+            if (data.Contains("server_inventory") && data["server_inventory"] != null)
+                userData.UserInventoryURI = (string)data["server_inventory"];
+            if (data.Contains("server_asset") && data["server_asset"] != null)
+                userData.UserAssetURI = (string)data["server_asset"];
+            if (data.Contains("profile_firstlife_about") && data["profile_firstlife_about"] != null)
+                userData.FirstLifeAboutText = (string)data["profile_firstlife_about"];
             userData.FirstLifeImage = new UUID((string)data["profile_firstlife_image"]);
             userData.CanDoMask = Convert.ToUInt32((string)data["profile_can_do"]);
             userData.WantDoMask = Convert.ToUInt32(data["profile_want_do"]);
@@ -664,13 +673,13 @@ namespace OpenSim.Region.Communications.OGS1
             else
                 userData.HomeRegionID = UUID.Zero;
             userData.HomeLocation =
-                new Vector3((float)Convert.ToDecimal((string)data["home_coordinates_x"]),
-                              (float)Convert.ToDecimal((string)data["home_coordinates_y"]),
-                              (float)Convert.ToDecimal((string)data["home_coordinates_z"]));
+                new Vector3((float)Convert.ToDecimal((string)data["home_coordinates_x"], Culture.NumberFormatInfo),
+                              (float)Convert.ToDecimal((string)data["home_coordinates_y"], Culture.NumberFormatInfo),
+                              (float)Convert.ToDecimal((string)data["home_coordinates_z"], Culture.NumberFormatInfo));
             userData.HomeLookAt =
-                new Vector3((float)Convert.ToDecimal((string)data["home_look_x"]),
-                              (float)Convert.ToDecimal((string)data["home_look_y"]),
-                              (float)Convert.ToDecimal((string)data["home_look_z"]));
+                new Vector3((float)Convert.ToDecimal((string)data["home_look_x"], Culture.NumberFormatInfo),
+                              (float)Convert.ToDecimal((string)data["home_look_y"], Culture.NumberFormatInfo),
+                              (float)Convert.ToDecimal((string)data["home_look_z"], Culture.NumberFormatInfo));
             if (data.Contains("user_flags"))
                 userData.UserFlags = Convert.ToInt32((string)data["user_flags"]);
             if (data.Contains("god_level"))
@@ -689,7 +698,7 @@ namespace OpenSim.Region.Communications.OGS1
                 userData.Partner = UUID.Zero;
 
             return userData;
-        }            
+        }
 
         protected AvatarAppearance ConvertXMLRPCDataToAvatarAppearance(Hashtable data)
         {
@@ -760,6 +769,6 @@ namespace OpenSim.Region.Communications.OGS1
             }
 
             return buddylist;
-        }        
+        }
     }
 }

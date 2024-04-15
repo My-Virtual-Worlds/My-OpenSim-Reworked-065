@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -53,7 +53,7 @@ namespace OpenSim.Region.Framework.Scenes
     
                                       
     public class RegionStatsHandler : IStreamedRequestHandler
-    {        
+    {
         private string osRXStatsURI = String.Empty;
         private string osXStatsURI = String.Empty;
         //private string osSecret = String.Empty;
@@ -63,7 +63,7 @@ namespace OpenSim.Region.Framework.Scenes
         
         //private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public RegionStatsHandler(OpenSim.Framework.RegionInfo region_info )
+        public RegionStatsHandler(OpenSim.Framework.RegionInfo region_info)
         {
             regionInfo = region_info;
             osRXStatsURI = Util.SHA1Hash(regionInfo.regionSecret);
@@ -73,7 +73,7 @@ namespace OpenSim.Region.Framework.Scenes
                     
         public byte[] Handle(string path, Stream request, OSHttpRequest httpRequest, OSHttpResponse httpResponse)
         {
-            return Encoding.UTF8.GetBytes(Report());
+            return Util.UTF8.GetBytes(Report());
         }
 
         public string ContentType
@@ -87,15 +87,15 @@ namespace OpenSim.Region.Framework.Scenes
         }
 
         public string Path
-        {   
+        {
             // This is for the region and is the regionSecret hashed
             get { return "/" + osRXStatsURI + "/"; }
         }
         
         private string Report()
-        {            
+        {
             OSDMap args = new OSDMap(30);
-            //int time = Util.ToUnixTime( DateTime.Now );
+            //int time = Util.ToUnixTime(DateTime.Now);
             args["OSStatsURI"] = OSD.FromString("http://" + regionInfo.ExternalHostName + ":" + regionInfo.HttpPort + "/" + osXStatsURI + "/");
             args["TimeZoneName"] = OSD.FromString(localZone);
             args["TimeZoneOffs"] = OSD.FromReal(utcOffset.TotalHours);

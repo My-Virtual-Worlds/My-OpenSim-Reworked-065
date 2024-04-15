@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -26,6 +26,7 @@
  */
 
 using System;
+using System.Collections;
 using OpenMetaverse;
 
 namespace OpenSim.Region.Framework.Interfaces
@@ -34,10 +35,12 @@ namespace OpenSim.Region.Framework.Interfaces
     {
         string ScriptEngineName { get; }
 
-        string GetAssemblyName(UUID itemID);
         string GetXMLState(UUID itemID);
+        bool SetXMLState(UUID itemID, string xml);
 
         bool PostScriptEvent(UUID itemID, string name, Object[] args);
         bool PostObjectEvent(UUID itemID, string name, Object[] args);
+
+        ArrayList GetScriptErrors(UUID itemID);
     }
 }

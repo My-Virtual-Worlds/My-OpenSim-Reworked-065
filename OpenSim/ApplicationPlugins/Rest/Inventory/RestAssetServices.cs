@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -190,14 +190,12 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
 
         private void DoGet(AssetRequestData rdata)
         {
-            bool istexture = false;
-
             Rest.Log.DebugFormat("{0} REST Asset handler, Method = <{1}> ENTRY", MsgId, rdata.method);
 
             if (rdata.Parameters.Length == 1)
             {
                 UUID uuid = new UUID(rdata.Parameters[0]);
-                AssetBase asset = Rest.AssetServices.GetAsset(uuid, istexture);
+                AssetBase asset = Rest.AssetServices.Get(uuid.ToString());
 
                 if (asset != null)
                 {
@@ -258,16 +256,13 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
                 }
 
                 UUID uuid = new UUID(rdata.Parameters[0]);
-                asset = Rest.AssetServices.GetAsset(uuid, false);
+                asset = Rest.AssetServices.Get(uuid.ToString());
 
                 modified = (asset != null);
                 created  = !modified;
 
-                asset             = new AssetBase();
-                asset.FullID      = uuid;
-                asset.Name        = xml.GetAttribute("name");
+                asset             = new AssetBase(uuid, xml.GetAttribute("name"), SByte.Parse(xml.GetAttribute("type")));
                 asset.Description = xml.GetAttribute("desc");
-                asset.Type        = SByte.Parse(xml.GetAttribute("type"));
                 asset.Local       = Int32.Parse(xml.GetAttribute("local")) != 0;
                 asset.Temporary   = Int32.Parse(xml.GetAttribute("temporary")) != 0;
                 asset.Data        = Convert.FromBase64String(xml.ReadElementContentAsString("Asset", ""));
@@ -278,7 +273,7 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
                                         MsgId, rdata.Parameters[0], asset.ID);
                 }
 
-                Rest.AssetServices.AddAsset(asset);
+                Rest.AssetServices.Store(asset);
 
             }
             else
@@ -338,21 +333,18 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
             }
 
             UUID uuid = new UUID(xml.GetAttribute("id"));
-            AssetBase asset = Rest.AssetServices.GetAsset(uuid, false);
+            AssetBase asset = Rest.AssetServices.Get(uuid.ToString());
 
             modified = (asset != null);
             created  = !modified;
 
-            asset             = new AssetBase();
-            asset.FullID      = uuid;
-            asset.Name        = xml.GetAttribute("name");
+            asset             = new AssetBase(uuid, xml.GetAttribute("name"), SByte.Parse(xml.GetAttribute("type")));
             asset.Description = xml.GetAttribute("desc");
-            asset.Type        = SByte.Parse(xml.GetAttribute("type"));
             asset.Local       = Int32.Parse(xml.GetAttribute("local")) != 0;
             asset.Temporary   = Int32.Parse(xml.GetAttribute("temporary")) != 0;
             asset.Data        = Convert.FromBase64String(xml.ReadElementContentAsString("Asset", ""));
 
-            Rest.AssetServices.AddAsset(asset);
+            Rest.AssetServices.Store(asset);
 
             if (created)
             {

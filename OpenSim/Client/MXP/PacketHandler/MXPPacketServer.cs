@@ -55,7 +55,7 @@ namespace OpenSim.Client.MXP.PacketHandler
         private readonly Dictionary<UUID, Scene> m_scenes;
         private readonly Transmitter m_transmitter;
 
-        private readonly Thread m_clientThread;
+//        private readonly Thread m_clientThread;
 
         private readonly IList<Session> m_sessions = new List<Session>();
         private readonly IList<Session> m_sessionsToClient = new List<Session>();
@@ -85,11 +85,7 @@ namespace OpenSim.Client.MXP.PacketHandler
 
             m_transmitter = new Transmitter(port);
 
-            m_clientThread = new Thread(StartListener);
-            m_clientThread.Name = "MXPThread";
-            m_clientThread.IsBackground = true;
-            m_clientThread.Start();
-            ThreadTracker.Add(m_clientThread);
+            StartListener();
         }
 
         public void StartListener()
@@ -340,12 +336,6 @@ namespace OpenSim.Client.MXP.PacketHandler
                                 m_clients.Add(client);
                                 m_log.Debug("[MXP ClientStack]: Created ClientView.");
 
-
-                                m_log.Debug("[MXP ClientStack]: Adding ClientView to Scene...");
-                                scene.ClientManager.Add(client.CircuitCode, client);
-                                m_log.Debug("[MXP ClientStack]: Added ClientView to Scene.");
-
-
                                 client.MXPSendSynchronizationBegin(m_scenes[new UUID(joinRequestMessage.BubbleId)].SceneContents.GetTotalObjectsCount());
 
                                 m_log.Debug("[MXP ClientStack]: Starting ClientView...");
@@ -450,11 +440,18 @@ namespace OpenSim.Client.MXP.PacketHandler
 
             joinResponseMessage.RequestMessageId = joinRequestMessage.MessageId;
             joinResponseMessage.FailureCode = MxpResponseCodes.SUCCESS;
-
+            
             joinResponseMessage.BubbleId = joinRequestMessage.BubbleId;
             joinResponseMessage.ParticipantId = userId.Guid;
             joinResponseMessage.AvatarId = userId.Guid;
-            joinResponseMessage.BubbleAssetCacheUrl = "http://"+m_scenes[new UUID(joinRequestMessage.BubbleId)].RegionInfo.ExternalHostName+":"+m_scenes[new UUID(joinRequestMessage.BubbleId)].RegionInfo.HttpPort+"/assets/";
+            joinResponseMessage.BubbleAssetCacheUrl = "http://" +
+                                                      NetworkUtil.GetHostFor(session.RemoteEndPoint.Address,
+                                                                             m_scenes[
+                                                                                 new UUID(joinRequestMessage.BubbleId)].
+                                                                                 RegionInfo.
+                                                                                 ExternalHostName) + ":" +
+                                                      m_scenes[new UUID(joinRequestMessage.BubbleId)].RegionInfo.
+                                                          HttpPort + "/assets/";
 
             joinResponseMessage.BubbleName = m_scenes[new UUID(joinRequestMessage.BubbleId)].RegionInfo.RegionName;
 
@@ -533,8 +530,8 @@ namespace OpenSim.Client.MXP.PacketHandler
                 password = password.Remove(0, 3); //remove $1$
                 string s = Util.Md5Hash(password + ":" + userProfile.PasswordSalt);
                 return (userProfile.PasswordHash.Equals(s.ToString(), StringComparison.InvariantCultureIgnoreCase)
-                                   || userProfile.PasswordHash.Equals(password, StringComparison.InvariantCultureIgnoreCase));
-            }
+                                   || userProfile.PasswordHash.Equals(password, StringComparison.InvariantCulture));
+                }
             else
             {
                 return true;
@@ -612,7 +609,7 @@ namespace OpenSim.Client.MXP.PacketHandler
                 agent.Appearance = new AvatarAppearance();
             }
             
-            return scene.NewUserConnection(agent, out reason);
+            return scene.NewUserConnection(agent, 0, out reason);
         }
 
         public void PrintDebugInformation()

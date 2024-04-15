@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -37,7 +37,7 @@ using OpenSim.Region.Framework.Scenes;
 
 namespace OpenSim.Region.CoreModules.Avatar.Chat
 {
-    public class ChatModule : IRegionModule
+    public class ChatModule : ISharedRegionModule
     {
         private static readonly ILog m_log =
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
@@ -50,27 +50,39 @@ namespace OpenSim.Region.CoreModules.Avatar.Chat
         private int m_whisperdistance = 10;
         private List<Scene> m_scenes = new List<Scene>();
 
-        internal object m_syncInit = new object();
+        internal object m_syncy = new object();
 
-        #region IRegionModule Members
-        public virtual void Initialise(Scene scene, IConfigSource config)
+        internal IConfig m_config;
+
+        #region ISharedRegionModule Members
+        public virtual void Initialise(IConfigSource config)
         {
-            // wrap this in a try block so that defaults will work if
-            // the config file doesn't specify otherwise.
-            try
-            {
-                m_enabled = config.Configs["Chat"].GetBoolean("enabled", m_enabled);
-                if (!m_enabled) return;
+            m_config = config.Configs["Chat"];
 
-                m_whisperdistance = config.Configs["Chat"].GetInt("whisper_distance", m_whisperdistance);
-                m_saydistance = config.Configs["Chat"].GetInt("say_distance", m_saydistance);
-                m_shoutdistance = config.Configs["Chat"].GetInt("shout_distance", m_shoutdistance);
-            }
-            catch (Exception)
+            if (null == m_config)
             {
+                m_log.Info("[CHAT]: no config found, plugin disabled");
+                m_enabled = false;
+                return;
             }
 
-            lock (m_syncInit)
+            if (!m_config.GetBoolean("enabled", true))
+            {
+                m_log.Info("[CHAT]: plugin disabled by configuration");
+                m_enabled = false;
+                return;
+            }
+
+            m_whisperdistance = config.Configs["Chat"].GetInt("whisper_distance", m_whisperdistance);
+            m_saydistance = config.Configs["Chat"].GetInt("say_distance", m_saydistance);
+            m_shoutdistance = config.Configs["Chat"].GetInt("shout_distance", m_shoutdistance);
+        }
+
+        public virtual void AddRegion(Scene scene)
+        {
+            if (!m_enabled) return;
+
+            lock (m_syncy)
             {
                 if (!m_scenes.Contains(scene))
                 {
@@ -84,23 +96,43 @@ namespace OpenSim.Region.CoreModules.Avatar.Chat
             m_log.InfoFormat("[CHAT]: Initialized for {0} w:{1} s:{2} S:{3}", scene.RegionInfo.RegionName,
                              m_whisperdistance, m_saydistance, m_shoutdistance);
         }
+
+        public virtual void RegionLoaded(Scene scene)
+        {
+        }
+
+        public virtual void RemoveRegion(Scene scene)
+        {
+            if (!m_enabled) return;
+
+            lock (m_syncy)
+            {
+                if (m_scenes.Contains(scene))
+                {
+                    scene.EventManager.OnNewClient -= OnNewClient;
+                    scene.EventManager.OnChatFromWorld -= OnChatFromWorld;
+                    scene.EventManager.OnChatBroadcast -= OnChatBroadcast;
+                    m_scenes.Remove(scene);
+                }
+            }
+        }
         
+        public virtual void Close()
+        {
+        }
+
         public virtual void PostInitialise()
         {
         }
 
-        public virtual void Close()
+        public Type ReplaceableInterface 
         {
+            get { return null; }
         }
 
         public virtual string Name
         {
             get { return "ChatModule"; }
-        }
-
-        public virtual bool IsSharedModule
-        {
-            get { return true; }
         }
 
         #endregion
@@ -192,11 +224,12 @@ namespace OpenSim.Region.CoreModules.Avatar.Chat
 
             foreach (Scene s in m_scenes)
             {
-                s.ForEachScenePresence(delegate(ScenePresence presence) 
-                                       {
-                                           TrySendChatMessage(presence, fromPos, regionPos, fromID, fromName, 
-                                                              c.Type, message, sourceType);
-                                       });
+                s.ForEachScenePresence(
+                    delegate(ScenePresence presence)
+                    {
+                        TrySendChatMessage(presence, fromPos, regionPos, fromID, fromName, c.Type, message, sourceType);
+                    }
+                );
             }
         }
 
@@ -230,6 +263,10 @@ namespace OpenSim.Region.CoreModules.Avatar.Chat
                 fromID = c.Sender.AgentId;
                 fromName = avatar.Name;
                 sourceType = ChatSourceType.Agent;
+            }
+            else if (c.SenderUUID != UUID.Zero) 
+            {
+                fromID = c.SenderUUID; 
             }
             
             // m_log.DebugFormat("[CHAT] Broadcast: fromID {0} fromName {1}, cType {2}, sType {3}", fromID, fromName, cType, sourceType);
@@ -267,8 +304,8 @@ namespace OpenSim.Region.CoreModules.Avatar.Chat
                 new Vector3(presence.Scene.RegionInfo.RegionLocX * Constants.RegionSize,
                             presence.Scene.RegionInfo.RegionLocY * Constants.RegionSize, 0);
 
-            int dis = Math.Abs((int) Util.GetDistanceTo(toRegionPos, fromRegionPos));
-
+            int dis = (int)Util.GetDistanceTo(toRegionPos, fromRegionPos);
+            
             if (type == ChatTypeEnum.Whisper && dis > m_whisperdistance ||
                 type == ChatTypeEnum.Say && dis > m_saydistance ||
                 type == ChatTypeEnum.Shout && dis > m_shoutdistance)

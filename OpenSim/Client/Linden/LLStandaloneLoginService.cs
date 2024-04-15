@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -38,10 +38,11 @@ using OpenSim.Framework;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Communications.Services;
 using OpenSim.Framework.Communications.Cache;
-using OpenSim.Framework.Communications.Capabilities;
+using OpenSim.Framework.Capabilities;
 using OpenSim.Framework.Servers;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Region.Framework.Interfaces;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Client.Linden
 {
@@ -59,7 +60,7 @@ namespace OpenSim.Client.Linden
 
         public LLStandaloneLoginService(
             UserManagerBase userManager, string welcomeMess,
-            IInterServiceInventoryServices interServiceInventoryService,
+            IInventoryService interServiceInventoryService,
             NetworkServersInfo serversInfo,
             bool authenticate, LibraryRootFolder libraryRootFolder, ILoginServiceToRegionsConnector regionsConnector)
             : base(userManager, libraryRootFolder, welcomeMess)
@@ -69,8 +70,10 @@ namespace OpenSim.Client.Linden
             m_defaultHomeY = this.m_serversInfo.DefaultHomeLocY;
             m_authUsers = authenticate;
 
-            m_inventoryService = interServiceInventoryService;
+            m_InventoryService = interServiceInventoryService;
             m_regionsConnector = regionsConnector;
+            // Standard behavior: In StandAlone, silent logout of last hung session
+            m_warn_already_logged = false;
         }
 
         public override UserProfileData GetTheUser(string firstname, string lastname)
@@ -116,7 +119,7 @@ namespace OpenSim.Client.Linden
                 string s = Util.Md5Hash(password + ":" + profile.PasswordSalt);
 
                 bool loginresult = (profile.PasswordHash.Equals(s.ToString(), StringComparison.InvariantCultureIgnoreCase)
-                            || profile.PasswordHash.Equals(password, StringComparison.InvariantCultureIgnoreCase));
+                            || profile.PasswordHash.Equals(password, StringComparison.InvariantCulture));
                 return loginresult;
             }
         }
@@ -136,15 +139,8 @@ namespace OpenSim.Client.Linden
             return m_regionsConnector.RequestNeighbourInfo(homeRegionId);
         }
 
-        /// <summary>
-        /// Prepare a login to the given region.  This involves both telling the region to expect a connection
-        /// and appropriately customising the response to the user.
-        /// </summary>
-        /// <param name="sim"></param>
-        /// <param name="user"></param>
-        /// <param name="response"></param>
-        /// <returns>true if the region was successfully contacted, false otherwise</returns>
-        protected override bool PrepareLoginToRegion(RegionInfo regionInfo, UserProfileData user, LoginResponse response)
+        protected override bool PrepareLoginToRegion(
+            RegionInfo regionInfo, UserProfileData user, LoginResponse response, IPEndPoint remoteClient)
         {
             IPEndPoint endPoint = regionInfo.ExternalEndPoint;
             response.SimAddress = endPoint.Address.ToString();
@@ -163,11 +159,17 @@ namespace OpenSim.Client.Linden
 
             if (m_serversInfo.HttpUsesSSL)
             {
-                seedcap = "https://" + m_serversInfo.HttpSSLCN + ":" + m_serversInfo.httpSSLPort + capsSeedPath;
+                // For NAT
+                string host = NetworkUtil.GetHostFor(remoteClient.Address, m_serversInfo.HttpSSLCN);
+
+                seedcap = "https://" + host + ":" + m_serversInfo.httpSSLPort + capsSeedPath;
             }
             else
             {
-                seedcap = "http://" + regionInfo.ExternalHostName + ":" + m_serversInfo.HttpListenerPort + capsSeedPath;
+                // For NAT
+                string host = NetworkUtil.GetHostFor(remoteClient.Address, regionInfo.ExternalHostName);
+
+                seedcap = "http://" + host + ":" + m_serversInfo.HttpListenerPort + capsSeedPath;
             }
 
             response.SeedCapability = seedcap;
@@ -195,24 +197,20 @@ namespace OpenSim.Client.Linden
             agent.Appearance = m_userManager.GetUserAppearance(user.ID);
             if (agent.Appearance == null)
             {
-                m_log.WarnFormat("[INTER]: Appearance not found for {0} {1}. Creating default.", agent.firstname, agent.lastname);
+                m_log.WarnFormat(
+                    "[INTER]: Appearance not found for {0} {1}. Creating default.", agent.firstname, agent.lastname);
                 agent.Appearance = new AvatarAppearance(agent.AgentID);
             }
 
-            if (m_regionsConnector.RegionLoginsEnabled)
+            string reason;
+            bool success = m_regionsConnector.NewUserConnection(regionInfo.RegionHandle, agent, out reason);
+            if (!success)
             {
-                string reason;
-                bool success = m_regionsConnector.NewUserConnection(regionInfo.RegionHandle, agent, out reason);
-                if (!success)
-                {
-                    response.ErrorReason = "key";
-                    response.ErrorMessage = reason;
-                }
-                return success;
-                // return m_regionsConnector.NewUserConnection(regionInfo.RegionHandle, agent, out reason);
+                response.ErrorReason = "key";
+                response.ErrorMessage = reason;
             }
-
-            return false;
+            return success;
+            // return m_regionsConnector.NewUserConnection(regionInfo.RegionHandle, agent, out reason);
         }
 
         public override void LogOffUser(UserProfileData theUser, string message)
@@ -234,7 +232,8 @@ namespace OpenSim.Client.Linden
                 return;
             }
 
-            m_regionsConnector.LogOffUserFromGrid(SimInfo.RegionHandle, theUser.ID, theUser.CurrentAgent.SecureSessionID, "Logging you off");
+            m_regionsConnector.LogOffUserFromGrid(
+                SimInfo.RegionHandle, theUser.ID, theUser.CurrentAgent.SecureSessionID, "Logging you off");
         }
     }
 }

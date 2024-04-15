@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -31,12 +31,12 @@ using System.Collections.Generic;
 using OpenSim.Framework;
 using OpenSim.Region.Physics.Manager;
 using OpenMetaverse;
-using OpenMetaverse.Imaging;
 using System.Drawing;
 using System.Drawing.Imaging;
 using PrimMesher;
 using log4net;
 using System.Reflection;
+using System.IO;
 
 namespace OpenSim.Region.Physics.Meshing
 {
@@ -60,7 +60,6 @@ namespace OpenSim.Region.Physics.Meshing
     public class Meshmerizer : IMesher
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        //private static readonly log4net.ILog m_log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
         // Setting baseDir to a path will enable the dumping of raw files
         // raw files can be imported by blender so a visual inspection of the results can be done
@@ -70,8 +69,26 @@ namespace OpenSim.Region.Physics.Meshing
         private const string baseDir = null; //"rawFiles";
 #endif
 
+        private bool cacheSculptMaps = true;
+        private string decodedScultMapPath = "j2kDecodeCache";
+
         private float minSizeForComplexMesh = 0.2f; // prims with all dimensions smaller than this will have a bounding box mesh
 
+        private Dictionary<ulong, Mesh> m_uniqueMeshes = new Dictionary<ulong, Mesh>();
+
+        public Meshmerizer()
+        {
+            try
+            {
+                if (!Directory.Exists(decodedScultMapPath))
+                    Directory.CreateDirectory(decodedScultMapPath);
+            }
+            catch (Exception e)
+            {
+                m_log.WarnFormat("[SCULPT]: Unable to create {0} directory: ", decodedScultMapPath, e.Message);
+            }
+
+        }
 
         /// <summary>
         /// creates a simple box mesh of the specified size. This mesh is of very low vertex count and may
@@ -88,40 +105,40 @@ namespace OpenSim.Region.Physics.Meshing
         private static Mesh CreateSimpleBoxMesh(float minX, float maxX, float minY, float maxY, float minZ, float maxZ)
         {
             Mesh box = new Mesh();
-
+            List<Vertex> vertices = new List<Vertex>();
             // bottom
 
-            box.Add(new Vertex(minX, maxY, minZ));
-            box.Add(new Vertex(maxX, maxY, minZ));
-            box.Add(new Vertex(maxX, minY, minZ));
-            box.Add(new Vertex(minX, minY, minZ));
+            vertices.Add(new Vertex(minX, maxY, minZ));
+            vertices.Add(new Vertex(maxX, maxY, minZ));
+            vertices.Add(new Vertex(maxX, minY, minZ));
+            vertices.Add(new Vertex(minX, minY, minZ));
 
-            box.Add(new Triangle(box.vertices[0], box.vertices[1], box.vertices[2]));
-            box.Add(new Triangle(box.vertices[0], box.vertices[2], box.vertices[3]));
+            box.Add(new Triangle(vertices[0], vertices[1], vertices[2]));
+            box.Add(new Triangle(vertices[0], vertices[2], vertices[3]));
 
             // top
 
-            box.Add(new Vertex(maxX, maxY, maxZ));
-            box.Add(new Vertex(minX, maxY, maxZ));
-            box.Add(new Vertex(minX, minY, maxZ));
-            box.Add(new Vertex(maxX, minY, maxZ));
+            vertices.Add(new Vertex(maxX, maxY, maxZ));
+            vertices.Add(new Vertex(minX, maxY, maxZ));
+            vertices.Add(new Vertex(minX, minY, maxZ));
+            vertices.Add(new Vertex(maxX, minY, maxZ));
 
-            box.Add(new Triangle(box.vertices[4], box.vertices[5], box.vertices[6]));
-            box.Add(new Triangle(box.vertices[4], box.vertices[6], box.vertices[7]));
+            box.Add(new Triangle(vertices[4], vertices[5], vertices[6]));
+            box.Add(new Triangle(vertices[4], vertices[6], vertices[7]));
 
             // sides
 
-            box.Add(new Triangle(box.vertices[5], box.vertices[0], box.vertices[3]));
-            box.Add(new Triangle(box.vertices[5], box.vertices[3], box.vertices[6]));
+            box.Add(new Triangle(vertices[5], vertices[0], vertices[3]));
+            box.Add(new Triangle(vertices[5], vertices[3], vertices[6]));
 
-            box.Add(new Triangle(box.vertices[1], box.vertices[0], box.vertices[5]));
-            box.Add(new Triangle(box.vertices[1], box.vertices[5], box.vertices[4]));
+            box.Add(new Triangle(vertices[1], vertices[0], vertices[5]));
+            box.Add(new Triangle(vertices[1], vertices[5], vertices[4]));
 
-            box.Add(new Triangle(box.vertices[7], box.vertices[1], box.vertices[4]));
-            box.Add(new Triangle(box.vertices[7], box.vertices[2], box.vertices[1]));
+            box.Add(new Triangle(vertices[7], vertices[1], vertices[4]));
+            box.Add(new Triangle(vertices[7], vertices[2], vertices[1]));
 
-            box.Add(new Triangle(box.vertices[3], box.vertices[2], box.vertices[7]));
-            box.Add(new Triangle(box.vertices[3], box.vertices[7], box.vertices[6]));
+            box.Add(new Triangle(vertices[3], vertices[2], vertices[7]));
+            box.Add(new Triangle(vertices[3], vertices[7], vertices[6]));
 
             return box;
         }
@@ -141,7 +158,7 @@ namespace OpenSim.Region.Physics.Meshing
             float minZ = float.MaxValue;
             float maxZ = float.MinValue;
 
-            foreach (Vertex v in meshIn.vertices)
+            foreach (Vector3 v in meshIn.getVertexList())
             {
                 if (v != null)
                 {
@@ -166,9 +183,70 @@ namespace OpenSim.Region.Physics.Meshing
 
         }
 
-        public Mesh CreateMeshFromPrimMesher(string primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod)
+        private ulong GetMeshKey(PrimitiveBaseShape pbs, Vector3 size, float lod)
         {
-            Mesh mesh = new Mesh();
+            ulong hash = 5381;
+
+            hash = djb2(hash, pbs.PathCurve);
+            hash = djb2(hash, (byte)((byte)pbs.HollowShape | (byte)pbs.ProfileShape));
+            hash = djb2(hash, pbs.PathBegin);
+            hash = djb2(hash, pbs.PathEnd);
+            hash = djb2(hash, pbs.PathScaleX);
+            hash = djb2(hash, pbs.PathScaleY);
+            hash = djb2(hash, pbs.PathShearX);
+            hash = djb2(hash, pbs.PathShearY);
+            hash = djb2(hash, (byte)pbs.PathTwist);
+            hash = djb2(hash, (byte)pbs.PathTwistBegin);
+            hash = djb2(hash, (byte)pbs.PathRadiusOffset);
+            hash = djb2(hash, (byte)pbs.PathTaperX);
+            hash = djb2(hash, (byte)pbs.PathTaperY);
+            hash = djb2(hash, pbs.PathRevolutions);
+            hash = djb2(hash, (byte)pbs.PathSkew);
+            hash = djb2(hash, pbs.ProfileBegin);
+            hash = djb2(hash, pbs.ProfileEnd);
+            hash = djb2(hash, pbs.ProfileHollow);
+
+            // TODO: Separate scale out from the primitive shape data (after
+            // scaling is supported at the physics engine level)
+            byte[] scaleBytes = size.GetBytes();
+            for (int i = 0; i < scaleBytes.Length; i++)
+                hash = djb2(hash, scaleBytes[i]);
+
+            // Include LOD in hash, accounting for endianness
+            byte[] lodBytes = new byte[4];
+            Buffer.BlockCopy(BitConverter.GetBytes(lod), 0, lodBytes, 0, 4);
+            if (!BitConverter.IsLittleEndian)
+            {
+                Array.Reverse(lodBytes, 0, 4);
+            }
+            for (int i = 0; i < lodBytes.Length; i++)
+                hash = djb2(hash, lodBytes[i]);
+
+            // include sculpt UUID
+            if (pbs.SculptEntry)
+            {
+                scaleBytes = pbs.SculptTexture.GetBytes();
+                for (int i = 0; i < scaleBytes.Length; i++)
+                    hash = djb2(hash, scaleBytes[i]);
+            }
+
+            return hash;
+        }
+
+        private ulong djb2(ulong hash, byte c)
+        {
+            return ((hash << 5) + hash) + (ulong)c;
+        }
+
+        private ulong djb2(ulong hash, ushort c)
+        {
+            hash = ((hash << 5) + hash) + (ulong)((byte)c);
+            return ((hash << 5) + hash) + (ulong)(c >> 8);
+        }
+
+
+        private Mesh CreateMeshFromPrimMesher(string primName, PrimitiveBaseShape primShape, Vector3 size, float lod)
+        {
             PrimMesh primMesh;
             PrimMesher.SculptMesh sculptMesh;
 
@@ -176,32 +254,63 @@ namespace OpenSim.Region.Physics.Meshing
             List<Face> faces;
 
             Image idata = null;
+            string decodedSculptFileName = "";
 
             if (primShape.SculptEntry)
             {
-                if (primShape.SculptData.Length == 0)
-                    return null;
+                if (cacheSculptMaps && primShape.SculptTexture != UUID.Zero)
+                {
+                    decodedSculptFileName = System.IO.Path.Combine(decodedScultMapPath, "smap_" + primShape.SculptTexture.ToString());
+                    try
+                    {
+                        if (File.Exists(decodedSculptFileName))
+                        {
+                            idata = Image.FromFile(decodedSculptFileName);
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        m_log.Error("[SCULPT]: unable to load cached sculpt map " + decodedSculptFileName + " " + e.Message);
 
-                try
-                {
-                    ManagedImage managedImage;  // we never use this
-                    OpenJPEG.DecodeToImage(primShape.SculptData, out managedImage, out idata);
-                    
+                    }
+                    //if (idata != null)
+                    //    m_log.Debug("[SCULPT]: loaded cached map asset for map ID: " + primShape.SculptTexture.ToString());
                 }
-                catch (DllNotFoundException)
+
+                if (idata == null)
                 {
-                    m_log.Error("[PHYSICS]: OpenJpeg is not installed correctly on this system. Physics Proxy generation failed.  Often times this is because of an old version of GLIBC.  You must have version 2.4 or above!");
-                    return null;
-                }
-                catch (IndexOutOfRangeException)
-                {
-                    m_log.Error("[PHYSICS]: OpenJpeg was unable to decode this.   Physics Proxy generation failed");
-                    return null;
-                }
-                catch (Exception)
-                {
-                    m_log.Error("[PHYSICS]: Unable to generate a Sculpty physics proxy.  Sculpty texture decode failed!");
-                    return null;
+                    if (primShape.SculptData == null || primShape.SculptData.Length == 0)
+                        return null;
+
+                    try
+                    {
+                        OpenMetaverse.Imaging.ManagedImage unusedData;
+                        OpenMetaverse.Imaging.OpenJPEG.DecodeToImage(primShape.SculptData, out unusedData, out idata);
+                        unusedData = null;
+
+                        //idata = CSJ2K.J2kImage.FromBytes(primShape.SculptData);
+
+                        if (cacheSculptMaps && idata != null)
+                        {
+                            try { idata.Save(decodedSculptFileName, ImageFormat.MemoryBmp); }
+                            catch (Exception e) { m_log.Error("[SCULPT]: unable to cache sculpt map " + decodedSculptFileName + " " + e.Message); }
+                        }
+                    }
+                    catch (DllNotFoundException)
+                    {
+                        m_log.Error("[PHYSICS]: OpenJpeg is not installed correctly on this system. Physics Proxy generation failed.  Often times this is because of an old version of GLIBC.  You must have version 2.4 or above!");
+                        return null;
+                    }
+                    catch (IndexOutOfRangeException)
+                    {
+                        m_log.Error("[PHYSICS]: OpenJpeg was unable to decode this. Physics Proxy generation failed");
+                        return null;
+                    }
+                    catch (Exception ex)
+                    {
+                        m_log.Error("[PHYSICS]: Unable to generate a Sculpty physics proxy. Sculpty texture decode failed: " + ex.Message);
+                        return null;
+                    }
                 }
 
                 PrimMesher.SculptMesh.SculptType sculptType;
@@ -228,7 +337,7 @@ namespace OpenSim.Region.Physics.Meshing
                 bool invert = ((primShape.SculptType & 64) != 0);
 
                 sculptMesh = new PrimMesher.SculptMesh((Bitmap)idata, sculptType, (int)lod, false, mirror, invert);
-
+                
                 idata.Dispose();
 
                 sculptMesh.DumpRaw(baseDir, primName, "primMesh");
@@ -238,7 +347,6 @@ namespace OpenSim.Region.Physics.Meshing
                 coords = sculptMesh.coords;
                 faces = sculptMesh.faces;
             }
-
             else
             {
                 float pathShearX = primShape.PathShearX < 128 ? (float)primShape.PathShearX * 0.01f : (float)(primShape.PathShearX - 256) * 0.01f;
@@ -287,7 +395,7 @@ namespace OpenSim.Region.Physics.Meshing
                 primMesh.pathCutBegin = pathBegin;
                 primMesh.pathCutEnd = pathEnd;
 
-                if (primShape.PathCurve == (byte)Extrusion.Straight)
+                if (primShape.PathCurve == (byte)Extrusion.Straight || primShape.PathCurve == (byte) Extrusion.Flexible)
                 {
                     primMesh.twistBegin = primShape.PathTwistBegin * 18 / 10;
                     primMesh.twistEnd = primShape.PathTwist * 18 / 10;
@@ -351,37 +459,48 @@ namespace OpenSim.Region.Physics.Meshing
 
                 coords = primMesh.coords;
                 faces = primMesh.faces;
-
             }
 
+            // Remove the reference to any JPEG2000 sculpt data so it can be GCed
+            primShape.SculptData = Utils.EmptyBytes;
 
             int numCoords = coords.Count;
             int numFaces = faces.Count;
 
+            // Create the list of vertices
+            List<Vertex> vertices = new List<Vertex>();
             for (int i = 0; i < numCoords; i++)
             {
                 Coord c = coords[i];
-                mesh.vertices.Add(new Vertex(c.X, c.Y, c.Z));
+                vertices.Add(new Vertex(c.X, c.Y, c.Z));
             }
 
-            List<Vertex> vertices = mesh.vertices;
+            Mesh mesh = new Mesh();
+            // Add the corresponding triangles to the mesh
             for (int i = 0; i < numFaces; i++)
             {
                 Face f = faces[i];
-                mesh.triangles.Add(new Triangle(vertices[f.v1], vertices[f.v2], vertices[f.v3]));
+                mesh.Add(new Triangle(vertices[f.v1], vertices[f.v2], vertices[f.v3]));
             }
-
             return mesh;
         }
 
-        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod)
+        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, Vector3 size, float lod)
         {
             return CreateMesh(primName, primShape, size, lod, false);
         }
 
-        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod, bool isPhysical)
+        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, Vector3 size, float lod, bool isPhysical)
         {
             Mesh mesh = null;
+            ulong key = 0;
+
+            // If this mesh has been created already, return it instead of creating another copy
+            // For large regions with 100k+ prims and hundreds of copies of each, this can save a GB or more of memory
+
+            key = GetMeshKey(primShape, size, lod);
+            if (m_uniqueMeshes.TryGetValue(key, out mesh))
+                return mesh;
 
             if (size.X < 0.01f) size.X = 0.01f;
             if (size.Y < 0.01f) size.Y = 0.01f;
@@ -395,20 +514,19 @@ namespace OpenSim.Region.Physics.Meshing
                 {
 #if SPAM
                 m_log.Debug("Meshmerizer: prim " + primName + " has a size of " + size.ToString() + " which is below threshold of " + 
-
-minSizeForComplexMesh.ToString() + " - creating simple bounding box" );
+                            minSizeForComplexMesh.ToString() + " - creating simple bounding box");
 #endif
                     mesh = CreateBoundingBoxMesh(mesh);
                     mesh.DumpRaw(baseDir, primName, "Z extruded");
                 }
 
                 // trim the vertex and triangle lists to free up memory
-                mesh.vertices.TrimExcess();
-                mesh.triangles.TrimExcess();
+                mesh.TrimExcess();
+
+                m_uniqueMeshes.Add(key, mesh);
             }
 
             return mesh;
         }
-
     }
 }

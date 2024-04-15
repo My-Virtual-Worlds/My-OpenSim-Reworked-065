@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -114,7 +114,10 @@ namespace OpenSim.Framework
         /// </summary>
         private uint m_profileWantDoMask; // Profile window "I want to" mask
 
-        private UUID m_rootInventoryFolderId;
+        /// <summary>
+        /// The profile url for an avatar
+        /// </summary>
+        private string m_profileUrl;
 
         /// <summary>
         /// The second component of a users account name
@@ -212,7 +215,7 @@ namespace OpenSim.Framework
         public string Name
         {
             get { return String.Format("{0} {1}", m_firstname, m_surname); }
-        }        
+        }
 
         public string Email
         {
@@ -307,12 +310,6 @@ namespace OpenSim.Framework
             set { m_lastLogin = value; }
         }
 
-        public UUID RootInventoryFolderID
-        {
-            get { return m_rootInventoryFolderId; }
-            set { m_rootInventoryFolderId = value; }
-        }
-
         public string UserInventoryURI
         {
             get { return m_userInventoryUri; }
@@ -347,6 +344,12 @@ namespace OpenSim.Framework
         {
             get { return m_profileFirstText; }
             set { m_profileFirstText = value; }
+        }
+
+        public string ProfileUrl
+        {
+            get { return m_profileUrl; }
+            set { m_profileUrl = value; }
         }
 
         public UUID Image

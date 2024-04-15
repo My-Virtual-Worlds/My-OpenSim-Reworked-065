@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -35,6 +35,8 @@ using OpenMetaverse;
 namespace OpenSim.Region.Physics.Manager
 {
     public delegate void physicsCrash();
+
+    public delegate void RaycastCallback(bool hitYN, Vector3 collisionPoint, uint localid, float distance, Vector3 normal);
 
     public abstract class PhysicsScene
     {
@@ -62,23 +64,28 @@ namespace OpenSim.Region.Physics.Manager
 
         public abstract void Initialise(IMesher meshmerizer, IConfigSource config);
 
-        public abstract PhysicsActor AddAvatar(string avName, PhysicsVector position, PhysicsVector size, bool isFlying);
+        public abstract PhysicsActor AddAvatar(string avName, Vector3 position, Vector3 size, bool isFlying);
 
         public abstract void RemoveAvatar(PhysicsActor actor);
 
         public abstract void RemovePrim(PhysicsActor prim);
 
-        public abstract PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                  PhysicsVector size, Quaternion rotation); //To be removed
-        public abstract PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                  PhysicsVector size, Quaternion rotation, bool isPhysical);
+        public abstract PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                  Vector3 size, Quaternion rotation); //To be removed
+        public abstract PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                  Vector3 size, Quaternion rotation, bool isPhysical);
+
+        public virtual float TimeDilation
+        {
+            get { return 1.0f; }
+        }
 
         public virtual bool SupportsNINJAJoints
         {
             get { return false; }
         }
 
-        public virtual PhysicsJoint RequestJointCreation(string objectNameInScene, PhysicsJointType jointType, PhysicsVector position,
+        public virtual PhysicsJoint RequestJointCreation(string objectNameInScene, PhysicsJointType jointType, Vector3 position,
                                             Quaternion rotation, string parms, List<string> bodyNames, string trackedBodyName, Quaternion localRotation)
         { return null; }
 
@@ -127,11 +134,11 @@ namespace OpenSim.Region.Physics.Manager
             }
         }
 
-        public virtual PhysicsVector GetJointAnchor(PhysicsJoint joint)
-        { return null; }
+        public virtual Vector3 GetJointAnchor(PhysicsJoint joint)
+        { return Vector3.Zero; }
 
-        public virtual PhysicsVector GetJointAxis(PhysicsJoint joint)
-        { return null; }
+        public virtual Vector3 GetJointAxis(PhysicsJoint joint)
+        { return Vector3.Zero; }
 
 
         public abstract void AddPhysicsActorTaint(PhysicsActor prim);
@@ -152,6 +159,54 @@ namespace OpenSim.Region.Physics.Manager
 
         public abstract bool IsThreaded { get; }
 
+        /// <summary>
+        /// True if the physics plugin supports raycasting against the physics scene
+        /// </summary>
+        public virtual bool SupportsRayCast()
+        {
+            return false;
+        }
+
+        public virtual bool SupportsCombining()
+        {
+            return false;
+        }
+
+        public virtual void Combine(PhysicsScene pScene, Vector3 offset, Vector3 extents)
+        {
+            return;
+        }
+
+        public virtual void UnCombine(PhysicsScene pScene)
+        {
+            
+        }
+
+        /// <summary>
+        /// Queue a raycast against the physics scene.
+        /// The provided callback method will be called when the raycast is complete
+        /// 
+        /// Many physics engines don't support collision testing at the same time as 
+        /// manipulating the physics scene, so we queue the request up and callback 
+        /// a custom method when the raycast is complete.
+        /// This allows physics engines that give an immediate result to callback immediately
+        /// and ones that don't, to callback when it gets a result back.
+        /// 
+        /// ODE for example will not allow you to change the scene while collision testing or
+        /// it asserts, 'opteration not valid for locked space'.  This includes adding a ray to the scene.
+        /// 
+        /// This is named RayCastWorld to not conflict with modrex's Raycast method.
+        /// </summary>
+        /// <param name="position">Origin of the ray</param>
+        /// <param name="direction">Direction of the ray</param>
+        /// <param name="length">Length of ray in meters</param>
+        /// <param name="retMethod">Method to call when the raycast is complete</param>
+        public virtual void RaycastWorld(Vector3 position, Vector3 direction, float length, RaycastCallback retMethod)
+        {
+            if (retMethod != null)
+                retMethod(false, Vector3.Zero, 0, 999999999999f, Vector3.Zero);
+        }
+
         private class NullPhysicsScene : PhysicsScene
         {
             private static int m_workIndicator;
@@ -162,7 +217,7 @@ namespace OpenSim.Region.Physics.Manager
                 // Does nothing right now
             }
 
-            public override PhysicsActor AddAvatar(string avName, PhysicsVector position, PhysicsVector size, bool isFlying)
+            public override PhysicsActor AddAvatar(string avName, Vector3 position, Vector3 size, bool isFlying)
             {
                 m_log.InfoFormat("[PHYSICS]: NullPhysicsScene : AddAvatar({0})", position);
                 return PhysicsActor.Null;
@@ -181,21 +236,21 @@ namespace OpenSim.Region.Physics.Manager
             }
 
 /*
-            public override PhysicsActor AddPrim(PhysicsVector position, PhysicsVector size, Quaternion rotation)
+            public override PhysicsActor AddPrim(Vector3 position, Vector3 size, Quaternion rotation)
             {
                 m_log.InfoFormat("NullPhysicsScene : AddPrim({0},{1})", position, size);
                 return PhysicsActor.Null;
             }
 */
 
-            public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                      PhysicsVector size, Quaternion rotation) //To be removed
+            public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                      Vector3 size, Quaternion rotation) //To be removed
             {
                 return AddPrimShape(primName, pbs, position, size, rotation, false);
             }
 
-            public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                      PhysicsVector size, Quaternion rotation, bool isPhysical)
+            public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                      Vector3 size, Quaternion rotation, bool isPhysical)
             {
                 m_log.InfoFormat("[PHYSICS]: NullPhysicsScene : AddPrim({0},{1})", position, size);
                 return PhysicsActor.Null;
@@ -240,6 +295,7 @@ namespace OpenSim.Region.Physics.Manager
                 Dictionary<uint, float> returncolliders = new Dictionary<uint, float>();
                 return returncolliders;
             }
+            
         }
     }
     public delegate void JointMoved(PhysicsJoint joint);

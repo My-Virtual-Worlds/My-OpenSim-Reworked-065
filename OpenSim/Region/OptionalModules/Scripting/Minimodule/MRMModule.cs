@@ -27,9 +27,14 @@
 
 using System;
 using System.CodeDom.Compiler;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Security;
+using System.Security.Permissions;
+using System.Security.Policy;
 using System.Text;
 using log4net;
 using Microsoft.CSharp;
@@ -54,6 +59,9 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 
         private readonly MicroScheduler m_microthreads = new MicroScheduler();
 
+
+        private IConfig m_config;
+
         public void RegisterExtension<T>(T instance)
         {
             m_extensions[typeof (T)] = instance;
@@ -63,11 +71,21 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         {
             if (source.Configs["MRM"] != null)
             {
+                m_config = source.Configs["MRM"];
+
                 if (source.Configs["MRM"].GetBoolean("Enabled", false))
                 {
                     m_log.Info("[MRM] Enabling MRM Module");
                     m_scene = scene;
-                    scene.EventManager.OnRezScript += EventManager_OnRezScript;
+                
+                    // when hidden, we don't listen for client initiated script events
+                    // only making the MRM engine available for region modules
+                    if (!source.Configs["MRM"].GetBoolean("Hidden", false))
+                    {
+                        scene.EventManager.OnRezScript += EventManager_OnRezScript;
+                        scene.EventManager.OnStopScript += EventManager_OnStopScript;
+                    }
+                    
                     scene.EventManager.OnFrame += EventManager_OnFrame;
 
                     scene.RegisterModuleInterface<IMRMModule>(this);
@@ -83,6 +101,14 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             }
         }
 
+        void EventManager_OnStopScript(uint localID, UUID itemID)
+        {
+            if (m_scripts.ContainsKey(itemID))
+            {
+                m_scripts[itemID].Stop();
+            }
+        }
+
         void EventManager_OnFrame()
         {
             m_microthreads.Tick(1000);
@@ -90,31 +116,134 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 
         static string ConvertMRMKeywords(string script)
         {
-            script = script.Replace("microthreaded void ", "IEnumerable");
+            script = script.Replace("microthreaded void", "IEnumerable");
             script = script.Replace("relax;", "yield return null;");
 
             return script;
         }
 
+        /// <summary>
+        /// Create an AppDomain that contains policy restricting code to execute
+        /// with only the permissions granted by a named permission set
+        /// </summary>
+        /// <param name="permissionSetName">name of the permission set to restrict to</param>
+        /// <param name="appDomainName">'friendly' name of the appdomain to be created</param>
+        /// <exception cref="ArgumentNullException">
+        /// if <paramref name="permissionSetName"/> is null
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// if <paramref name="permissionSetName"/> is empty
+        /// </exception>
+        /// <returns>AppDomain with a restricted security policy</returns>
+        /// <remarks>Substantial portions of this function from: http://blogs.msdn.com/shawnfa/archive/2004/10/25/247379.aspx
+        /// Valid permissionSetName values are:
+        /// * FullTrust
+        /// * SkipVerification
+        /// * Execution
+        /// * Nothing
+        /// * LocalIntranet
+        /// * Internet
+        /// * Everything
+        /// </remarks>
+        public static AppDomain CreateRestrictedDomain(string permissionSetName, string appDomainName)
+        {
+            if (permissionSetName == null)
+                throw new ArgumentNullException("permissionSetName");
+            if (permissionSetName.Length == 0)
+                throw new ArgumentOutOfRangeException("permissionSetName", permissionSetName,
+                                                      "Cannot have an empty permission set name");
+
+            // Default to all code getting nothing
+            PolicyStatement emptyPolicy = new PolicyStatement(new PermissionSet(PermissionState.None));
+            UnionCodeGroup policyRoot = new UnionCodeGroup(new AllMembershipCondition(), emptyPolicy);
+
+            bool foundName = false;
+            PermissionSet setIntersection = new PermissionSet(PermissionState.Unrestricted);
+
+            // iterate over each policy level
+            IEnumerator levelEnumerator = SecurityManager.PolicyHierarchy();
+            while (levelEnumerator.MoveNext())
+            {
+                PolicyLevel level = levelEnumerator.Current as PolicyLevel;
+
+                // if this level has defined a named permission set with the
+                // given name, then intersect it with what we've retrieved
+                // from all the previous levels
+                if (level != null)
+                {
+                    PermissionSet levelSet = level.GetNamedPermissionSet(permissionSetName);
+                    if (levelSet != null)
+                    {
+                        foundName = true;
+                        if (setIntersection != null)
+                            setIntersection = setIntersection.Intersect(levelSet);
+                    }
+                }
+            }
+
+            // Intersect() can return null for an empty set, so convert that
+            // to an empty set object. Also return an empty set if we didn't find
+            // the named permission set we were looking for
+            if (setIntersection == null || !foundName)
+                setIntersection = new PermissionSet(PermissionState.None);
+            else
+                setIntersection = new NamedPermissionSet(permissionSetName, setIntersection);
+
+            // if no named permission sets were found, return an empty set,
+            // otherwise return the set that was found
+            PolicyStatement permissions = new PolicyStatement(setIntersection);
+            policyRoot.AddChild(new UnionCodeGroup(new AllMembershipCondition(), permissions));
+
+            // create an AppDomain policy level for the policy tree
+            PolicyLevel appDomainLevel = PolicyLevel.CreateAppDomainLevel();
+            appDomainLevel.RootCodeGroup = policyRoot;
+
+            // create an AppDomain where this policy will be in effect
+            string domainName = appDomainName;
+            AppDomain restrictedDomain = AppDomain.CreateDomain(domainName);
+            restrictedDomain.SetAppDomainPolicy(appDomainLevel);
+
+            return restrictedDomain;
+        }
+
+
         void EventManager_OnRezScript(uint localID, UUID itemID, string script, int startParam, bool postOnRez, string engine, int stateSource)
         {
             if (script.StartsWith("//MRM:C#"))
             {
-                if (m_scene.GetSceneObjectPart(localID).OwnerID != m_scene.RegionInfo.MasterAvatarAssignedUUID
-                    ||
-                    m_scene.GetSceneObjectPart(localID).CreatorID != m_scene.RegionInfo.MasterAvatarAssignedUUID)
-                    return;
+                if (m_config.GetBoolean("OwnerOnly", true))
+                    if (m_scene.GetSceneObjectPart(localID).OwnerID != m_scene.RegionInfo.MasterAvatarAssignedUUID
+                        || m_scene.GetSceneObjectPart(localID).CreatorID != m_scene.RegionInfo.MasterAvatarAssignedUUID)
+                        return;
 
                 script = ConvertMRMKeywords(script);
 
                 try
                 {
-                    m_log.Info("[MRM] Found C# MRM");
+                    AppDomain target;
+                    if (m_config.GetBoolean("Sandboxed", true))
+                    {
+                        m_log.Info("[MRM] Found C# MRM - Starting in AppDomain with " +
+                                   m_config.GetString("SandboxLevel", "Internet") + "-level security.");
 
-                    MRMBase mmb = (MRMBase)AppDomain.CurrentDomain.CreateInstanceFromAndUnwrap(
+                        string domainName = UUID.Random().ToString();
+                        target = CreateRestrictedDomain(m_config.GetString("SandboxLevel", "Internet"),
+                                                                  domainName);
+                    }
+                    else
+                    {
+                        m_log.Info("[MRM] Found C# MRM - Starting in current AppDomain");
+                        m_log.Warn(
+                            "[MRM] Security Risk: AppDomain is run in current context. Use only in trusted environments.");
+                        target = AppDomain.CurrentDomain;
+                    }
+
+                    m_log.Info("[MRM] Unwrapping into target AppDomain");
+                    MRMBase mmb = (MRMBase) target.CreateInstanceFromAndUnwrap(
                                                 CompileFromDotNetText(script, itemID.ToString()),
                                                 "OpenSim.MiniModule");
 
+                    m_log.Info("[MRM] Initialising MRM Globals");
                     InitializeMRM(mmb, localID, itemID);
 
                     m_scripts[itemID] = mmb;
@@ -130,7 +259,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
                     if (e.InnerException != null)
                         m_log.Error("[MRM] " + e.InnerException);
 
-                    m_scene.Broadcast(delegate(IClientAPI user)
+                    m_scene.ForEachClient(delegate(IClientAPI user)
                     {
                         user.SendAlertMessage(
                             "MRM UnAuthorizedAccess: " + e);
@@ -139,7 +268,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
                 catch (Exception e)
                 {
                     m_log.Info("[MRM] Error: " + e);
-                    m_scene.Broadcast(delegate(IClientAPI user)
+                    m_scene.ForEachClient(delegate(IClientAPI user)
                                           {
                                               user.SendAlertMessage(
                                                   "Compile error while building MRM script, check OpenSim console for more information.");
@@ -148,17 +277,29 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
             }
         }
 
+        public void GetGlobalEnvironment(uint localID, out IWorld world, out IHost host)
+        {
+            // UUID should be changed to object owner.
+            UUID owner = m_scene.RegionInfo.MasterAvatarAssignedUUID;
+            SEUser securityUser = new SEUser(owner, "Name Unassigned");
+            SecurityCredential creds = new SecurityCredential(securityUser, m_scene);
+
+            world = new World(m_scene, creds);
+            host = new Host(new SOPObject(m_scene, localID, creds), m_scene, new ExtensionHandler(m_extensions),
+                            m_microthreads);
+        }
+
         public void InitializeMRM(MRMBase mmb, uint localID, UUID itemID)
         {
 
             m_log.Info("[MRM] Created MRM Instance");
 
-            IWorld m_world = new World(m_scene);
-            IHost m_host = new Host(new SOPObject(m_scene, localID), m_scene, new ExtensionHandler(m_extensions),
-                                    m_microthreads);
+            IWorld world;
+            IHost host;
 
-            mmb.InitMiniModule(m_world, m_host, itemID);
+            GetGlobalEnvironment(localID, out world, out host);
 
+            mmb.InitMiniModule(world, host, itemID);
         }
 
         public void PostInitialise()

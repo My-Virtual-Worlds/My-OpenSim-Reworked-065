@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,6 +33,7 @@ using System.IO;
 using System.Net;
 using System.Reflection;
 using System.Text;
+using System.Web;
 using HttpServer;
 using log4net;
 
@@ -71,6 +72,18 @@ namespace OpenSim.Framework.Servers.HttpServer
             get { return _contentType; }
         }
         private string _contentType;
+
+        public HttpCookieCollection Cookies
+        {
+            get
+            {
+                RequestCookies cookies = _request.Cookies;
+                HttpCookieCollection httpCookies = new HttpCookieCollection();
+                foreach (RequestCookie cookie in cookies)
+                    httpCookies.Add(new HttpCookie(cookie.Name, cookie.Value));
+                return httpCookies;
+            }
+        }
 
         public bool HasEntityBody
         {
@@ -175,7 +188,15 @@ namespace OpenSim.Framework.Servers.HttpServer
                 try
                 {
                     IPAddress addr = IPAddress.Parse(req.Headers["remote_addr"]);
-                    int port = Int32.Parse(req.Headers["remote_port"]);
+                    // sometimes req.Headers["remote_port"] returns a comma separated list, so use
+                    // the first one in the list and log it 
+                    string[] strPorts = req.Headers["remote_port"].Split(new char[] { ',' });
+                    if (strPorts.Length > 1)
+                    {
+                        _log.ErrorFormat("[OSHttpRequest]: format exception on addr/port {0}:{1}, ignoring",
+                                     req.Headers["remote_addr"], req.Headers["remote_port"]);
+                    }
+                    int port = Int32.Parse(strPorts[0]);
                     _remoteIPEndPoint = new IPEndPoint(addr, port);
                 }
                 catch (FormatException)

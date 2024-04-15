@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -59,7 +59,11 @@ namespace OpenSim.Framework
                 
                 // Body
                 defaultWearables[0].ItemID  = new UUID("66c41e39-38f9-f75a-024e-585989bfaba9");
-                defaultWearables[0].AssetID = new UUID("66c41e39-38f9-f75a-024e-585989bfab73");                
+                defaultWearables[0].AssetID = new UUID("66c41e39-38f9-f75a-024e-585989bfab73");
+                
+                // Hair
+                defaultWearables[2].ItemID  = new UUID("d342e6c1-b9d2-11dc-95ff-0800200c9a66");
+                defaultWearables[2].AssetID = new UUID("d342e6c0-b9d2-11dc-95ff-0800200c9a66");
 
                 // Skin
                 defaultWearables[1].ItemID  = new UUID("77c41e39-38f9-f75a-024e-585989bfabc9");

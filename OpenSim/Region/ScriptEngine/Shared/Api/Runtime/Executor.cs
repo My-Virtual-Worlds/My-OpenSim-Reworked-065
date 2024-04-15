@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -35,9 +35,9 @@ using log4net;
 
 namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
 {
-    public class Executor : MarshalByRefObject
+    public class Executor
     {
-        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        // private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         /// <summary>
         /// Contains the script to execute functions in.
@@ -62,6 +62,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             land_collision_end = 4096,
             land_collision_start = 8192,
             at_target = 16384,
+            at_rot_target = 16777216,
             listen = 32768,
             money = 65536,
             moving_end = 131072,
@@ -88,26 +89,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             m_Script = script;
             initEventFlags();
         }
-
-        /// <summary>
-        /// Make sure our object does not timeout when in AppDomain. (Called by ILease base class)
-        /// </summary>
-        /// <returns></returns>
-        public override Object InitializeLifetimeService()
-        {
-            //m_log.Debug("Executor: InitializeLifetimeService()");
-            //            return null;
-            ILease lease = (ILease)base.InitializeLifetimeService();
-
-            if (lease.CurrentState == LeaseState.Initial)
-            {
-                lease.InitialLeaseTime = TimeSpan.Zero; // TimeSpan.FromMinutes(1);
-                //                lease.SponsorshipTimeout = TimeSpan.FromMinutes(2);
-                //                lease.RenewOnCallTime = TimeSpan.FromSeconds(2);
-            }
-            return lease;
-        }
-
 
         public scriptEvents GetStateEventFlags(string state)
         {
@@ -173,7 +154,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
                 }
                 catch
                 {
-                    m_log.Error("Event "+EventName+" not found.");
+                    // m_log.Error("Event "+EventName+" not found.");
                     // Event name not found, cache it as not found
                     Events.Add(EventName, null);
                 }
@@ -206,7 +187,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
                 // DO NOT THROW JUST THE INNER EXCEPTION!
                 // FriendlyErrors depends on getting the whole exception!
                 //
-                if ( !(tie.InnerException is EventAbortException) )
+                if (!(tie.InnerException is EventAbortException))
                 {
                     throw;
                 }
@@ -223,7 +204,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             }
 
             m_eventFlagsMap.Add("attach", scriptEvents.attach);
-            // m_eventFlagsMap.Add("at_rot_target",(long)scriptEvents.at_rot_target);
+            m_eventFlagsMap.Add("at_rot_target", scriptEvents.at_rot_target);
             m_eventFlagsMap.Add("at_target", scriptEvents.at_target);
             // m_eventFlagsMap.Add("changed",(long)scriptEvents.changed);
             m_eventFlagsMap.Add("collision", scriptEvents.collision);

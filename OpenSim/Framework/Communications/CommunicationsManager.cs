@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,12 +29,11 @@ using System;
 using System.Collections.Generic;
 using OpenMetaverse;
 using OpenSim.Framework.Communications.Cache;
-using OpenSim.Framework.Servers.HttpServer;
 
 namespace OpenSim.Framework.Communications
 {
     /// <summary>
-    /// This class manages references to OpenSim non-region services (asset, inventory, user, etc.)
+    /// This class manages references to OpenSim non-region services (inventory, user, etc.)
     /// </summary>
     /// 
     /// TODO: Service retrieval needs to be managed via plugin and interfaces requests, as happens for region
@@ -60,11 +59,6 @@ namespace OpenSim.Framework.Communications
         }
         protected IMessagingService m_messageService;
 
-        public IGridServices GridService
-        {
-            get { return m_gridService; }
-        }
-        protected IGridServices m_gridService;
 
         public UserProfileCacheService UserProfileCacheService
         {
@@ -72,24 +66,11 @@ namespace OpenSim.Framework.Communications
         }
         protected UserProfileCacheService m_userProfileCacheService;
 
-        // protected AgentAssetTransactionsManager m_transactionsManager;
-
-        // public AgentAssetTransactionsManager TransactionsManager
-        // {
-        //     get { return m_transactionsManager; }
-        // }
-
         public IAvatarService AvatarService
         {
             get { return m_avatarService; }
         }
         protected IAvatarService m_avatarService;
-
-        public IAssetCache AssetCache
-        {
-            get { return m_assetCache; }
-        }
-        protected IAssetCache m_assetCache;
 
         public IInterServiceInventoryServices InterServiceInventoryService
         {
@@ -109,148 +90,20 @@ namespace OpenSim.Framework.Communications
         public IUserAdminService UserAdminService
         {
             get { return m_userAdminService; }
-        }        
-        protected IUserAdminService m_userAdminService;        
-
-        /// <value>
-        /// OpenSimulator's built in HTTP server
-        /// </value>
-        public IHttpServer HttpServer
-        {
-            get { return m_httpServer; }
         }
-        protected IHttpServer m_httpServer;
+        protected IUserAdminService m_userAdminService;
 
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="serversInfo"></param>
-        /// <param name="httpServer"></param>
-        /// <param name="assetCache"></param>
-        /// <param name="dumpAssetsToFile"></param>
-        public CommunicationsManager(NetworkServersInfo serversInfo, IHttpServer httpServer, IAssetCache assetCache,
-                                     bool dumpAssetsToFile, LibraryRootFolder libraryRootFolder)
+        public CommunicationsManager(NetworkServersInfo serversInfo,
+                                     LibraryRootFolder libraryRootFolder)
         {
             m_networkServersInfo = serversInfo;
-            m_assetCache = assetCache;
             m_userProfileCacheService = new UserProfileCacheService(this, libraryRootFolder);
-            m_httpServer = httpServer;
         }
 
-        #region Inventory
-        protected string m_defaultInventoryHost = "default";
-
-        protected List<IInventoryServices> m_inventoryServices = new List<IInventoryServices>();
-        // protected IInventoryServices m_inventoryService;
-        protected List<ISecureInventoryService> m_secureinventoryServices = new List<ISecureInventoryService>();
-
-        public ISecureInventoryService SecureInventoryService
-        {
-            get
-            {
-                if (m_secureinventoryServices.Count > 0)
-                {
-                    // return m_inventoryServices[0];
-                    ISecureInventoryService invService;
-                    if (TryGetSecureInventoryService(m_defaultInventoryHost, out invService))
-                    {
-                        return invService;
-                    }
-                }
-                return null;
-            }
-        }
-
-        public IInventoryServices InventoryService
-        {
-            get
-            {
-                if (m_inventoryServices.Count > 0)
-                {
-                    // return m_inventoryServices[0];
-                    IInventoryServices invService;
-                    if (TryGetInventoryService(m_defaultInventoryHost, out invService))
-                    {
-                        return invService;
-                    }
-                }
-                return null;
-            }
-        }
-
-        public bool TryGetSecureInventoryService(string host, out ISecureInventoryService inventoryService)
-        {
-            if ((host == string.Empty) || (host == "default"))
-            {
-                host = m_defaultInventoryHost;
-            }
-
-            lock (m_secureinventoryServices)
-            {
-                foreach (ISecureInventoryService service in m_secureinventoryServices)
-                {
-                    if (service.Host == host)
-                    {
-                        inventoryService = service;
-                        return true;
-                    }
-                }
-            }
-
-            inventoryService = null;
-            return false;
-        }
-
-        public bool TryGetInventoryService(string host, out IInventoryServices inventoryService)
-        {
-            if ((host == string.Empty) || (host == "default"))
-            {
-                host = m_defaultInventoryHost;
-            }
-
-            lock (m_inventoryServices)
-            {
-                foreach (IInventoryServices service in m_inventoryServices)
-                {
-                    if (service.Host == host)
-                    {
-                        inventoryService = service;
-                        return true;
-                    }
-                }
-            }
-
-            inventoryService = null;
-            return false;
-        }
-
-        public virtual void AddInventoryService(string hostUrl)
-        {
-
-        }
-
-        public virtual void AddSecureInventoryService(string hostUrl)
-        {
-
-        }
-
-        public virtual void AddSecureInventoryService(ISecureInventoryService service)
-        {
-            lock (m_secureinventoryServices)
-            {
-                m_secureinventoryServices.Add(service);
-            }
-        }
-
-        public virtual void AddInventoryService(IInventoryServices service)
-        {
-            lock (m_inventoryServices)
-            {
-                m_inventoryServices.Add(service);
-            }
-        }
-
-        #endregion
 
         #region Friend Methods
 
@@ -356,35 +209,24 @@ namespace OpenSim.Framework.Communications
 
         private string[] doUUIDNameRequest(UUID uuid)
         {
-            string[] returnstring = new string[0];
-            bool doLookup = false;
-
             lock (m_nameRequestCache)
             {
                 if (m_nameRequestCache.ContainsKey(uuid))
-                {
-                    returnstring = m_nameRequestCache[uuid];
-                }
-                else
-                {
-                    // we don't want to lock the dictionary while we're doing the lookup
-                    doLookup = true;
-                }
+                    return m_nameRequestCache[uuid];
             }
 
-            if (doLookup) {
-                UserProfileData profileData = m_userService.GetUserProfile(uuid);
-                if (profileData != null)
+            string[] returnstring = new string[0];
+            CachedUserInfo uinfo = UserProfileCacheService.GetUserDetails(uuid);
+
+            if ((uinfo != null) && (uinfo.UserProfile != null))
+            {
+                returnstring = new string[2];
+                returnstring[0] = uinfo.UserProfile.FirstName;
+                returnstring[1] = uinfo.UserProfile.SurName;
+                lock (m_nameRequestCache)
                 {
-                    returnstring = new string[2];
-                    // UUID profileId = profileData.ID;
-                    returnstring[0] = profileData.FirstName;
-                    returnstring[1] = profileData.SurName;
-                    lock (m_nameRequestCache)
-                    {
-                        if (!m_nameRequestCache.ContainsKey(uuid))
-                            m_nameRequestCache.Add(uuid, returnstring);
-                    }
+                    if (!m_nameRequestCache.ContainsKey(uuid))
+                        m_nameRequestCache.Add(uuid, returnstring);
                 }
             }
             

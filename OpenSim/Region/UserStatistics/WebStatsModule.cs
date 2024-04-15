@@ -45,7 +45,7 @@ using OpenSim.Region.Framework.Scenes;
 using Mono.Data.SqliteClient;
 
 
-using Caps = OpenSim.Framework.Communications.Capabilities.Caps;
+using Caps = OpenSim.Framework.Capabilities.Caps;
 
 using OSD = OpenMetaverse.StructuredData.OSD;
 using OSDMap = OpenMetaverse.StructuredData.OSDMap;
@@ -76,7 +76,7 @@ namespace OpenSim.Region.UserStatistics
             try
             {
                 cnfg = config.Configs["WebStats"];
-                enabled = cnfg.GetBoolean("enabled", false);                              
+                enabled = cnfg.GetBoolean("enabled", false);
             } 
             catch (Exception)
             {
@@ -110,9 +110,9 @@ namespace OpenSim.Region.UserStatistics
                     reports.Add("", rep);
                     reports.Add("prototype.js", protodep);
                     reports.Add("updater.js", updatedep);
-                    reports.Add("activeconnectionsajax.ajax", ajConnections);
-                    reports.Add("simstatsajax.ajax", ajSimStats);
-                    reports.Add("activelogajax.ajax", ajLogLines);
+                    reports.Add("activeconnectionsajax.html", ajConnections);
+                    reports.Add("simstatsajax.html", ajSimStats);
+                    reports.Add("activelogajax.html", ajLogLines);
                     reports.Add("clients.report", clientReport);
                     reports.Add("sessions.report", sessionsReport);
 
@@ -127,8 +127,8 @@ namespace OpenSim.Region.UserStatistics
                     //// 
 
 
-                    scene.CommsManager.HttpServer.AddHTTPHandler("/SStats/", HandleStatsRequest);
-                    scene.CommsManager.HttpServer.AddHTTPHandler("/CAPS/VS/", HandleUnknownCAPSRequest);
+                    MainServer.Instance.AddHTTPHandler("/SStats/", HandleStatsRequest);
+                    MainServer.Instance.AddHTTPHandler("/CAPS/VS/", HandleUnknownCAPSRequest);
                 }
                 
                 m_scene.Add(scene);
@@ -137,7 +137,7 @@ namespace OpenSim.Region.UserStatistics
 
                 m_simstatsCounters.Add(scene.RegionInfo.RegionID, new USimStatsData(scene.RegionInfo.RegionID));
                 scene.StatsReporter.OnSendStatsResult += ReceiveClassicSimStatsPacket;
-            }            
+            }
         }
 
         public void ReceiveClassicSimStatsPacket(SimStats stats)
@@ -168,7 +168,7 @@ namespace OpenSim.Region.UserStatistics
                 }
             } 
             catch (KeyNotFoundException)
-            {               
+            {
             }
         }
         
@@ -236,7 +236,7 @@ namespace OpenSim.Region.UserStatistics
             }
             else
             {
-                strOut = m_scene[0].CommsManager.HttpServer.GetHTTP404("");
+                strOut = MainServer.Instance.GetHTTP404("");
             }
             
 
@@ -398,7 +398,7 @@ namespace OpenSim.Region.UserStatistics
 
         }
 
-        public string readLogLines( int amount)
+        public string readLogLines(int amount)
         {
             Encoding encoding = Encoding.ASCII;
             int sizeOfChar = encoding.GetByteCount("\n");

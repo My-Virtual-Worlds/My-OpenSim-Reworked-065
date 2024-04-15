@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -25,9 +25,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+using System.Net;
 using Nwc.XmlRpc;
 
 namespace OpenSim.Framework.Servers.HttpServer
 {
-    public delegate XmlRpcResponse XmlRpcMethod(XmlRpcRequest request);
+    public delegate XmlRpcResponse XmlRpcMethod(XmlRpcRequest request, IPEndPoint client);
 }

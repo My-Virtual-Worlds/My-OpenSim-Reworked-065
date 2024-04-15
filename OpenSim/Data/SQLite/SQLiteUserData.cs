@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -30,7 +30,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Reflection;
 using log4net;
-using Mono.Data.SqliteClient;
+using Mono.Data.Sqlite;
 using OpenMetaverse;
 using OpenSim.Framework;
 
@@ -115,15 +115,19 @@ namespace OpenSim.Data.SQLite
 
                 setupUserCommands(da, conn);
                 da.Fill(ds.Tables["users"]);
+                CreateDataSetMapping(da, "users");
 
                 setupAgentCommands(dua, conn);
                 dua.Fill(ds.Tables["useragents"]);
+                CreateDataSetMapping(dua, "useragents");
 
                 setupUserFriendsCommands(daf, conn);
                 daf.Fill(ds.Tables["userfriends"]);
+                CreateDataSetMapping(daf, "userfriends");
 
                 setupAvatarAppearanceCommands(daa, conn);
                 daa.Fill(ds.Tables["avatarappearance"]);
+                CreateDataSetMapping(daa, "avatarappearance");
             }
 
             return;
@@ -706,15 +710,10 @@ namespace OpenSim.Data.SQLite
                     aa.SkirtItem        = new UUID((String)row["SkirtItem"]);
                     aa.SkirtAsset       = new UUID((String)row["SkirtAsset"]);
 
-                    // Ewe Loon
-                    //  Used Base64String because for some reason it wont accept using Byte[] (which works in Region date)
-
-                    String str = (String)row["Texture"];
-                    byte[] texture = Convert.FromBase64String(str);
+                    byte[] texture = (byte[])row["Texture"];
                     aa.Texture = new Primitive.TextureEntry(texture, 0, texture.Length);
 
-                    str = (String)row["VisualParams"];
-                    byte[] VisualParams = Convert.FromBase64String(str);
+                    byte[] VisualParams = (byte[])row["VisualParams"];
                     aa.VisualParams = VisualParams;
 
                     aa.Serial = Convert.ToInt32(row["Serial"]);
@@ -793,6 +792,15 @@ namespace OpenSim.Data.SQLite
          *
          **********************************************************************/
 
+        protected void CreateDataSetMapping(IDataAdapter da, string tableName)
+        {       
+            ITableMapping dbMapping = da.TableMappings.Add(tableName, tableName);
+            foreach (DataColumn col in ds.Tables[tableName].Columns)
+            {       
+                dbMapping.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+            }       
+        }
+        
         /// <summary>
         /// Create the "users" table
         /// </summary>
@@ -819,7 +827,10 @@ namespace OpenSim.Data.SQLite
             SQLiteUtil.createCol(users, "homeLookAtZ", typeof (Double));
             SQLiteUtil.createCol(users, "created", typeof (Int32));
             SQLiteUtil.createCol(users, "lastLogin", typeof (Int32));
+
+            //TODO: Please delete this column.  It's now a brick
             SQLiteUtil.createCol(users, "rootInventoryFolderID", typeof (String));
+
             SQLiteUtil.createCol(users, "userInventoryURI", typeof (String));
             SQLiteUtil.createCol(users, "userAssetURI", typeof (String));
             SQLiteUtil.createCol(users, "profileCanDoMask", typeof (Int32));
@@ -921,9 +932,8 @@ namespace OpenSim.Data.SQLite
             SQLiteUtil.createCol(aa, "SkirtItem", typeof(String));
             SQLiteUtil.createCol(aa, "SkirtAsset", typeof(String));
 
-            //  Used Base64String because for some reason it wont accept using Byte[] (which works in Region date)
-            SQLiteUtil.createCol(aa, "Texture", typeof (String));
-            SQLiteUtil.createCol(aa, "VisualParams", typeof (String));
+            SQLiteUtil.createCol(aa, "Texture", typeof (Byte[]));
+            SQLiteUtil.createCol(aa, "VisualParams", typeof (Byte[]));
 
             SQLiteUtil.createCol(aa, "Serial", typeof(Int32));
             SQLiteUtil.createCol(aa, "AvatarHeight", typeof(Double));
@@ -980,7 +990,6 @@ namespace OpenSim.Data.SQLite
 
             user.Created = Convert.ToInt32(row["created"]);
             user.LastLogin = Convert.ToInt32(row["lastLogin"]);
-            user.RootInventoryFolderID = new UUID((String) row["rootInventoryFolderID"]);
             user.UserInventoryURI = (String) row["userInventoryURI"];
             user.UserAssetURI = (String) row["userAssetURI"];
             user.CanDoMask = Convert.ToUInt32(row["profileCanDoMask"]);
@@ -1016,7 +1025,7 @@ namespace OpenSim.Data.SQLite
 
             row["homeRegionX"] = user.HomeRegionX;
             row["homeRegionY"] = user.HomeRegionY;
-            row["homeRegionID"] = user.HomeRegionID;
+            row["homeRegionID"] = user.HomeRegionID.ToString();
             row["homeLocationX"] = user.HomeLocation.X;
             row["homeLocationY"] = user.HomeLocation.Y;
             row["homeLocationZ"] = user.HomeLocation.Z;
@@ -1026,16 +1035,17 @@ namespace OpenSim.Data.SQLite
 
             row["created"] = user.Created;
             row["lastLogin"] = user.LastLogin;
-            row["rootInventoryFolderID"] = user.RootInventoryFolderID;
+            //TODO: Get rid of rootInventoryFolderID in a safe way.
+            row["rootInventoryFolderID"] = UUID.Zero.ToString();
             row["userInventoryURI"] = user.UserInventoryURI;
             row["userAssetURI"] = user.UserAssetURI;
             row["profileCanDoMask"] = user.CanDoMask;
             row["profileWantDoMask"] = user.WantDoMask;
             row["profileAboutText"] = user.AboutText;
             row["profileFirstText"] = user.FirstLifeAboutText;
-            row["profileImage"] = user.Image;
-            row["profileFirstImage"] = user.FirstLifeImage;
-            row["webLoginKey"] = user.WebLoginKey;
+            row["profileImage"] = user.Image.ToString();
+            row["profileFirstImage"] = user.FirstLifeImage.ToString();
+            row["webLoginKey"] = user.WebLoginKey.ToString();
             row["userFlags"] = user.UserFlags;
             row["godLevel"] = user.GodLevel;
             row["customType"] = user.CustomType == null ? "" : user.CustomType;
@@ -1087,8 +1097,8 @@ namespace OpenSim.Data.SQLite
             row["SkirtAsset"] = appearance.SkirtAsset.ToString();
 
             //  Used Base64String because for some reason it wont accept using Byte[] (which works in Region date)
-            row["Texture"] = Convert.ToBase64String(appearance.Texture.GetBytes());
-            row["VisualParams"] = Convert.ToBase64String(appearance.VisualParams);
+            row["Texture"] = appearance.Texture.GetBytes();
+            row["VisualParams"] = appearance.VisualParams;
 
             row["Serial"] = appearance.Serial;
             row["AvatarHeight"] = appearance.AvatarHeight;
@@ -1149,12 +1159,12 @@ namespace OpenSim.Data.SQLite
             row["agentIP"] = ua.AgentIP;
             row["agentPort"] = ua.AgentPort;
             row["agentOnline"] = ua.AgentOnline;
-            row["sessionID"] = ua.SessionID;
-            row["secureSessionID"] = ua.SecureSessionID;
-            row["regionID"] = ua.InitialRegion;
+            row["sessionID"] = ua.SessionID.ToString();
+            row["secureSessionID"] = ua.SecureSessionID.ToString();
+            row["regionID"] = ua.InitialRegion.ToString();
             row["loginTime"] = ua.LoginTime;
             row["logoutTime"] = ua.LogoutTime;
-            row["currentRegion"] = ua.Region;
+            row["currentRegion"] = ua.Region.ToString();
             row["currentHandle"] = ua.Handle.ToString();
             // vectors
             row["currentPosX"] = ua.Position.X;
@@ -1195,14 +1205,14 @@ namespace OpenSim.Data.SQLite
 
         private void setupAgentCommands(SqliteDataAdapter da, SqliteConnection conn)
         {
-            da.InsertCommand = SQLiteUtil.createInsertCommand( "useragents", ds.Tables["useragents"]);
+            da.InsertCommand = SQLiteUtil.createInsertCommand("useragents", ds.Tables["useragents"]);
             da.InsertCommand.Connection = conn;
 
-            da.UpdateCommand = SQLiteUtil.createUpdateCommand( "useragents", "UUID=:UUID", ds.Tables["useragents"]);
+            da.UpdateCommand = SQLiteUtil.createUpdateCommand("useragents", "UUID=:UUID", ds.Tables["useragents"]);
             da.UpdateCommand.Connection = conn;
 
-            SqliteCommand delete = new SqliteCommand( "delete from useragents where UUID = :ProfileID");
-            delete.Parameters.Add( SQLiteUtil.createSqliteParameter( "ProfileID", typeof(String)));
+            SqliteCommand delete = new SqliteCommand("delete from useragents where UUID = :ProfileID");
+            delete.Parameters.Add(SQLiteUtil.createSqliteParameter("ProfileID", typeof(String)));
             delete.Connection = conn;
             da.DeleteCommand = delete;
         }

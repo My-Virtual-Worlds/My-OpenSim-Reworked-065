@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -206,11 +206,11 @@ namespace OpenSim.Grid.GridServer.Modules
                 {
                     if (existingSim == null)
                     {
-                        insertResponse = plugin.AddProfile(sim);
+                        insertResponse = plugin.StoreProfile(sim);
                     }
                     else
                     {
-                        insertResponse = plugin.UpdateProfile(sim);
+                        insertResponse = plugin.StoreProfile(sim);
                     }
                 }
                 catch (Exception e)
@@ -259,7 +259,7 @@ namespace OpenSim.Grid.GridServer.Modules
                     if ((reserveData != null && reserveData.gridRecvKey == theSim.regionRecvKey) ||
                         (reserveData == null && authkeynode.InnerText != theSim.regionRecvKey))
                     {
-                        plugin.AddProfile(theSim);
+                        plugin.StoreProfile(theSim);
                         m_log.Info("[grid]: New sim added to grid (" + theSim.regionName + ")");
                         logToDB(theSim.ToString(), "RestSetSimMethod", String.Empty, 5,
                                 "Region successfully updated and connected to grid.");

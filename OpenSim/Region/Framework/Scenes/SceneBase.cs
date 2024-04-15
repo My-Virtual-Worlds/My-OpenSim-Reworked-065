@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -36,6 +36,7 @@ using OpenSim.Framework;
 using OpenSim.Framework.Console;
 using OpenSim.Framework.Communications.Cache;
 using OpenSim.Region.Framework.Interfaces;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 namespace OpenSim.Region.Framework.Scenes
 {
@@ -91,7 +92,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// <value>
         /// Registered classes that are capable of creating entities.
         /// </value>
-        protected Dictionary<PCode, IEntityCreator> m_entityCreators = new Dictionary<PCode, IEntityCreator>();                
+        protected Dictionary<PCode, IEntityCreator> m_entityCreators = new Dictionary<PCode, IEntityCreator>();
 
         /// <summary>
         /// The last allocated local prim id.  When a new local id is requested, the next number in the sequence is
@@ -101,18 +102,12 @@ namespace OpenSim.Region.Framework.Scenes
 
         private readonly Mutex _primAllocateMutex = new Mutex(false);
         
-        private readonly ClientManager m_clientManager = new ClientManager();
-
-        public ClientManager ClientManager
-        {
-            get { return m_clientManager; }
-        }
+        protected readonly ClientManager m_clientManager = new ClientManager();
 
         public float TimeDilation
         {
-            get { return m_timedilation; }
+            get { return 1.0f; }
         }
-        protected float m_timedilation = 1.0f;
 
         protected ulong m_regionHandle;
         protected string m_regionName;
@@ -195,8 +190,6 @@ namespace OpenSim.Region.Framework.Scenes
         /// <param name="agentID"></param>
         public abstract void RemoveClient(UUID agentID);
 
-        public abstract void CloseAllAgents(uint circuitcode);
-
         #endregion
 
         /// <summary>
@@ -227,7 +220,7 @@ namespace OpenSim.Region.Framework.Scenes
             return false;
         }
         
-        public abstract bool OtherRegionUp(RegionInfo thisRegion);
+        public abstract void OtherRegionUp(GridRegion otherRegion);
 
         public virtual string GetSimulatorVersion()
         {
@@ -269,7 +262,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// Returns a new unallocated local ID
         /// </summary>
         /// <returns>A brand new local ID</returns>
-        protected internal uint AllocateLocalId()
+        public uint AllocateLocalId()
         {
             uint myID;
 
@@ -278,7 +271,7 @@ namespace OpenSim.Region.Framework.Scenes
             _primAllocateMutex.ReleaseMutex();
 
             return myID;
-        }        
+        }
         
         #region Module Methods
 
@@ -472,7 +465,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// <summary>
         /// Shows various details about the sim based on the parameters supplied by the console command in openSimMain.
         /// </summary>
-        /// <param name="showParams">What to show</param>        
+        /// <param name="showParams">What to show</param>
         public virtual void Show(string[] showParams)
         {
             switch (showParams[0])
@@ -488,7 +481,7 @@ namespace OpenSim.Region.Framework.Scenes
                     }
                     break;
             }
-        }        
+        }
 
         public void AddCommand(object mod, string command, string shorthelp, string longhelp, CommandDelegate callback)
         {

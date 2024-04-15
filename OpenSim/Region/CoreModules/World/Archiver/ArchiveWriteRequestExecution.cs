@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -80,20 +80,35 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         protected internal void ReceivedAllAssets(
             ICollection<UUID> assetsFoundUuids, ICollection<UUID> assetsNotFoundUuids)
         {
+            try
+            {
+                Save(assetsFoundUuids, assetsNotFoundUuids);
+            }
+            finally
+            {
+                m_archiveWriter.Close();
+            }
+            
+            m_log.InfoFormat("[ARCHIVER]: Finished writing out OAR for {0}", m_scene.RegionInfo.RegionName);
+
+            m_scene.EventManager.TriggerOarFileSaved(m_requestId, String.Empty);
+        }
+
+        protected internal void Save(ICollection<UUID> assetsFoundUuids, ICollection<UUID> assetsNotFoundUuids)
+        {
             foreach (UUID uuid in assetsNotFoundUuids)
             {
                 m_log.DebugFormat("[ARCHIVER]: Could not find asset {0}", uuid);
             }
 
-            m_log.InfoFormat(
-                "[ARCHIVER]: Received {0} of {1} assets requested",
-                assetsFoundUuids.Count, assetsFoundUuids.Count + assetsNotFoundUuids.Count);
+//            m_log.InfoFormat(
+//                "[ARCHIVER]: Received {0} of {1} assets requested",
+//                assetsFoundUuids.Count, assetsFoundUuids.Count + assetsNotFoundUuids.Count);
 
             m_log.InfoFormat("[ARCHIVER]: Creating archive file.  This may take some time.");
 
             // Write out control file
             m_archiveWriter.WriteFile(ArchiveConstants.CONTROL_FILE_PATH, Create0p2ControlFile());
-
             m_log.InfoFormat("[ARCHIVER]: Added control file to archive.");
 
             // Write out region settings
@@ -102,6 +117,17 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             m_archiveWriter.WriteFile(settingsPath, RegionSettingsSerializer.Serialize(m_scene.RegionInfo.RegionSettings));
 
             m_log.InfoFormat("[ARCHIVER]: Added region settings to archive.");
+
+            // Write out land data (aka parcel) settings
+            List<ILandObject>landObjects = m_scene.LandChannel.AllParcels();
+            foreach (ILandObject lo in landObjects)
+            {
+                LandData landData = lo.LandData;
+                string landDataPath = String.Format("{0}{1}.xml", ArchiveConstants.LANDDATA_PATH, 
+                                                    landData.GlobalID.ToString());
+                m_archiveWriter.WriteFile(landDataPath, LandDataSerializer.Serialize(landData));
+            }
+            m_log.InfoFormat("[ARCHIVER]: Added parcel settings to archive.");
 
             // Write out terrain
             string terrainPath
@@ -121,7 +147,7 @@ namespace OpenSim.Region.CoreModules.World.Archiver
 
                 Vector3 position = sceneObject.AbsolutePosition;
 
-                string serializedObject = m_serialiser.SaveGroupToXml2(sceneObject);
+                string serializedObject = m_serialiser.SerializeGroupToXml2(sceneObject);
                 string filename
                     = string.Format(
                         "{0}{1}_{2:000}-{3:000}-{4:000}__{5}.xml",
@@ -133,12 +159,6 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             }
 
             m_log.InfoFormat("[ARCHIVER]: Added scene objects to archive.");
-
-            m_archiveWriter.Close();
-
-            m_log.InfoFormat("[ARCHIVER]: Wrote out OpenSimulator archive for {0}", m_scene.RegionInfo.RegionName);
-
-            m_scene.EventManager.TriggerOarFileSaved(m_requestId, String.Empty);
         }
 
         /// <summary>
@@ -153,7 +173,14 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             xtw.WriteStartDocument();
             xtw.WriteStartElement("archive");
             xtw.WriteAttributeString("major_version", "0");
-            xtw.WriteAttributeString("minor_version", "2");
+            xtw.WriteAttributeString("minor_version", "3");
+
+            xtw.WriteStartElement("creation_info");
+            DateTime now = DateTime.UtcNow;
+            TimeSpan t = now - new DateTime(1970, 1, 1);
+            xtw.WriteElementString("datetime", ((int)t.TotalSeconds).ToString());
+            xtw.WriteElementString("id", UUID.Random().ToString());
+            xtw.WriteEndElement();
             xtw.WriteEndElement();
 
             xtw.Flush();

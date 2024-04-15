@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -41,12 +41,18 @@ using OpenSim.Region.Framework.Interfaces;
 
 namespace OpenSim.Client.Linden
 {
-    public class LLClientStackModule : IRegionModule
+    /// <summary>
+    /// Linden UDP Stack Region Module
+    /// </summary>
+    public class LLClientStackModule : INonSharedRegionModule
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         #region IRegionModule Members
 
+        /// <summary>
+        /// Scene that contains the region's data
+        /// </summary>
         protected Scene m_scene;
         protected bool m_createClientStack = false;
         protected IClientNetworkServer m_clientServer;
@@ -55,11 +61,10 @@ namespace OpenSim.Client.Linden
 
         protected string m_clientStackDll = "OpenSim.Region.ClientStack.LindenUDP.dll";
 
-        public void Initialise(Scene scene, IConfigSource source)
+        public void Initialise(IConfigSource source)
         {
             if (m_scene == null)
             {
-                m_scene = scene;
                 m_source = source;
 
                 IConfig startupConfig = m_source.Configs["Startup"];
@@ -70,8 +75,23 @@ namespace OpenSim.Client.Linden
             }
         }
 
-        public void PostInitialise()
+        public void AddRegion(Scene scene)
         {
+
+        }
+
+        public void RemoveRegion(Scene scene)
+        {
+
+        }
+        
+        public void RegionLoaded(Scene scene)
+        {
+            if (m_scene == null)
+            {
+                m_scene = scene;
+            }
+
             if ((m_scene != null) && (m_createClientStack))
             {
                 m_log.Info("[LLClientStackModule] Starting up LLClientStack.");
@@ -83,7 +103,7 @@ namespace OpenSim.Client.Linden
                 m_clientServer
                    = m_clientStackManager.CreateServer(endPoint.Address,
                      ref port, m_scene.RegionInfo.ProxyOffset, m_scene.RegionInfo.m_allow_alternate_ports, m_source,
-                       m_scene.CommsManager.AssetCache, m_scene.AuthenticateHandler);
+                       m_scene.AuthenticateHandler);
 
                 m_clientServer.AddScene(m_scene);
 
@@ -94,6 +114,11 @@ namespace OpenSim.Client.Linden
         public void Close()
         {
 
+        }
+
+        public Type ReplaceableInterface 
+        {
+            get { return null; }
         }
 
         public string Name

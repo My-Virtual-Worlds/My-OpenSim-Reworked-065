@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,9 +33,9 @@ using OpenMetaverse;
 using OpenSim.Data;
 
 namespace OpenSim.Framework.Communications
-{                
+{
     /// <summary>
-    /// Plugin for managing temporary user profiles.  
+    /// Plugin for managing temporary user profiles.
     /// </summary>
     public class TemporaryUserProfilePlugin : IUserDataPlugin
     {
@@ -45,7 +45,7 @@ namespace OpenSim.Framework.Communications
         
         public string Name { get { return "TemporaryUserProfilePlugin"; } }
         public string Version { get { return "0.1"; } }
-        public void Initialise() {}       
+        public void Initialise() {}
         public void Initialise(string connect) {}
         public void Dispose() {}
         

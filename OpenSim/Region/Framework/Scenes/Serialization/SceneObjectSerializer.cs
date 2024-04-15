@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -65,8 +65,6 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
             //m_log.DebugFormat("[SOG]: Starting deserialization of SOG");
             //int time = System.Environment.TickCount;
 
-            SceneObjectGroup sceneObject = new SceneObjectGroup();            
-
             // libomv.types changes UUID to Guid
             xmlData = xmlData.Replace("<UUID>", "<Guid>");
             xmlData = xmlData.Replace("</UUID>", "</Guid>");
@@ -88,17 +86,13 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
                 parts = doc.GetElementsByTagName("RootPart");
 
                 if (parts.Count == 0)
-                {
                     throw new Exception("Invalid Xml format - no root part");
-                }
-                else
-                {
-                    sr = new StringReader(parts[0].InnerXml);
-                    reader = new XmlTextReader(sr);
-                    sceneObject.SetRootPart(SceneObjectPart.FromXml(fromUserInventoryItemID, reader));
-                    reader.Close();
-                    sr.Close();
-                }
+
+                sr = new StringReader(parts[0].InnerXml);
+                reader = new XmlTextReader(sr);
+                SceneObjectGroup sceneObject = new SceneObjectGroup(SceneObjectPart.FromXml(fromUserInventoryItemID, reader));
+                reader.Close();
+                sr.Close();
 
                 parts = doc.GetElementsByTagName("Part");
 
@@ -119,23 +113,22 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
                 // Script state may, or may not, exist. Not having any, is NOT
                 // ever a problem.
                 sceneObject.LoadScriptState(doc);
+
+                return sceneObject;
             }
             catch (Exception e)
             {
                 m_log.ErrorFormat(
                     "[SERIALIZER]: Deserialization of xml failed with {0}.  xml was {1}", e, xmlData);
+                return null;
             }
-
-            //m_log.DebugFormat("[SERIALIZER]: Finished deserialization of SOG {0}, {1}ms", Name, System.Environment.TickCount - time);
-
-            return sceneObject;
-        }      
+        }
 
         /// <summary>
         /// Serialize a scene object to the original xml format
         /// </summary>
         /// <param name="sceneObject"></param>
-        /// <returns></returns>        
+        /// <returns></returns>
         public static string ToOriginalXmlFormat(SceneObjectGroup sceneObject)
         {
             using (StringWriter sw = new StringWriter())
@@ -147,13 +140,13 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
 
                 return sw.ToString();
             }
-        }                
+        }
 
         /// <summary>
         /// Serialize a scene object to the original xml format
         /// </summary>
         /// <param name="sceneObject"></param>
-        /// <returns></returns>            
+        /// <returns></returns>
         public static void ToOriginalXmlFormat(SceneObjectGroup sceneObject, XmlTextWriter writer)
         {
             //m_log.DebugFormat("[SERIALIZER]: Starting serialization of {0}", Name);
@@ -161,7 +154,7 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
 
             writer.WriteStartElement(String.Empty, "SceneObjectGroup", String.Empty);
             writer.WriteStartElement(String.Empty, "RootPart", String.Empty);
-            sceneObject.RootPart.ToXml(writer);
+            ToOriginalXmlFormat(sceneObject.RootPart, writer);
             writer.WriteEndElement();
             writer.WriteStartElement(String.Empty, "OtherParts", String.Empty);
 
@@ -172,7 +165,7 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
                     if (part.UUID != sceneObject.RootPart.UUID)
                     {
                         writer.WriteStartElement(String.Empty, "Part", String.Empty);
-                        part.ToXml(writer);
+                        ToOriginalXmlFormat(part, writer);
                         writer.WriteEndElement();
                     }
                 }
@@ -184,13 +177,16 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
 
             //m_log.DebugFormat("[SERIALIZER]: Finished serialization of SOG {0}, {1}ms", Name, System.Environment.TickCount - time);
         }
+
+        protected static void ToOriginalXmlFormat(SceneObjectPart part, XmlTextWriter writer)
+        {
+            part.ToXml(writer);
+        }
         
         public static SceneObjectGroup FromXml2Format(string xmlData)
         {
             //m_log.DebugFormat("[SOG]: Starting deserialization of SOG");
             //int time = System.Environment.TickCount;
-
-            SceneObjectGroup sceneObject = new SceneObjectGroup();
             
             // libomv.types changes UUID to Guid
             xmlData = xmlData.Replace("<UUID>", "<Guid>");
@@ -207,21 +203,23 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
 
                 XmlNodeList parts = doc.GetElementsByTagName("SceneObjectPart");
 
-                // Process the root part first
-                if (parts.Count > 0)
+                if (parts.Count == 0)
                 {
-                    StringReader      sr = new StringReader(parts[0].OuterXml);
-                    XmlTextReader reader = new XmlTextReader(sr);
-                    sceneObject.SetRootPart(SceneObjectPart.FromXml(reader));
-                    reader.Close();
-                    sr.Close();
+                    m_log.ErrorFormat("[SERIALIZER]: Deserialization of xml failed: No SceneObjectPart nodes. xml was " + xmlData);
+                    return null;
                 }
+
+                StringReader sr = new StringReader(parts[0].OuterXml);
+                XmlTextReader reader = new XmlTextReader(sr);
+                SceneObjectGroup sceneObject = new SceneObjectGroup(SceneObjectPart.FromXml(reader));
+                reader.Close();
+                sr.Close();
 
                 // Then deal with the rest
                 for (int i = 1; i < parts.Count; i++)
                 {
-                    StringReader      sr = new StringReader(parts[i].OuterXml);
-                    XmlTextReader reader = new XmlTextReader(sr);
+                    sr = new StringReader(parts[i].OuterXml);
+                    reader = new XmlTextReader(sr);
                     SceneObjectPart part = SceneObjectPart.FromXml(reader);
                     sceneObject.AddPart(part);
                     part.StoreUndoState();
@@ -233,22 +231,20 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
                 // ever a problem.
 
                 sceneObject.LoadScriptState(doc);
+                return sceneObject;
             }
             catch (Exception e)
             {
                 m_log.ErrorFormat("[SERIALIZER]: Deserialization of xml failed with {0}.  xml was {1}", e, xmlData);
+                return null;
             }
-
-            //m_log.DebugFormat("[SERIALIZER]: Finished deserialization of SOG {0}, {1}ms", Name, System.Environment.TickCount - time);
-
-            return sceneObject;
-        }         
+        }
 
         /// <summary>
         /// Serialize a scene object to the 'xml2' format.
         /// </summary>
         /// <param name="sceneObject"></param>
-        /// <returns></returns>               
+        /// <returns></returns>
         public static string ToXml2Format(SceneObjectGroup sceneObject)
         {
             using (StringWriter sw = new StringWriter())
@@ -266,7 +262,7 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
         /// Serialize a scene object to the 'xml2' format.
         /// </summary>
         /// <param name="sceneObject"></param>
-        /// <returns></returns>          
+        /// <returns></returns>
         public static void ToXml2Format(SceneObjectGroup sceneObject, XmlTextWriter writer)
         {
             //m_log.DebugFormat("[SERIALIZER]: Starting serialization of SOG {0} to XML2", Name);
@@ -292,6 +288,6 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
             writer.WriteEndElement(); // End of SceneObjectGroup
 
             //m_log.DebugFormat("[SERIALIZER]: Finished serialization of SOG {0} to XML2, {1}ms", Name, System.Environment.TickCount - time);
-        }   
+        }
     }
 }

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -56,10 +56,28 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         /// <summary>
         /// Constructor
         /// </summary>
+        /// <param name="scene"></param>
+        /// <param name="savePath">The path to which to save data.</param>
+        /// <param name="requestId">The id associated with this request</param>
+        /// <exception cref="System.IO.IOException">
+        /// If there was a problem opening a stream for the file specified by the savePath
+        /// </exception>
         public ArchiveWriteRequestPreparation(Scene scene, string savePath, Guid requestId)
         {
             m_scene = scene;
-            m_saveStream = new GZipStream(new FileStream(savePath, FileMode.Create), CompressionMode.Compress);
+
+            try
+            {
+                m_saveStream = new GZipStream(new FileStream(savePath, FileMode.Create), CompressionMode.Compress);
+            }
+            catch (EntryPointNotFoundException e)
+            {
+                m_log.ErrorFormat(
+                    "[ARCHIVER]: Mismatch between Mono and zlib1g library version when trying to create compression stream."
+                        + "If you've manually installed Mono, have you appropriately updated zlib1g as well?");
+                m_log.Error(e);
+            }
+            
             m_requestId = requestId;
         }
         
@@ -74,19 +92,29 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             m_scene = scene;
             m_saveStream = saveStream;
             m_requestId = requestId;
-        }        
+        }
 
         /// <summary>
         /// Archive the region requested.
         /// </summary>
         /// <exception cref="System.IO.IOException">if there was an io problem with creating the file</exception>
         public void ArchiveRegion()
-        {            
+        {
             Dictionary<UUID, int> assetUuids = new Dictionary<UUID, int>();
 
             List<EntityBase> entities = m_scene.GetEntities();
             List<SceneObjectGroup> sceneObjects = new List<SceneObjectGroup>();
 
+            /*
+                foreach (ILandObject lo in m_scene.LandChannel.AllParcels())
+                {
+                    if (name == lo.LandData.Name)
+                    {
+                        // This is the parcel we want
+                    }
+                }
+                */
+     
             // Filter entities so that we only have scene objects.
             // FIXME: Would be nicer to have this as a proper list in SceneGraph, since lots of methods
             // end up having to do this
@@ -101,7 +129,7 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 }
             }
             
-            UuidGatherer assetGatherer = new UuidGatherer(m_scene.CommsManager.AssetCache);
+            UuidGatherer assetGatherer = new UuidGatherer(m_scene.AssetService);
 
             foreach (SceneObjectGroup sceneObject in sceneObjects)
             {
@@ -137,11 +165,11 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                     m_scene.RequestModuleInterface<IRegionSerialiserModule>(),
                     m_scene,
                     archiveWriter,
-                    m_requestId);           
+                    m_requestId);
             
             new AssetsRequest(
                 new AssetsArchiver(archiveWriter), assetUuids.Keys, 
-                m_scene.CommsManager.AssetCache, awre.ReceivedAllAssets).Execute();
+                m_scene.AssetService, awre.ReceivedAllAssets).Execute();
         }
     }
 }

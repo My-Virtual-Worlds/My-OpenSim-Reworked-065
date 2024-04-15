@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -26,7 +26,6 @@
  */
 
 using System;
-using System.Text.RegularExpressions;
 using log4net.Appender;
 using log4net.Core;
 
@@ -45,58 +44,25 @@ namespace OpenSim.Framework.Console
             set { m_console = value; }
         }
 
-        private static readonly ConsoleColor[] Colors = {
-            // the dark colors don't seem to be visible on some black background terminals like putty :(
-            //ConsoleColor.DarkBlue,
-            //ConsoleColor.DarkGreen,
-            //ConsoleColor.DarkCyan,
-            //ConsoleColor.DarkMagenta,
-            //ConsoleColor.DarkYellow,
-            ConsoleColor.Gray,
-            //ConsoleColor.DarkGray,
-            ConsoleColor.Blue,
-            ConsoleColor.Green,
-            ConsoleColor.Cyan,
-            ConsoleColor.Magenta,
-            ConsoleColor.Yellow
-        };
-
         override protected void Append(LoggingEvent le)
         {
             if (m_console != null)
                 m_console.LockOutput();
 
+            string loggingMessage = RenderLoggingEvent(le);
+
             try
             {
-                string loggingMessage = RenderLoggingEvent(le);
-
-                string regex = @"^(?<Front>.*?)\[(?<Category>[^\]]+)\]:?(?<End>.*)";
-
-                Regex RE = new Regex(regex, RegexOptions.Multiline);
-                MatchCollection matches = RE.Matches(loggingMessage);
-
-                // Get some direct matches $1 $4 is a
-                if (matches.Count == 1)
+                if (m_console != null)
                 {
-                    System.Console.Write(matches[0].Groups["Front"].Value);
-                    System.Console.Write("[");
-
-                    WriteColorText(DeriveColor(matches[0].Groups["Category"].Value), matches[0].Groups["Category"].Value);
-                    System.Console.Write("]:");
+                    string level = "normal";
 
                     if (le.Level == Level.Error)
-                    {
-                        WriteColorText(ConsoleColor.Red, matches[0].Groups["End"].Value);
-                    }
+                        level = "error";
                     else if (le.Level == Level.Warn)
-                    {
-                        WriteColorText(ConsoleColor.Yellow, matches[0].Groups["End"].Value);
-                    }
-                    else
-                    {
-                        System.Console.Write(matches[0].Groups["End"].Value);
-                    }
-                    System.Console.WriteLine();
+                        level = "warn";
+
+                    m_console.Output(loggingMessage, level);
                 }
                 else
                 {
@@ -112,36 +78,6 @@ namespace OpenSim.Framework.Console
                 if (m_console != null)
                     m_console.UnlockOutput();
             }
-        }
-
-        private void WriteColorText(ConsoleColor color, string sender)
-        {
-            try
-            {
-                lock (this)
-                {
-                    try
-                    {
-                        System.Console.ForegroundColor = color;
-                        System.Console.Write(sender);
-                        System.Console.ResetColor();
-                    }
-                    catch (ArgumentNullException)
-                    {
-                        // Some older systems dont support coloured text.
-                        System.Console.WriteLine(sender);
-                    }
-                }
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-        }
-
-        private static ConsoleColor DeriveColor(string input)
-        {
-            // it is important to do Abs, hash values can be negative
-            return Colors[(Math.Abs(input.ToUpper().GetHashCode()) % Colors.Length)];
         }
     }
 }

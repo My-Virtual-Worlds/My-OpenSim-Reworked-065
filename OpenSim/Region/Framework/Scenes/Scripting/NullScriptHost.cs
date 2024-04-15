@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,6 +29,7 @@ using System;
 using OpenMetaverse;
 using log4net;
 using System.Reflection;
+using OpenSim.Framework;
 
 namespace OpenSim.Region.Framework.Scenes.Scripting
 {
@@ -36,7 +37,7 @@ namespace OpenSim.Region.Framework.Scenes.Scripting
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        private Vector3 m_pos = new Vector3(128, 128, 30);
+        private Vector3 m_pos = new Vector3(((int)Constants.RegionSize * 0.5f), ((int)Constants.RegionSize * 0.5f), 30);
 
         public string Name
         {
@@ -67,12 +68,12 @@ namespace OpenSim.Region.Framework.Scenes.Scripting
             get { return UUID.Zero; }
         }
 
-        public UUID ObjectOwner
+        public UUID OwnerID
         {
             get { return UUID.Zero; }
         }
 
-        public UUID ObjectCreator
+        public UUID CreatorID
         {
             get { return UUID.Zero; }
         }

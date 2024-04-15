@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -26,6 +26,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Nini.Config;
 
@@ -60,21 +61,38 @@ namespace OpenSim.Framework.RegionLoader.Filesystem
             }
 
             string[] configFiles = Directory.GetFiles(regionConfigPath, "*.xml");
+            string[] iniFiles = Directory.GetFiles(regionConfigPath, "*.ini");
 
-            if (configFiles.Length == 0)
+            if (configFiles.Length == 0 && iniFiles.Length == 0)
             {
-                new RegionInfo("DEFAULT REGION CONFIG", Path.Combine(regionConfigPath, "default.xml"), false, m_configSource);
-                configFiles = Directory.GetFiles(regionConfigPath, "*.xml");
+                new RegionInfo("DEFAULT REGION CONFIG", Path.Combine(regionConfigPath, "Regions.ini"), false, m_configSource);
+                iniFiles = Directory.GetFiles(regionConfigPath, "*.ini");
             }
 
-            RegionInfo[] regionInfos = new RegionInfo[configFiles.Length];
-            for (int i = 0; i < configFiles.Length; i++)
+            List<RegionInfo> regionInfos = new List<RegionInfo>();
+
+            int i = 0;
+            foreach (string file in iniFiles)
             {
-                RegionInfo regionInfo = new RegionInfo("REGION CONFIG #" + (i + 1), configFiles[i], false, m_configSource);
-                regionInfos[i] = regionInfo;
+                IConfigSource source = new IniConfigSource(file);
+
+                foreach (IConfig config in source.Configs)
+                {
+                    //m_log.Info("[REGIONLOADERFILESYSTEM]: Creating RegionInfo for " + config.Name);
+                    RegionInfo regionInfo = new RegionInfo("REGION CONFIG #" + (i + 1), file, false, m_configSource, config.Name);
+                    regionInfos.Add(regionInfo);
+                    i++;
+                }
             }
 
-            return regionInfos;
+            foreach (string file in configFiles)
+            {
+                RegionInfo regionInfo = new RegionInfo("REGION CONFIG #" + (i + 1), file, false, m_configSource);
+                regionInfos.Add(regionInfo);
+                i++;
+            }
+
+            return regionInfos.ToArray();
         }
     }
 }

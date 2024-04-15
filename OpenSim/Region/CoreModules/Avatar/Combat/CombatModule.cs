@@ -30,6 +30,7 @@ using System.Collections.Generic;
 using Nini.Config;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
+using OpenMetaverse;
 
 namespace OpenSim.Region.CoreModules.Avatar.Combat.CombatModule
 {
@@ -67,6 +68,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Combat.CombatModule
             }
 
             scene.EventManager.OnAvatarKilled += KillAvatar;
+            scene.EventManager.OnAvatarEnteringNewParcel += AvatarEnteringParcel;
         }
 
         public void PostInitialise()
@@ -94,12 +96,14 @@ namespace OpenSim.Region.CoreModules.Avatar.Combat.CombatModule
             else
             {
                 bool foundResult = false;
-                string resultstring = "";
-                List<ScenePresence> allav = DeadAvatar.Scene.GetScenePresences();
+                string resultstring = String.Empty;
+                ScenePresence[] allav = DeadAvatar.Scene.GetScenePresences();
                 try
                 {
-                    foreach (ScenePresence av in allav)
+                    for (int i = 0; i < allav.Length; i++)
                     {
+                        ScenePresence av = allav[i];
+
                         if (av.LocalId == killerObjectLocalID)
                         {
                             av.ControllingClient.SendAlertMessage("You fragged " + DeadAvatar.Firstname + " " + DeadAvatar.Lastname);
@@ -139,6 +143,26 @@ namespace OpenSim.Region.CoreModules.Avatar.Combat.CombatModule
             }
             DeadAvatar.Health = 100;
             DeadAvatar.Scene.TeleportClientHome(DeadAvatar.UUID, DeadAvatar.ControllingClient);
+        }
+
+        private void AvatarEnteringParcel(ScenePresence avatar, int localLandID, UUID regionID)
+        {            
+            try
+            {
+                ILandObject obj = avatar.Scene.LandChannel.GetLandObject(avatar.AbsolutePosition.X, avatar.AbsolutePosition.Y);
+                
+                if ((obj.LandData.Flags & (uint)ParcelFlags.AllowDamage) != 0)
+                {
+                    avatar.Invulnerable = false;
+                }
+                else
+                {
+                    avatar.Invulnerable = true;
+                }
+            }
+            catch (Exception)
+            {
+            }
         }
     }
 }

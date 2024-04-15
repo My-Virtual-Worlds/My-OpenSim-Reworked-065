@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -27,26 +27,68 @@
 
 using System;
 using System.Xml.Serialization;
+using System.Reflection;
+using log4net;
 using OpenMetaverse;
 
 namespace OpenSim.Framework
 {
+    /// <summary>
+    /// Asset class.   All Assets are reference by this class or a class derived from this class
+    /// </summary>
     [Serializable]
     public class AssetBase
     {
+        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+
+        /// <summary>
+        /// Data of the Asset
+        /// </summary>
         private byte[] m_data;
+
+        /// <summary>
+        /// Meta Data of the Asset
+        /// </summary>
         private AssetMetadata m_metadata;
 
+        // This is needed for .NET serialization!!!
+        // Do NOT "Optimize" away!
         public AssetBase()
         {
             m_metadata = new AssetMetadata();
+            m_metadata.FullID = UUID.Zero;
+            m_metadata.ID = UUID.Zero.ToString();
+            m_metadata.Type = (sbyte)AssetType.Unknown;
         }
 
-        public AssetBase(UUID assetId, string name)
+        public AssetBase(UUID assetID, string name, sbyte assetType)
         {
+            if (assetType == (sbyte)AssetType.Unknown)
+            {
+                System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(true);
+                m_log.ErrorFormat("[ASSETBASE]: Creating asset '{0}' ({1}) with an unknown asset type\n{2}",
+                    name, assetID, trace.ToString());
+            }
+
             m_metadata = new AssetMetadata();
-            m_metadata.FullID = assetId;
+            m_metadata.FullID = assetID;
             m_metadata.Name = name;
+            m_metadata.Type = assetType;
+        }
+
+        public AssetBase(string assetID, string name, sbyte assetType)
+        {
+            if (assetType == (sbyte)AssetType.Unknown)
+            {
+                System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(true);
+                m_log.ErrorFormat("[ASSETBASE]: Creating asset '{0}' ({1}) with an unknown asset type\n{2}",
+                    name, assetID, trace.ToString());
+            }
+
+            m_metadata = new AssetMetadata();
+            m_metadata.ID = assetID;
+            m_metadata.Name = name;
+            m_metadata.Type = assetType;
         }
 
         public bool ContainsReferences
@@ -71,6 +113,9 @@ namespace OpenSim.Framework
 
         }
 
+        /// <summary>
+        /// Checks if this asset is a binary or text asset
+        /// </summary>
         public bool IsBinaryAsset
         {
             get
@@ -102,12 +147,17 @@ namespace OpenSim.Framework
             set { m_data = value; }
         }
 
+        /// <summary>
+        /// Asset UUID
+        /// </summary>
         public UUID FullID
         {
             get { return m_metadata.FullID; }
             set { m_metadata.FullID = value; }
         }
-
+        /// <summary>
+        /// Asset MetaData ID (transferring from UUID to string ID)
+        /// </summary>
         public string ID
         {
             get { return m_metadata.ID; }
@@ -126,18 +176,27 @@ namespace OpenSim.Framework
             set { m_metadata.Description = value; }
         }
 
+        /// <summary>
+        /// (sbyte) AssetType enum
+        /// </summary>
         public sbyte Type
         {
             get { return m_metadata.Type; }
             set { m_metadata.Type = value; }
         }
 
+        /// <summary>
+        /// Is this a region only asset, or does this exist on the asset server also
+        /// </summary>
         public bool Local
         {
             get { return m_metadata.Local; }
             set { m_metadata.Local = value; }
         }
 
+        /// <summary>
+        /// Is this asset going to be saved to the asset database?
+        /// </summary>
         public bool Temporary
         {
             get { return m_metadata.Temporary; }
@@ -150,32 +209,58 @@ namespace OpenSim.Framework
             get { return m_metadata; }
             set { m_metadata = value; }
         }
+
+        public override string ToString()
+        {
+            return FullID.ToString();
+        }
     }
 
+    [Serializable]
     public class AssetMetadata
     {
         private UUID m_fullid;
+        // m_id added as a dirty hack to transition from FullID to ID
+        private string m_id;
         private string m_name = String.Empty;
         private string m_description = String.Empty;
         private DateTime m_creation_date;
-        private sbyte m_type;
+        private sbyte m_type = (sbyte)AssetType.Unknown;
         private string m_content_type;
         private byte[] m_sha1;
-        private bool m_local = false;
-        private bool m_temporary = false;
+        private bool m_local;
+        private bool m_temporary;
         //private Dictionary<string, Uri> m_methods = new Dictionary<string, Uri>();
         //private OSDMap m_extra_data;
 
         public UUID FullID
         {
             get { return m_fullid; }
-            set { m_fullid = value; }
+            set { m_fullid = value; m_id = m_fullid.ToString(); }
         }
 
         public string ID
         {
-            get { return m_fullid.ToString(); }
-            set { m_fullid = new UUID(value); }
+            //get { return m_fullid.ToString(); }
+            //set { m_fullid = new UUID(value); }
+            get
+            {
+                if (String.IsNullOrEmpty(m_id))
+                    m_id = m_fullid.ToString();
+
+                return m_id;
+            }
+            set
+            {
+                UUID uuid = UUID.Zero;
+                if (UUID.TryParse(value, out uuid))
+                {
+                    m_fullid = uuid;
+                    m_id = m_fullid.ToString();
+                }
+                else
+                    m_id = value;
+            }
         }
 
         public string Name

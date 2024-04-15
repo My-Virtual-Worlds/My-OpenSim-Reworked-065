@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -28,13 +28,14 @@
 using System;
 using System.Collections.Generic;
 using OpenSim.Framework;
+using OpenMetaverse;
 
 namespace OpenSim.Region.Physics.Manager
 {
     public interface IMesher
     {
-        IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod);
-        IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod, bool isPhysical);
+        IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, Vector3 size, float lod);
+        IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, Vector3 size, float lod, bool isPhysical);
     }
 
     public interface IVertex
@@ -43,10 +44,12 @@ namespace OpenSim.Region.Physics.Manager
 
     public interface IMesh
     {
-        List<PhysicsVector> getVertexList();
+        List<Vector3> getVertexList();
         int[] getIndexListAsInt();
         int[] getIndexListAsIntLocked();
         float[] getVertexListAsFloatLocked();
+        void getIndexListAsPtrToIntArray(out IntPtr indices, out int triStride, out int indexCount);
+        void getVertexListAsPtrToFloatArray(out IntPtr vertexList, out int vertexStride, out int vertexCount);
         void releaseSourceMeshData();
         void releasePinned();
         void Append(IMesh newMesh);

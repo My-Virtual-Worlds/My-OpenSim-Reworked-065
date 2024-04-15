@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -28,6 +28,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net;
 using System.Reflection;
 using log4net;
 using Nini.Config;
@@ -38,6 +39,8 @@ using OpenSim.Framework.Communications;
 using OpenSim.Framework.Communications.Cache;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
+using OpenSim.Services.Interfaces;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 namespace OpenSim.Region.CoreModules.Avatar.Friends
 {
@@ -106,7 +109,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
         private Dictionary<ulong, Scene> m_scenes = new Dictionary<ulong,Scene>();
         private IMessageTransferModule m_TransferModule = null;
 
-        private IGridServices m_gridServices = null;
+        private IGridService m_gridServices = null;
 
         #region IRegionModule Members
 
@@ -116,8 +119,8 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
             {
                 if (m_scenes.Count == 0)
                 {
-                    scene.CommsManager.HttpServer.AddXmlRPCHandler("presence_update_bulk", processPresenceUpdateBulk);
-                    scene.CommsManager.HttpServer.AddXmlRPCHandler("terminate_friend", processTerminateFriend);
+                    MainServer.Instance.AddXmlRPCHandler("presence_update_bulk", processPresenceUpdateBulk);
+                    MainServer.Instance.AddXmlRPCHandler("terminate_friend", processTerminateFriend);
                     m_friendLists.DefaultTTL = new TimeSpan(1, 0, 0);  // store entries for one hour max
                     m_initialScene = scene;
                 }
@@ -140,7 +143,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
             if (m_scenes.Count > 0)
             {
                 m_TransferModule = m_initialScene.RequestModuleInterface<IMessageTransferModule>();
-                m_gridServices = m_initialScene.CommsManager.GridService;
+                m_gridServices = m_initialScene.GridService;
             }
             if (m_TransferModule == null)
                 m_log.Error("[FRIENDS]: Unable to find a message transfer module, friendship offers will not work");
@@ -169,7 +172,9 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
             List<UUID> tpdAway = new List<UUID>();
 
             // destRegionHandle is a region on another server
-            RegionInfo info = m_gridServices.RequestNeighbourInfo(destRegionHandle);
+            uint x = 0, y = 0;
+            Utils.LongToUInts(destRegionHandle, out x, out y);
+            GridRegion info = m_gridServices.GetRegionByPosition(m_initialScene.RegionInfo.ScopeID, (int)x, (int)y);
             if (info != null)
             {
                 string httpServer = "http://" + info.ExternalEndPoint.Address + ":" + info.HttpPort + "/presence_update_bulk";
@@ -199,6 +204,15 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
                         if (UUID.TryParse((string)respData["friendID_" + i], out uuid)) tpdAway.Add(uuid);
                     }
                 }
+                catch (WebException e)
+                {
+                    // Ignore connect failures, simulators come and go
+                    //
+                    if (!e.Message.Contains("ConnectFailure"))
+                    {
+                        m_log.Error("[OGS1 GRID SERVICES]: InformFriendsInOtherRegion XMLRPC failure: ", e);
+                    }
+                }
                 catch (Exception e)
                 {
                     m_log.Error("[OGS1 GRID SERVICES]: InformFriendsInOtherRegion XMLRPC failure: ", e);
@@ -212,7 +226,9 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
         public bool TriggerTerminateFriend(ulong destRegionHandle, UUID agentID, UUID exFriendID)
         {
             // destRegionHandle is a region on another server
-            RegionInfo info = m_gridServices.RequestNeighbourInfo(destRegionHandle);
+            uint x = 0, y = 0;
+            Utils.LongToUInts(destRegionHandle, out x, out y);
+            GridRegion info = m_gridServices.GetRegionByPosition(m_initialScene.RegionInfo.ScopeID, (int)x, (int)y);
             if (info == null)
             {
                 m_log.WarnFormat("[OGS1 GRID SERVICES]: Couldn't find region {0}", destRegionHandle);
@@ -250,7 +266,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
         /// </summary>
         /// <param name="req"></param>
         /// <returns></returns>
-        public XmlRpcResponse processPresenceUpdateBulk(XmlRpcRequest req)
+        public XmlRpcResponse processPresenceUpdateBulk(XmlRpcRequest req, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)req.Params[0];
 
@@ -319,7 +335,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
             return response;
         }
 
-        public XmlRpcResponse processTerminateFriend(XmlRpcRequest req)
+        public XmlRpcResponse processTerminateFriend(XmlRpcRequest req, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)req.Params[0];
 
@@ -379,6 +395,11 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
 
             // if it leaves, we want to know, too
             client.OnLogout += OnLogout;
+            
+            client.OnGrantUserRights += GrantUserFriendRights;
+            client.OnTrackAgent += FindAgent;
+            client.OnFindAgent += FindAgent;
+
         }
 
         private void ClientClosed(UUID AgentId, Scene scene)
@@ -481,7 +502,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
             {
                 m_log.ErrorFormat("[FRIENDS]: No user found for id {0} in OfferFriendship()", fromUserId);
             }
-        }        
+        }
 
         #region FriendRequestHandling
 
@@ -492,7 +513,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
 
             if (im.dialog == (byte)InstantMessageDialog.FriendshipOffered) // 38
             {
-                // fromAgentName is the *destination* name (the friend we offer friendship to)                
+                // fromAgentName is the *destination* name (the friend we offer friendship to)
                 ScenePresence initiator = GetAnyPresenceFromAgentID(new UUID(im.fromAgentID));
                 im.fromAgentName = initiator != null ? initiator.Name : "(hippo)";
                 
@@ -512,13 +533,13 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
         /// Invoked when a user offers a friendship.
         /// </summary>
         /// 
-        /// <param name="im"></param>    
+        /// <param name="im"></param>
         /// <param name="client"></param>
         private void FriendshipOffered(GridInstantMessage im)
         {
             // this is triggered by the initiating agent:
             // A local agent offers friendship to some possibly remote friend.
-            // A IM is triggered, processed here and sent to the friend (possibly in a remote region).           
+            // A IM is triggered, processed here and sent to the friend (possibly in a remote region).
 
             m_log.DebugFormat("[FRIEND]: Offer(38) - From: {0}, FromName: {1} To: {2}, Session: {3}, Message: {4}, Offline {5}",
                        im.fromAgentID, im.fromAgentName, im.toAgentID, im.imSessionID, im.message, im.offline);
@@ -543,7 +564,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
                         m_log.DebugFormat("[FRIEND]: sending IM success = {0}", success);
                     }
                 );
-            }            
+            }
         }
         
         /// <summary>
@@ -554,7 +575,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
         private void FriendshipAccepted(IClientAPI client, GridInstantMessage im)
         {
             m_log.DebugFormat("[FRIEND]: 39 - from client {0}, agent {2} {3}, imsession {4} to {5}: {6} (dialog {7})",
-              client.AgentId, im.fromAgentID, im.fromAgentName, im.imSessionID, im.toAgentID, im.message, im.dialog);            
+              client.AgentId, im.fromAgentID, im.fromAgentName, im.imSessionID, im.toAgentID, im.message, im.dialog);
         }
         
         /// <summary>
@@ -586,7 +607,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
                 delegate(bool success) {
                     m_log.DebugFormat("[FRIEND]: sending IM success = {0}", success);
                 }
-            );            
+            );
         }
 
         private void OnGridInstantMessage(GridInstantMessage msg)
@@ -644,8 +665,10 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
             initiator.ControllingClient.SendAgentOnline(new UUID[] { fromAgentID });
 
             // find the folder for the friend...
-            InventoryFolderImpl folder =
-                initiator.Scene.CommsManager.UserProfileCacheService.GetUserDetails(toAgentID).FindFolderForType((int)InventoryType.CallingCard);
+            //InventoryFolderImpl folder =
+            //    initiator.Scene.CommsManager.UserProfileCacheService.GetUserDetails(toAgentID).FindFolderForType((int)InventoryType.CallingCard);
+            IInventoryService invService = initiator.Scene.InventoryService;
+            InventoryFolderBase folder = invService.GetFolderForType(toAgentID, AssetType.CallingCard);
             if (folder != null)
             {
                 // ... and add the calling card
@@ -1090,7 +1113,42 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
             // tell everyone that we are offline
             SendPresenceState(remoteClient, fl, false);
         }
-    }
+        private void GrantUserFriendRights(IClientAPI remoteClient, UUID requester, UUID target, int rights)
+        {
+            ((Scene)remoteClient.Scene).CommsManager.UpdateUserFriendPerms(requester, target, (uint)rights);
+        }
+        public void FindAgent(IClientAPI remoteClient, UUID hunter, UUID target)
+        {
+            List<FriendListItem> friendList = GetUserFriends(hunter);
+            foreach (FriendListItem item in friendList)
+            {
+                if (item.onlinestatus == true)
+                {
+                    if (item.Friend == target && (item.FriendPerms & (uint)FriendRights.CanSeeOnMap) != 0)
+                    {
+                        ScenePresence SPTarget = ((Scene)remoteClient.Scene).GetScenePresence(target);
+                        string regionname =  SPTarget.Scene.RegionInfo.RegionName;
+                        remoteClient.SendScriptTeleportRequest("FindAgent", regionname,new Vector3(SPTarget.AbsolutePosition),new Vector3(SPTarget.Lookat));
+                    }
+                }
+                else
+                {
+                    remoteClient.SendAgentAlertMessage("The agent you are looking for is not online.", false);
+                }
+            }
+        }
 
+        public List<FriendListItem> GetUserFriends(UUID agentID)
+        {
+            List<FriendListItem> fl;
+            lock (m_friendLists)
+            {
+                fl = (List<FriendListItem>)m_friendLists.Get(agentID.ToString(),
+                        m_initialScene.GetFriendList);
+            }
+
+            return fl;
+        }
+    }
     #endregion
 }

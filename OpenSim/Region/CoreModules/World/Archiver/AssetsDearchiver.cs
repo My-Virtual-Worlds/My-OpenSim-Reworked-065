@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -35,6 +35,7 @@ using log4net;
 using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Framework.Serialization;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Region.CoreModules.World.Archiver
 {
@@ -60,9 +61,9 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         /// <summary>
         /// Cache to which dearchived assets will be added
         /// </summary>
-        protected IAssetCache m_cache;
+        protected IAssetService m_cache;
 
-        public AssetsDearchiver(IAssetCache cache)
+        public AssetsDearchiver(IAssetService cache)
         {
             m_cache = cache;
         }
@@ -157,12 +158,11 @@ namespace OpenSim.Region.CoreModules.World.Archiver
 
                 m_log.DebugFormat("[ARCHIVER]: Importing asset {0}", filename);
 
-                AssetBase asset = new AssetBase(new UUID(filename), metadata.Name);
+                AssetBase asset = new AssetBase(new UUID(filename), metadata.Name, metadata.AssetType);
                 asset.Description = metadata.Description;
-                asset.Type = metadata.AssetType;
                 asset.Data = data;
 
-                m_cache.AddAsset(asset);
+                m_cache.Store(asset);
             }
             else
             {

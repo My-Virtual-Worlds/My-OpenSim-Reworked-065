@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -27,6 +27,7 @@
 
 using System;
 using OpenSim.Framework;
+using OpenMetaverse;
 
 /*
  * This is the zero mesher.
@@ -60,13 +61,16 @@ namespace OpenSim.Region.Physics.Manager
 
     public class ZeroMesher : IMesher
     {
-        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod)
+        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, Vector3 size, float lod)
         {
             return CreateMesh(primName, primShape, size, lod, false);
         }
 
-        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod, bool isPhysical)
+        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, Vector3 size, float lod, bool isPhysical)
         {
+            // Remove the reference to the encoded JPEG2000 data so it can be GCed
+            primShape.SculptData = OpenMetaverse.Utils.EmptyBytes;
+
             return null;
         }
     }

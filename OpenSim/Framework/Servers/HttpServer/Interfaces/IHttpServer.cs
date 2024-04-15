@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -74,6 +74,9 @@ namespace OpenSim.Framework.Servers.HttpServer
         /// </returns>
         bool AddHTTPHandler(string methodName, GenericHTTPMethod handler);
 
+         
+        bool AddPollServiceHTTPHandler(string methodName, GenericHTTPMethod handler, PollServiceEventArgs args);
+
         /// <summary>
         /// Adds a LLSD handler, yay.
         /// </summary>
@@ -114,13 +117,17 @@ namespace OpenSim.Framework.Servers.HttpServer
         /// <param name="httpMethod"></param>
         /// <param name="path"></param>
         void RemoveHTTPHandler(string httpMethod, string path);
+
+        void RemovePollServiceHTTPHandler(string httpMethod, string path);
         
         bool RemoveLLSDHandler(string path, LLSDMethod handler);
         
         void RemoveStreamHandler(string httpMethod, string path);
+
+        void RemoveXmlRPCHandler(string method);
         
         string GetHTTP404(string host);
 
-        string GetHTTP500();       
+        string GetHTTP500();
     }
 }

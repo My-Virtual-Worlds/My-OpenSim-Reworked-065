@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -109,7 +109,7 @@ namespace OpenSim.Framework.Serialization.External
                         settings.AgentLimit = int.Parse(xtr.ReadElementContentAsString());
                         break;
                     case "ObjectBonus":
-                        settings.ObjectBonus = double.Parse(xtr.ReadElementContentAsString());
+                        settings.ObjectBonus = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                 }
             }
@@ -134,31 +134,31 @@ namespace OpenSim.Framework.Serialization.External
                         settings.TerrainTexture4 = UUID.Parse(xtr.ReadElementContentAsString());
                         break;
                     case "ElevationLowSW":
-                        settings.Elevation1SW = double.Parse(xtr.ReadElementContentAsString());
+                        settings.Elevation1SW = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "ElevationLowNW":
-                        settings.Elevation1NW = double.Parse(xtr.ReadElementContentAsString());
+                        settings.Elevation1NW = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "ElevationLowSE":
-                        settings.Elevation1SE = double.Parse(xtr.ReadElementContentAsString());
+                        settings.Elevation1SE = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "ElevationLowNE":
-                        settings.Elevation1NE = double.Parse(xtr.ReadElementContentAsString());
+                        settings.Elevation1NE = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "ElevationHighSW":
-                        settings.Elevation2SW = double.Parse(xtr.ReadElementContentAsString());
+                        settings.Elevation2SW = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "ElevationHighNW":
-                        settings.Elevation2NW = double.Parse(xtr.ReadElementContentAsString());
+                        settings.Elevation2NW = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "ElevationHighSE":
-                        settings.Elevation2SE = double.Parse(xtr.ReadElementContentAsString());
+                        settings.Elevation2SE = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "ElevationHighNE":
-                        settings.Elevation2NE = double.Parse(xtr.ReadElementContentAsString());
+                        settings.Elevation2NE = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                 }
-            }                    
+            }
            
             xtr.ReadEndElement();
             xtr.ReadStartElement("Terrain");
@@ -168,13 +168,13 @@ namespace OpenSim.Framework.Serialization.External
                 switch (xtr.Name)
                 {
                     case "WaterHeight":
-                        settings.WaterHeight = double.Parse(xtr.ReadElementContentAsString());
+                        settings.WaterHeight = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "TerrainRaiseLimit":
-                        settings.TerrainRaiseLimit = double.Parse(xtr.ReadElementContentAsString());
+                        settings.TerrainRaiseLimit = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "TerrainLowerLimit":
-                        settings.TerrainLowerLimit = double.Parse(xtr.ReadElementContentAsString());
+                        settings.TerrainLowerLimit = double.Parse(xtr.ReadElementContentAsString(), Culture.NumberFormatInfo);
                         break;
                     case "UseEstateSun":
                         settings.UseEstateSun = bool.Parse(xtr.ReadElementContentAsString());
@@ -200,8 +200,8 @@ namespace OpenSim.Framework.Serialization.External
             
             xtw.WriteStartElement("RegionSettings");
             
-            xtw.WriteStartElement("General");            
-            xtw.WriteElementString("AllowDamage", settings.AllowDamage.ToString());            
+            xtw.WriteStartElement("General");
+            xtw.WriteElementString("AllowDamage", settings.AllowDamage.ToString());
             xtw.WriteElementString("AllowLandResell", settings.AllowLandResell.ToString());
             xtw.WriteElementString("AllowLandJoinDivide", settings.AllowLandJoinDivide.ToString());
             xtw.WriteElementString("BlockFly", settings.BlockFly.ToString());

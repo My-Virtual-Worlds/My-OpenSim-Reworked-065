@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,8 +29,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Timers;
 using log4net;
+using Nini.Config;
 using OpenSim.Framework;
 using OpenSim.Framework.Console;
 using OpenSim.Framework.Servers;
@@ -46,6 +46,9 @@ namespace OpenSim.Grid.GridServer
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         protected GridConfig m_config;
+        public string m_consoleType = "local";
+        public IConfigSource m_configSource = null;
+        public string m_configFile = "GridServer_Config.xml";
 
         public GridConfig Config
         {
@@ -61,7 +64,7 @@ namespace OpenSim.Grid.GridServer
 
         public void Work()
         {
-            m_console.Notice("Enter help for a list of commands\n");
+            m_console.Output("Enter help for a list of commands\n");
 
             while (true)
             {
@@ -71,16 +74,36 @@ namespace OpenSim.Grid.GridServer
 
         public GridServerBase()
         {
-            m_console = new LocalConsole("Grid");
-            MainConsole.Instance = m_console;
         }
 
         protected override void StartupSpecific()
         {
-            m_config = new GridConfig("GRID SERVER", (Path.Combine(Util.configDir(), "GridServer_Config.xml")));
+            switch (m_consoleType)
+            {
+            case "rest":
+                m_console = new RemoteConsole("Grid");
+                break;
+            case "basic":
+                m_console = new CommandConsole("Grid");
+                break;
+            default:
+                m_console = new LocalConsole("Grid");
+                break;
+            }
+            MainConsole.Instance = m_console;
+            m_config = new GridConfig("GRID SERVER", (Path.Combine(Util.configDir(), m_configFile)));
 
             m_log.Info("[GRID]: Starting HTTP process");
             m_httpServer = new BaseHttpServer(m_config.HttpPort);
+            if (m_console is RemoteConsole)
+            {
+                RemoteConsole c = (RemoteConsole)m_console;
+                c.SetServer(m_httpServer);
+                IConfig netConfig = m_configSource.AddConfig("Network");
+                netConfig.Set("ConsoleUser", m_config.ConsoleUser);
+                netConfig.Set("ConsolePass", m_config.ConsolePass);
+                c.ReadConfig(m_configSource);
+            }
 
             LoadPlugins();
 
@@ -91,11 +114,11 @@ namespace OpenSim.Grid.GridServer
 
         protected virtual void LoadPlugins()
         {
-            PluginLoader<IGridPlugin> loader =
-                new PluginLoader<IGridPlugin>(new GridPluginInitialiser(this));
-
-            loader.Load("/OpenSim/GridServer");
-            m_plugins = loader.Plugins;
+            using (PluginLoader<IGridPlugin> loader = new PluginLoader<IGridPlugin>(new GridPluginInitialiser(this)))
+            {
+                loader.Load("/OpenSim/GridServer");
+                m_plugins = loader.Plugins;
+            }
         }
 
         public override void ShutdownSpecific()

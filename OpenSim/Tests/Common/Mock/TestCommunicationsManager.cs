@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -43,11 +43,11 @@ namespace OpenSim.Tests.Common.Mock
         }
         private IUserDataPlugin m_userDataPlugin;
 
-        public IInventoryDataPlugin InventoryDataPlugin
-        {
-            get { return m_inventoryDataPlugin; }
-        }
-        private IInventoryDataPlugin m_inventoryDataPlugin;
+        // public IInventoryDataPlugin InventoryDataPlugin
+        // {
+        //     get { return m_inventoryDataPlugin; }
+        // }
+        // private IInventoryDataPlugin m_inventoryDataPlugin;
 
         public TestCommunicationsManager()
             : this(null)
@@ -55,16 +55,8 @@ namespace OpenSim.Tests.Common.Mock
         }
 
         public TestCommunicationsManager(NetworkServersInfo serversInfo)
-            : base(serversInfo, new BaseHttpServer(666), null, false, null)
-        {                        
-            SQLAssetServer assetService = new SQLAssetServer(new TestAssetDataPlugin());  
-            m_assetCache = new AssetCache(assetService);            
-            
-            LocalInventoryService lis = new LocalInventoryService();
-            m_inventoryDataPlugin = new TestInventoryDataPlugin();
-            lis.AddPlugin(m_inventoryDataPlugin);
-            m_interServiceInventoryService = lis;
-            AddInventoryService(lis);
+            : base(serversInfo, null)
+        {
 
             LocalUserServices lus = new LocalUserServices(991, 992, this);
             lus.AddPlugin(new TemporaryUserProfilePlugin());
@@ -73,16 +65,6 @@ namespace OpenSim.Tests.Common.Mock
             m_userService = lus;
             m_userAdminService = lus;
 
-            LocalBackEndServices gs = new LocalBackEndServices();
-            m_gridService = gs;
-        }
-        
-        /// <summary>
-        /// Start services that take care of business using their own threads.
-        /// </summary>
-        public void StartServices()
-        {
-            m_assetCache.AssetServer.Start();            
         }
     }
 }

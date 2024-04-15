@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,13 +33,13 @@ using OpenSim.Framework;
 using OpenSim.Framework.Communications.Cache;
 
 namespace OpenSim.Framework.Communications.Osp
-{    
+{
     /// <summary>
     /// Resolves OpenSim Profile Anchors (OSPA).  An OSPA is a string used to provide information for 
     /// identifying user profiles or supplying a simple name if no profile is available.
     /// </summary>
     public class OspResolver
-    {   
+    {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         
         public const string OSPA_PREFIX = "ospa:";
@@ -73,7 +73,7 @@ namespace OpenSim.Framework.Communications.Osp
         {
             return 
                 OSPA_PREFIX + OSPA_NAME_KEY + OSPA_PAIR_SEPARATOR + firstName + OSPA_NAME_VALUE_SEPARATOR + lastName;
-        }        
+        }
         
         /// <summary>
         /// Resolve an osp string into the most suitable internal OpenSim identifier.
@@ -89,13 +89,13 @@ namespace OpenSim.Framework.Communications.Osp
         /// is returned.
         /// </returns>
         public static UUID ResolveOspa(string ospa, CommunicationsManager commsManager)
-        {                       
+        {
             if (!ospa.StartsWith(OSPA_PREFIX))
                 return UUID.Zero;
 
-            m_log.DebugFormat("[OSP RESOLVER]: Resolving {0}", ospa);
+//            m_log.DebugFormat("[OSP RESOLVER]: Resolving {0}", ospa);
             
-            string ospaMeat = ospa.Substring(OSPA_PREFIX.Length);            
+            string ospaMeat = ospa.Substring(OSPA_PREFIX.Length);
             string[] ospaTuples = ospaMeat.Split(OSPA_TUPLE_SEPARATOR_ARRAY);
             
             foreach (string tuple in ospaTuples)
@@ -153,17 +153,22 @@ namespace OpenSim.Framework.Communications.Osp
             CachedUserInfo userInfo = commsManager.UserProfileCacheService.GetUserDetails(firstName, lastName);
             if (userInfo != null)
                 return userInfo.UserProfile.ID;
-                        
+
+            // XXX: Disable temporary user profile creation for now as implementation is incomplete - justincc
+            /*
             UserProfileData tempUserProfile = new UserProfileData();
             tempUserProfile.FirstName = firstName;
             tempUserProfile.SurName = lastName;
             tempUserProfile.ID = HashName(tempUserProfile.Name);
             
             m_log.DebugFormat(
-                "[OSP RESOLVER]: Adding temporary user profile for {0} {1}", tempUserProfile.Name, tempUserProfile.ID);            
+                "[OSP RESOLVER]: Adding temporary user profile for {0} {1}", tempUserProfile.Name, tempUserProfile.ID);
             commsManager.UserService.AddTemporaryUserProfile(tempUserProfile);
             
             return tempUserProfile.ID;
+            */
+
+            return UUID.Zero;
         }
     }
 }

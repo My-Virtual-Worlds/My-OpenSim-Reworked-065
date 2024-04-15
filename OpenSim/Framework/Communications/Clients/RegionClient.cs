@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -35,6 +35,8 @@ using System.Text;
 using OpenMetaverse;
 using OpenMetaverse.StructuredData;
 
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
+
 using log4net;
 
 namespace OpenSim.Framework.Communications.Clients
@@ -43,10 +45,23 @@ namespace OpenSim.Framework.Communications.Clients
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public bool DoCreateChildAgentCall(RegionInfo region, AgentCircuitData aCircuit, string authKey, out string reason)
+        public bool DoCreateChildAgentCall(GridRegion region, AgentCircuitData aCircuit, string authKey, uint teleportFlags, out string reason)
         {
+            reason = String.Empty;
+
             // Eventually, we want to use a caps url instead of the agentID
-            string uri = "http://" + region.ExternalEndPoint.Address + ":" + region.HttpPort + "/agent/" + aCircuit.AgentID + "/";
+            string uri = string.Empty;
+            try
+            {
+                uri = "http://" + region.ExternalEndPoint.Address + ":" + region.HttpPort + "/agent/" + aCircuit.AgentID + "/";
+            }
+            catch (Exception e)
+            {
+                m_log.Debug("[REST COMMS]: Unable to resolve external endpoint on agent create. Reason: " + e.Message);
+                reason = e.Message;
+                return false;
+            }
+
             //Console.WriteLine("   >>> DoCreateChildAgentCall <<< " + uri);
 
             HttpWebRequest AgentCreateRequest = (HttpWebRequest)WebRequest.Create(uri);
@@ -55,8 +70,6 @@ namespace OpenSim.Framework.Communications.Clients
             AgentCreateRequest.Timeout = 10000;
             //AgentCreateRequest.KeepAlive = false;
             AgentCreateRequest.Headers.Add("Authorization", authKey);
-
-            reason = String.Empty;
 
             // Fill it in
             OSDMap args = null;
@@ -71,13 +84,14 @@ namespace OpenSim.Framework.Communications.Clients
             // Add the regionhandle of the destination region
             ulong regionHandle = GetRegionHandle(region.RegionHandle);
             args["destination_handle"] = OSD.FromString(regionHandle.ToString());
+            args["teleport_flags"] = OSD.FromString(teleportFlags.ToString());
 
             string strBuffer = "";
             byte[] buffer = new byte[1];
             try
             {
                 strBuffer = OSDParser.SerializeJsonString(args);
-                UTF8Encoding str = new UTF8Encoding();
+                Encoding str = Util.UTF8;
                 buffer = str.GetBytes(strBuffer);
 
             }
@@ -93,7 +107,6 @@ namespace OpenSim.Framework.Communications.Clients
                 AgentCreateRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = AgentCreateRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 //m_log.InfoFormat("[REST COMMS]: Posted CreateChildAgent request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -103,13 +116,20 @@ namespace OpenSim.Framework.Communications.Clients
                 reason = "cannot contact remote region";
                 return false;
             }
+            finally
+            {
+                if (os != null)
+                    os.Close();
+            }
 
             // Let's wait for the response
             //m_log.Info("[REST COMMS]: Waiting for a reply after DoCreateChildAgentCall");
 
+            WebResponse webResponse = null;
+            StreamReader sr = null;
             try
             {
-                WebResponse webResponse = AgentCreateRequest.GetResponse();
+                webResponse = AgentCreateRequest.GetResponse();
                 if (webResponse == null)
                 {
                     m_log.Info("[REST COMMS]: Null reply on DoCreateChildAgentCall post");
@@ -117,11 +137,10 @@ namespace OpenSim.Framework.Communications.Clients
                 else
                 {
 
-                    StreamReader sr = new StreamReader(webResponse.GetResponseStream());
+                    sr = new StreamReader(webResponse.GetResponseStream());
                     string response = sr.ReadToEnd().Trim();
-                    sr.Close();
                     m_log.InfoFormat("[REST COMMS]: DoCreateChildAgentCall reply was {0} ", response);
-                
+
                     if (!String.IsNullOrEmpty(response))
                     {
                         try
@@ -145,20 +164,33 @@ namespace OpenSim.Framework.Communications.Clients
                     }
                 }
             }
-            catch (WebException ex)
+            catch (Exception ex)
             {
-                m_log.InfoFormat("[REST COMMS]: exception on reply of DoCreateChildAgentCall {0}", ex.Message);
+                m_log.DebugFormat("[REST COMMS]: exception on reply of DoCreateChildAgentCall {0}", ex.Message);
                 // ignore, really
+            }
+            finally
+            {
+                if (sr != null)
+                    sr.Close();
             }
 
             return true;
-
         }
 
-        public bool DoChildAgentUpdateCall(RegionInfo region, IAgentData cAgentData)
+        public bool DoChildAgentUpdateCall(GridRegion region, IAgentData cAgentData)
         {
             // Eventually, we want to use a caps url instead of the agentID
-            string uri = "http://" + region.ExternalEndPoint.Address + ":" + region.HttpPort + "/agent/" + cAgentData.AgentID + "/";
+            string uri = string.Empty;
+            try
+            {
+                uri = "http://" + region.ExternalEndPoint.Address + ":" + region.HttpPort + "/agent/" + cAgentData.AgentID + "/";
+            }
+            catch (Exception e)
+            {
+                m_log.Debug("[REST COMMS]: Unable to resolve external endpoint on agent update. Reason: " + e.Message);
+                return false;
+            }
             //Console.WriteLine("   >>> DoChildAgentUpdateCall <<< " + uri);
 
             HttpWebRequest ChildUpdateRequest = (HttpWebRequest)WebRequest.Create(uri);
@@ -186,7 +218,7 @@ namespace OpenSim.Framework.Communications.Clients
             try
             {
                 strBuffer = OSDParser.SerializeJsonString(args);
-                UTF8Encoding str = new UTF8Encoding();
+                Encoding str = Util.UTF8;
                 buffer = str.GetBytes(strBuffer);
 
             }
@@ -202,7 +234,6 @@ namespace OpenSim.Framework.Communications.Clients
                 ChildUpdateRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = ChildUpdateRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 //m_log.InfoFormat("[REST COMMS]: Posted ChildAgentUpdate request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -212,19 +243,26 @@ namespace OpenSim.Framework.Communications.Clients
 
                 return false;
             }
+            finally
+            {
+                if (os != null)
+                    os.Close();
+            }
 
             // Let's wait for the response
             //m_log.Info("[REST COMMS]: Waiting for a reply after ChildAgentUpdate");
 
+            WebResponse webResponse = null;
+            StreamReader sr = null;
             try
             {
-                WebResponse webResponse = ChildUpdateRequest.GetResponse();
+                webResponse = ChildUpdateRequest.GetResponse();
                 if (webResponse == null)
                 {
                     m_log.Info("[REST COMMS]: Null reply on ChilAgentUpdate post");
                 }
 
-                StreamReader sr = new StreamReader(webResponse.GetResponseStream());
+                sr = new StreamReader(webResponse.GetResponseStream());
                 //reply = sr.ReadToEnd().Trim();
                 sr.ReadToEnd().Trim();
                 sr.Close();
@@ -236,11 +274,16 @@ namespace OpenSim.Framework.Communications.Clients
                 m_log.InfoFormat("[REST COMMS]: exception on reply of ChilAgentUpdate {0}", ex.Message);
                 // ignore, really
             }
+            finally
+            {
+                if (sr != null)
+                    sr.Close();
+            }
 
             return true;
         }
 
-        public bool DoRetrieveRootAgentCall(RegionInfo region, UUID id, out IAgentData agent)
+        public bool DoRetrieveRootAgentCall(GridRegion region, UUID id, out IAgentData agent)
         {
             agent = null;
             // Eventually, we want to use a caps url instead of the agentID
@@ -254,6 +297,7 @@ namespace OpenSim.Framework.Communications.Clients
 
             HttpWebResponse webResponse = null;
             string reply = string.Empty;
+            StreamReader sr = null;
             try
             {
                 webResponse = (HttpWebResponse)request.GetResponse();
@@ -262,9 +306,8 @@ namespace OpenSim.Framework.Communications.Clients
                     m_log.Info("[REST COMMS]: Null reply on agent get ");
                 }
 
-                StreamReader sr = new StreamReader(webResponse.GetResponseStream());
+                sr = new StreamReader(webResponse.GetResponseStream());
                 reply = sr.ReadToEnd().Trim();
-                sr.Close();
 
                 //Console.WriteLine("[REST COMMS]: ChilAgentUpdate reply was " + reply);
 
@@ -274,6 +317,11 @@ namespace OpenSim.Framework.Communications.Clients
                 m_log.InfoFormat("[REST COMMS]: exception on reply of agent get {0}", ex.Message);
                 // ignore, really
                 return false;
+            }
+            finally
+            {
+                if (sr != null)
+                    sr.Close();
             }
 
             if (webResponse.StatusCode == HttpStatusCode.OK)
@@ -303,6 +351,7 @@ namespace OpenSim.Framework.Communications.Clients
             request.Method = "DELETE";
             request.Timeout = 10000;
 
+            StreamReader sr = null;
             try
             {
                 WebResponse webResponse = request.GetResponse();
@@ -311,7 +360,7 @@ namespace OpenSim.Framework.Communications.Clients
                     m_log.Info("[REST COMMS]: Null reply on agent delete ");
                 }
 
-                StreamReader sr = new StreamReader(webResponse.GetResponseStream());
+                sr = new StreamReader(webResponse.GetResponseStream());
                 //reply = sr.ReadToEnd().Trim();
                 sr.ReadToEnd().Trim();
                 sr.Close();
@@ -323,14 +372,28 @@ namespace OpenSim.Framework.Communications.Clients
                 m_log.InfoFormat("[REST COMMS]: exception on reply of agent delete {0}", ex.Message);
                 // ignore, really
             }
+            finally
+            {
+                if (sr != null)
+                    sr.Close();
+            }
 
             return true;
         }
 
 
-        public bool DoCloseAgentCall(RegionInfo region, UUID id)
+        public bool DoCloseAgentCall(GridRegion region, UUID id)
         {
-            string uri = "http://" + region.ExternalEndPoint.Address + ":" + region.HttpPort + "/agent/" + id + "/" + region.RegionHandle.ToString() + "/";
+            string uri = string.Empty;
+            try
+            {
+                uri = "http://" + region.ExternalEndPoint.Address + ":" + region.HttpPort + "/agent/" + id + "/" + region.RegionHandle.ToString() + "/";
+            }
+            catch (Exception e)
+            {
+                m_log.Debug("[REST COMMS]: Unable to resolve external endpoint on agent close. Reason: " + e.Message);
+                return false;
+            }
 
             //Console.WriteLine("   >>> DoCloseAgentCall <<< " + uri);
 
@@ -338,6 +401,7 @@ namespace OpenSim.Framework.Communications.Clients
             request.Method = "DELETE";
             request.Timeout = 10000;
 
+            StreamReader sr = null;
             try
             {
                 WebResponse webResponse = request.GetResponse();
@@ -346,7 +410,7 @@ namespace OpenSim.Framework.Communications.Clients
                     m_log.Info("[REST COMMS]: Null reply on agent delete ");
                 }
 
-                StreamReader sr = new StreamReader(webResponse.GetResponseStream());
+                sr = new StreamReader(webResponse.GetResponseStream());
                 //reply = sr.ReadToEnd().Trim();
                 sr.ReadToEnd().Trim();
                 sr.Close();
@@ -358,11 +422,16 @@ namespace OpenSim.Framework.Communications.Clients
                 m_log.InfoFormat("[REST COMMS]: exception on reply of agent delete {0}", ex.Message);
                 // ignore, really
             }
+            finally
+            {
+                if (sr != null)
+                    sr.Close();
+            }
 
             return true;
         }
 
-        public bool DoCreateObjectCall(RegionInfo region, ISceneObject sog, string sogXml2, bool allowScriptCrossing)
+        public bool DoCreateObjectCall(GridRegion region, ISceneObject sog, string sogXml2, bool allowScriptCrossing)
         {
             ulong regionHandle = GetRegionHandle(region.RegionHandle);
             string uri 
@@ -390,7 +459,7 @@ namespace OpenSim.Framework.Communications.Clients
             try
             {
                 strBuffer = OSDParser.SerializeJsonString(args);
-                UTF8Encoding str = new UTF8Encoding();
+                Encoding str = Util.UTF8;
                 buffer = str.GetBytes(strBuffer);
 
             }
@@ -406,7 +475,6 @@ namespace OpenSim.Framework.Communications.Clients
                 ObjectCreateRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = ObjectCreateRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 m_log.InfoFormat("[REST COMMS]: Posted ChildAgentUpdate request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -416,10 +484,16 @@ namespace OpenSim.Framework.Communications.Clients
 
                 return false;
             }
+            finally
+            {
+                if (os != null)
+                    os.Close();
+            }
 
             // Let's wait for the response
             //m_log.Info("[REST COMMS]: Waiting for a reply after DoCreateChildAgentCall");
 
+            StreamReader sr = null;
             try
             {
                 WebResponse webResponse = ObjectCreateRequest.GetResponse();
@@ -428,10 +502,9 @@ namespace OpenSim.Framework.Communications.Clients
                     m_log.Info("[REST COMMS]: Null reply on DoCreateObjectCall post");
                 }
 
-                StreamReader sr = new StreamReader(webResponse.GetResponseStream());
+                sr = new StreamReader(webResponse.GetResponseStream());
                 //reply = sr.ReadToEnd().Trim();
                 sr.ReadToEnd().Trim();
-                sr.Close();
                 //m_log.InfoFormat("[REST COMMS]: DoCreateChildAgentCall reply was {0} ", reply);
 
             }
@@ -440,12 +513,17 @@ namespace OpenSim.Framework.Communications.Clients
                 m_log.InfoFormat("[REST COMMS]: exception on reply of DoCreateObjectCall {0}", ex.Message);
                 // ignore, really
             }
+            finally
+            {
+                if (sr != null)
+                    sr.Close();
+            }
 
             return true;
 
         }
 
-        public bool DoCreateObjectCall(RegionInfo region, UUID userID, UUID itemID)
+        public bool DoCreateObjectCall(GridRegion region, UUID userID, UUID itemID)
         {
             ulong regionHandle = GetRegionHandle(region.RegionHandle);
             string uri = "http://" + region.ExternalEndPoint.Address + ":" + region.HttpPort + "/object/" + UUID.Zero + "/" + regionHandle.ToString() + "/";
@@ -465,7 +543,7 @@ namespace OpenSim.Framework.Communications.Clients
             try
             {
                 strBuffer = OSDParser.SerializeJsonString(args);
-                UTF8Encoding str = new UTF8Encoding();
+                Encoding str = Util.UTF8;
                 buffer = str.GetBytes(strBuffer);
 
             }
@@ -481,7 +559,6 @@ namespace OpenSim.Framework.Communications.Clients
                 ObjectCreateRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = ObjectCreateRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 //m_log.InfoFormat("[REST COMMS]: Posted CreateObject request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -491,10 +568,16 @@ namespace OpenSim.Framework.Communications.Clients
 
                 return false;
             }
+            finally
+            {
+                if (os != null)
+                    os.Close();
+            }
 
             // Let's wait for the response
             //m_log.Info("[REST COMMS]: Waiting for a reply after DoCreateChildAgentCall");
 
+            StreamReader sr = null;
             try
             {
                 WebResponse webResponse = ObjectCreateRequest.GetResponse();
@@ -503,11 +586,10 @@ namespace OpenSim.Framework.Communications.Clients
                     m_log.Info("[REST COMMS]: Null reply on DoCreateObjectCall post");
                 }
 
-                StreamReader sr = new StreamReader(webResponse.GetResponseStream());
+                sr = new StreamReader(webResponse.GetResponseStream());
                 sr.ReadToEnd().Trim();
                 sr.ReadToEnd().Trim();
-                sr.Close();
-                
+
                 //m_log.InfoFormat("[REST COMMS]: DoCreateChildAgentCall reply was {0} ", reply);
 
             }
@@ -515,6 +597,11 @@ namespace OpenSim.Framework.Communications.Clients
             {
                 m_log.InfoFormat("[REST COMMS]: exception on reply of DoCreateObjectCall {0}", ex.Message);
                 // ignore, really
+            }
+            finally
+            {
+                if (sr != null)
+                    sr.Close();
             }
 
             return true;
@@ -550,7 +637,7 @@ namespace OpenSim.Framework.Communications.Clients
             try
             {
                 strBuffer = OSDParser.SerializeJsonString(args);
-                UTF8Encoding str = new UTF8Encoding();
+                Encoding str = Util.UTF8;
                 buffer = str.GetBytes(strBuffer);
 
             }
@@ -566,7 +653,6 @@ namespace OpenSim.Framework.Communications.Clients
                 HelloNeighbourRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = HelloNeighbourRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 //m_log.InfoFormat("[REST COMMS]: Posted HelloNeighbour request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -576,10 +662,15 @@ namespace OpenSim.Framework.Communications.Clients
 
                 return false;
             }
-
+            finally
+            {
+                if (os != null)
+                    os.Close();
+            }
             // Let's wait for the response
             //m_log.Info("[REST COMMS]: Waiting for a reply after DoHelloNeighbourCall");
 
+            StreamReader sr = null;
             try
             {
                 WebResponse webResponse = HelloNeighbourRequest.GetResponse();
@@ -588,10 +679,9 @@ namespace OpenSim.Framework.Communications.Clients
                     m_log.Info("[REST COMMS]: Null reply on DoHelloNeighbourCall post");
                 }
 
-                StreamReader sr = new StreamReader(webResponse.GetResponseStream());
+                sr = new StreamReader(webResponse.GetResponseStream());
                 //reply = sr.ReadToEnd().Trim();
                 sr.ReadToEnd().Trim();
-                sr.Close();
                 //m_log.InfoFormat("[REST COMMS]: DoHelloNeighbourCall reply was {0} ", reply);
 
             }
@@ -599,6 +689,11 @@ namespace OpenSim.Framework.Communications.Clients
             {
                 m_log.InfoFormat("[REST COMMS]: exception on reply of DoHelloNeighbourCall {0}", ex.Message);
                 // ignore, really
+            }
+            finally
+            {
+                if (sr != null)
+                    sr.Close();
             }
 
             return true;
@@ -617,7 +712,7 @@ namespace OpenSim.Framework.Communications.Clients
             return false;
         }
 
-        public virtual void SendUserInformation(RegionInfo regInfo, AgentCircuitData aCircuit)
+        public virtual void SendUserInformation(GridRegion regInfo, AgentCircuitData aCircuit)
         {
         }
 

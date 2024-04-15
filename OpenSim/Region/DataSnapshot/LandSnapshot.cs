@@ -9,7 +9,7 @@
 *     * Redistributions in binary form must reproduce the above copyright
 *       notice, this list of conditions and the following disclaimer in the
 *       documentation and/or other materials provided with the distribution.
-*     * Neither the name of the OpenSim Project nor the
+*     * Neither the name of the OpenSimulator Project nor the
 *       names of its contributors may be used to endorse or promote products
 *       derived from this software without specific prior written permission.
 *
@@ -87,7 +87,7 @@ namespace OpenSim.Region.DataSnapshot.Providers
             //Index sim land
             foreach (KeyValuePair<int, Land> curLand in m_scene.LandManager.landList)
             {
-                //if ((curLand.Value.landData.landFlags & (uint)Parcel.ParcelFlags.ShowDirectory) == (uint)Parcel.ParcelFlags.ShowDirectory)
+                //if ((curLand.Value.LandData.landFlags & (uint)ParcelFlags.ShowDirectory) == (uint)ParcelFlags.ShowDirectory)
                 //{
                     m_landIndexed.Add(curLand.Key, curLand.Value.Copy());
                 //}
@@ -135,10 +135,10 @@ namespace OpenSim.Region.DataSnapshot.Providers
 
                     LandObject land = (LandObject)parcel_interface;
 
-                    LandData parcel = land.landData;
+                    LandData parcel = land.LandData;
                     if (m_parent.ExposureLevel.Equals("all") ||
                         (m_parent.ExposureLevel.Equals("minimum") && 
-                        (parcel.Flags & (uint)Parcel.ParcelFlags.ShowDirectory) == (uint)Parcel.ParcelFlags.ShowDirectory))
+                        (parcel.Flags & (uint)ParcelFlags.ShowDirectory) == (uint)ParcelFlags.ShowDirectory))
                     {
 
                         //TODO: make better method of marshalling data from LandData to XmlNode
@@ -315,7 +315,7 @@ namespace OpenSim.Region.DataSnapshot.Providers
 
         private string GetScriptsPermissions(LandData parcel)
         {
-            if ((parcel.Flags & (uint)Parcel.ParcelFlags.AllowOtherScripts) == (uint)Parcel.ParcelFlags.AllowOtherScripts)
+            if ((parcel.Flags & (uint)ParcelFlags.AllowOtherScripts) == (uint)ParcelFlags.AllowOtherScripts)
                 return "true";
             else
                 return "false";
@@ -324,7 +324,7 @@ namespace OpenSim.Region.DataSnapshot.Providers
 
         private string GetPublicPermissions(LandData parcel)
         {
-            if ((parcel.Flags & (uint)Parcel.ParcelFlags.UseAccessList) == (uint)Parcel.ParcelFlags.UseAccessList)
+            if ((parcel.Flags & (uint)ParcelFlags.UseAccessList) == (uint)ParcelFlags.UseAccessList)
                 return "false";
             else
                 return "true";
@@ -333,7 +333,7 @@ namespace OpenSim.Region.DataSnapshot.Providers
 
         private string GetBuildPermissions(LandData parcel)
         {
-            if ((parcel.Flags & (uint)Parcel.ParcelFlags.CreateObjects) == (uint)Parcel.ParcelFlags.CreateObjects)
+            if ((parcel.Flags & (uint)ParcelFlags.CreateObjects) == (uint)ParcelFlags.CreateObjects)
                 return "true";
             else
                 return "false";
@@ -342,7 +342,7 @@ namespace OpenSim.Region.DataSnapshot.Providers
 
         private string CheckForSale(LandData parcel)
         {
-            if ((parcel.Flags & (uint)Parcel.ParcelFlags.ForSale) == (uint)Parcel.ParcelFlags.ForSale)
+            if ((parcel.Flags & (uint)ParcelFlags.ForSale) == (uint)ParcelFlags.ForSale)
                 return "true";
             else
                 return "false";
@@ -350,7 +350,7 @@ namespace OpenSim.Region.DataSnapshot.Providers
 
         private string GetShowInSearch(LandData parcel)
         {
-            if ((parcel.Flags & (uint)Parcel.ParcelFlags.ShowDirectory) == (uint)Parcel.ParcelFlags.ShowDirectory)
+            if ((parcel.Flags & (uint)ParcelFlags.ShowDirectory) == (uint)ParcelFlags.ShowDirectory)
                 return "true";
             else
                 return "false";
@@ -393,26 +393,26 @@ namespace OpenSim.Region.DataSnapshot.Providers
         {
             m_log.DebugFormat("[DATASNAPSHOT] trying {0}, {1}", refX, refY);
             // the point we started with already is in the parcel
-            if (land.containsPoint((int)refX, (int)refY)) return;
+            if (land.ContainsPoint((int)refX, (int)refY)) return;
 
             // ... otherwise, we have to search for a point within the parcel
-            uint startX = (uint)land.landData.AABBMin.X;
-            uint startY = (uint)land.landData.AABBMin.Y;
-            uint endX = (uint)land.landData.AABBMax.X;
-            uint endY = (uint)land.landData.AABBMax.Y;
+            uint startX = (uint)land.LandData.AABBMin.X;
+            uint startY = (uint)land.LandData.AABBMin.Y;
+            uint endX = (uint)land.LandData.AABBMax.X;
+            uint endY = (uint)land.LandData.AABBMax.Y;
 
             // default: center of the parcel
             refX = (startX + endX) / 2;
             refY = (startY + endY) / 2;
             // If the center point is within the parcel, take that one
-            if (land.containsPoint((int)refX, (int)refY)) return;
+            if (land.ContainsPoint((int)refX, (int)refY)) return;
 
             // otherwise, go the long way.
             for (uint y = startY; y <= endY; ++y)
             {
                 for (uint x = startX; x <= endX; ++x)
                 {
-                    if (land.containsPoint((int)x, (int)y))
+                    if (land.ContainsPoint((int)x, (int)y))
                     {
                         // found a point
                         refX = x;

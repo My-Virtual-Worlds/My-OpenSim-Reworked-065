@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -71,21 +71,21 @@ namespace OpenSim.Region.Framework.Interfaces
         /// Load persisted objects from region storage.
         /// </summary>
         /// <param name="regionUUID">the Region UUID</param>
-        /// <returns>List of loaded groups</returns>        
+        /// <returns>List of loaded groups</returns>
         List<SceneObjectGroup> LoadObjects(UUID regionUUID);
 
         /// <summary>
         /// Store a terrain revision in region storage
         /// </summary>
         /// <param name="ter">HeightField data</param>
-        /// <param name="regionID">region UUID</param>      
+        /// <param name="regionID">region UUID</param>
         void StoreTerrain(double[,] terrain, UUID regionID);
         
         /// <summary>
         /// Load the latest terrain revision from region storage
         /// </summary>
         /// <param name="regionID">the region UUID</param>
-        /// <returns>Heightfield data</returns>        
+        /// <returns>Heightfield data</returns>
         double[,] LoadTerrain(UUID regionID);
 
         void StoreLandObject(ILandObject Parcel);
@@ -96,7 +96,7 @@ namespace OpenSim.Region.Framework.Interfaces
         /// <item>delete from landaccesslist where LandUUID=globalID</item>
         /// </list>
         /// </summary>
-        /// <param name="globalID"></param>     
+        /// <param name="globalID"></param>
         void RemoveLandObject(UUID globalID);
         
         List<LandData> LoadLandObjects(UUID regionUUID);

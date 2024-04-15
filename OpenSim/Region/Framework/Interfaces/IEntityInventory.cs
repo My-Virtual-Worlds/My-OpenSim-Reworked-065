@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -26,6 +26,7 @@
  */
 
 using System.Collections.Generic;
+using System.Collections;
 using OpenMetaverse;
 using OpenSim.Framework;
 
@@ -64,18 +65,24 @@ namespace OpenSim.Region.Framework.Interfaces
         /// <summary>
         /// Change every item in this inventory to a new group.
         /// </summary>
-        /// <param name="groupID"></param>        
+        /// <param name="groupID"></param>
         void ChangeInventoryGroup(UUID groupID);
 
         /// <summary>
         /// Start all the scripts contained in this entity's inventory
         /// </summary>
-       void CreateScriptInstances(int startParam, bool postOnRez, string engine, int stateSource);
+        void CreateScriptInstances(int startParam, bool postOnRez, string engine, int stateSource);
+        
+        ArrayList GetScriptErrors(UUID itemID);
 
         /// <summary>
         /// Stop all the scripts in this entity.
         /// </summary>
-        void RemoveScriptInstances();
+        /// <param name="sceneObjectBeingDeleted">
+        /// Should be true if these scripts are being removed because the scene
+        /// object is being deleted.  This will prevent spurious updates to the client.
+        /// </param>
+        void RemoveScriptInstances(bool sceneObjectBeingDeleted);
 
         /// <summary>
         /// Start a script which is in this entity's inventory.
@@ -94,14 +101,18 @@ namespace OpenSim.Region.Framework.Interfaces
         /// <param name="startParam"></param>
         /// <param name="postOnRez"></param>
         /// <param name="engine"></param>
-        /// <param name="stateSource"></param>        
+        /// <param name="stateSource"></param>
         void CreateScriptInstance(UUID itemId, int startParam, bool postOnRez, string engine, int stateSource);
 
         /// <summary>
         /// Stop a script which is in this prim's inventory.
         /// </summary>
         /// <param name="itemId"></param>
-        void RemoveScriptInstance(UUID itemId);
+        /// <param name="sceneObjectBeingDeleted">
+        /// Should be true if these scripts are being removed because the scene
+        /// object is being deleted.  This will prevent spurious updates to the client.
+        /// </param>
+        void RemoveScriptInstance(UUID itemId, bool sceneObjectBeingDeleted);
 
         /// <summary>
         /// Add an item to this entity's inventory.  If an item with the same name already exists, then an alternative
@@ -133,6 +144,16 @@ namespace OpenSim.Region.Framework.Interfaces
         TaskInventoryItem GetInventoryItem(UUID itemId);
 
         /// <summary>
+        /// Get inventory items by name.
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns>
+        /// A list of inventory items with that name.
+        /// If no inventory item has that name then an empty list is returned.
+        /// </returns>
+        IList<TaskInventoryItem> GetInventoryItems(string name);
+
+        /// <summary>
         /// Update an existing inventory item.
         /// </summary>
         /// <param name="item">The updated item.  An item with the same id must already exist
@@ -150,7 +171,7 @@ namespace OpenSim.Region.Framework.Interfaces
 
         /// <summary>
         /// Return the name with which a client can request a xfer of this prim's inventory metadata
-        /// </summary>      
+        /// </summary>
         string GetInventoryFileName();
 
         bool GetInventoryFileName(IClientAPI client, uint localID);
@@ -183,12 +204,6 @@ namespace OpenSim.Region.Framework.Interfaces
         /// </summary>
         /// <returns></returns>
         List<UUID> GetInventoryList();
-        
-        /// <summary>
-        /// Get the names of the assemblies associated with scripts in this inventory.
-        /// </summary>
-        /// <returns></returns>
-        string[] GetScriptAssemblies();
         
         /// <summary>
         /// Get the xml representing the saved states of scripts in this inventory.

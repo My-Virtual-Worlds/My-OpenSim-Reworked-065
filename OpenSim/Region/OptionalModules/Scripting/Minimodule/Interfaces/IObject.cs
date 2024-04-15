@@ -32,6 +32,7 @@ using OpenSim.Region.OptionalModules.Scripting.Minimodule.Object;
 
 namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 {
+    [Serializable]
     public class TouchEventArgs : EventArgs
     {
         public IAvatar Avatar;
@@ -170,6 +171,7 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
 
         IObjectPhysics Physics { get; }
 
+        IObjectSound Sound { get; }
 
         /// <summary>
         /// Causes the object to speak to its surroundings,
@@ -177,7 +179,13 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         /// </summary>
         /// <param name="msg">The message to send to the user</param>
         void Say(string msg);
+        
+        void Say(string msg,int channel);
 
+        //// <value>
+        /// Grants access to the objects inventory
+        /// </value>
+        IObjectInventory Inventory { get; }
     }
 
     public enum PhysicsMaterial
@@ -206,6 +214,6 @@ namespace OpenSim.Region.OptionalModules.Scripting.Minimodule
         bool Bright { get; set; } // SetPrimParms(FULLBRIGHT)
         double Bloom { get; set; } // SetPrimParms(GLOW)
         bool Shiny { get; set; } // SetPrimParms(SHINY)
-        bool BumpMap { get; set; } // SetPrimParms(BUMPMAP) [DEPRECIATE IN FAVOUR OF UUID?]
+        bool BumpMap { get; set; } // SetPrimParms(BUMPMAP) [DEPRECATE IN FAVOUR OF UUID?]
     }
 }

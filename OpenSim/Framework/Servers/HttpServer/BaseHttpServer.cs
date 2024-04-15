@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -64,11 +64,18 @@ namespace OpenSim.Framework.Servers.HttpServer
         protected Dictionary<string, GenericHTTPMethod> m_HTTPHandlers  = new Dictionary<string, GenericHTTPMethod>();
         protected Dictionary<string, IHttpAgentHandler> m_agentHandlers = new Dictionary<string, IHttpAgentHandler>();
 
+        protected Dictionary<string, PollServiceEventArgs> m_pollHandlers =
+            new Dictionary<string, PollServiceEventArgs>();
+
         protected uint m_port;
         protected uint m_sslport;
         protected bool m_ssl;
         protected bool m_firstcaps = true;
         protected string m_SSLCommonName = "";
+
+        protected IPAddress m_listenIPAddress = IPAddress.Any;
+
+        private PollServiceRequestManager m_PollServiceManager;
 
         public uint SSLPort
         {
@@ -90,6 +97,12 @@ namespace OpenSim.Framework.Servers.HttpServer
             get { return m_ssl; }
         }
 
+        public IPAddress ListenIPAddress
+        {
+            get { return m_listenIPAddress; }
+            set { m_listenIPAddress = value; }
+        }
+
         public BaseHttpServer(uint port)
         {
             m_port = port;
@@ -97,7 +110,7 @@ namespace OpenSim.Framework.Servers.HttpServer
 
         public BaseHttpServer(uint port, bool ssl) : this (port)
         {
-            m_ssl = ssl;          
+            m_ssl = ssl;
         }
 
         public BaseHttpServer(uint port, bool ssl, uint sslport, string CN) : this (port, ssl)
@@ -143,7 +156,7 @@ namespace OpenSim.Framework.Servers.HttpServer
             lock (m_rpcHandlers)
             {
                 m_rpcHandlers[method] = handler;
-                m_rpcHandlersKeepAlive[method] = keepAlive; // default              
+                m_rpcHandlersKeepAlive[method] = keepAlive; // default
             }
             
             return true;
@@ -179,6 +192,26 @@ namespace OpenSim.Framework.Servers.HttpServer
 
             //must already have a handler for that path so return false
             return false;
+        }
+
+        public bool AddPollServiceHTTPHandler(string methodName, GenericHTTPMethod handler, PollServiceEventArgs args)
+        {
+            bool pollHandlerResult = false;
+            lock (m_pollHandlers)
+            {
+                if (!m_pollHandlers.ContainsKey(methodName))
+                {
+                    m_pollHandlers.Add(methodName,args);
+                    pollHandlerResult = true;
+                    
+                }
+            }
+            
+            if (pollHandlerResult)
+                return AddHTTPHandler(methodName, handler);
+
+            return false;
+            
         }
 
         // Note that the agent string is provided simply to differentiate
@@ -218,54 +251,86 @@ namespace OpenSim.Framework.Servers.HttpServer
             return true;
         }
 
+        private void OnRequest(object source, RequestEventArgs args)
+        {
+            try
+            {
+                IHttpClientContext context = (IHttpClientContext)source;
+                IHttpRequest request = args.Request;
+                
+                PollServiceEventArgs psEvArgs;
+    
+                if (TryGetPollServiceHTTPHandler(request.UriPath.ToString(), out psEvArgs))
+                {
+                    PollServiceHttpRequest psreq = new PollServiceHttpRequest(psEvArgs, context, request);
+    
+                    if (psEvArgs.Request != null)
+                    {
+                        OSHttpRequest req = new OSHttpRequest(context, request);
+                        
+                        Stream requestStream = req.InputStream;
+    
+                        Encoding encoding = Encoding.UTF8;
+                        StreamReader reader = new StreamReader(requestStream, encoding);
+    
+                        string requestBody = reader.ReadToEnd();
+    
+                        Hashtable keysvals = new Hashtable();
+                        Hashtable headervals = new Hashtable();
+    
+                        string[] querystringkeys = req.QueryString.AllKeys;
+                        string[] rHeaders = req.Headers.AllKeys;
+    
+                        keysvals.Add("body", requestBody);
+                        keysvals.Add("uri", req.RawUrl);
+                        keysvals.Add("content-type", req.ContentType);
+                        keysvals.Add("http-method", req.HttpMethod);
+    
+                        foreach (string queryname in querystringkeys)
+                        {
+                            keysvals.Add(queryname, req.QueryString[queryname]);
+                        }
+    
+                        foreach (string headername in rHeaders)
+                        {
+                            headervals[headername] = req.Headers[headername];
+                        }
+    
+                        keysvals.Add("headers",headervals);
+                        keysvals.Add("querystringkeys", querystringkeys);
+    
+                        psEvArgs.Request(psreq.RequestID, keysvals);
+                    }
+    
+                    m_PollServiceManager.Enqueue(psreq);
+                }
+                else
+                {
+                    OnHandleRequestIOThread(context, request);
+                }
+            }
+            catch (Exception e)
+            {
+                m_log.Error(string.Format("[BASE HTTP SERVER]: OnRequest() failed with "), e);
+            }
+        }
+
         public void OnHandleRequestIOThread(IHttpClientContext context, IHttpRequest request)
         {
             OSHttpRequest req = new OSHttpRequest(context, request);
-            OSHttpResponse resp = new OSHttpResponse(new HttpResponse(context, request));
-            //resp.KeepAlive = req.KeepAlive;
-            //m_log.Info("[Debug BASE HTTP SERVER]: Got Request");
-            //HttpServerContextObj objstate= new HttpServerContextObj(req,resp);
-            //ThreadPool.QueueUserWorkItem(new WaitCallback(ConvertIHttpClientContextToOSHttp), (object)objstate);
+            OSHttpResponse resp = new OSHttpResponse(new HttpResponse(context, request),context);
             HandleRequest(req, resp);
         }
 
-        public void ConvertIHttpClientContextToOSHttp(object stateinfo)
-        {
-            HttpServerContextObj objstate = (HttpServerContextObj)stateinfo;
-            //OSHttpRequest request = new OSHttpRequest(objstate.context,objstate.req);
-            //OSHttpResponse resp = new OSHttpResponse(new HttpServer.HttpResponse(objstate.context, objstate.req));
+        // public void ConvertIHttpClientContextToOSHttp(object stateinfo)
+        // {
+        //     HttpServerContextObj objstate = (HttpServerContextObj)stateinfo;
 
-            OSHttpRequest request = objstate.oreq;
-            OSHttpResponse resp = objstate.oresp;
-            //OSHttpResponse resp = new OSHttpResponse(new HttpServer.HttpResponse(objstate.context, objstate.req));
+        //     OSHttpRequest request = objstate.oreq;
+        //     OSHttpResponse resp = objstate.oresp;
 
-            /*
-            request.AcceptTypes = objstate.req.AcceptTypes;
-            request.ContentLength = (long)objstate.req.ContentLength;
-            request.Headers = objstate.req.Headers;
-            request.HttpMethod = objstate.req.Method;
-            request.InputStream = objstate.req.Body;
-            foreach (string str in request.Headers)
-            {
-                if (str.ToLower().Contains("content-type: "))
-                {
-                    request.ContentType = str.Substring(13, str.Length - 13);
-                    break;
-                }
-            }
-            //request.KeepAlive = objstate.req.
-            foreach (HttpServer.HttpInput httpinput in objstate.req.QueryString)
-            {
-                request.QueryString.Add(httpinput.Name, httpinput[httpinput.Name]);
-            }
-            
-            //request.Query = objstate.req.//objstate.req.QueryString;
-            //foreach (
-            //request.QueryString = objstate.req.QueryString;
-
-             */
-            HandleRequest(request,resp);           
-        }
+        //     HandleRequest(request,resp);
+        // }
 
         public virtual void HandleRequest(OSHttpRequest request, OSHttpResponse response)
         {
@@ -279,6 +344,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                 //  probability event; if a request is matched it is normally expected to be
                 //  handled
                 //m_log.Debug("[BASE HTTP SERVER]: Handling Request" + request.RawUrl);
+
                 IHttpAgentHandler agentHandler;
 
                 if (TryGetAgentHandler(request, response, out agentHandler))
@@ -289,9 +355,10 @@ namespace OpenSim.Framework.Servers.HttpServer
                     }
                 }
 
-                IRequestHandler requestHandler;
                 //response.KeepAlive = true;
                 response.SendChunked = false;
+
+                IRequestHandler requestHandler;
 
                 string path = request.RawUrl;
                 string handlerKey = GetHandlerKey(request.HttpMethod, path);
@@ -302,9 +369,10 @@ namespace OpenSim.Framework.Servers.HttpServer
                 {
                     //m_log.Debug("[BASE HTTP SERVER]: Found Stream Handler");
                     // Okay, so this is bad, but should be considered temporary until everything is IStreamHandler.
-                    byte[] buffer;
+                    byte[] buffer = null;
 
                     response.ContentType = requestHandler.ContentType; // Lets do this defaulting before in case handler has varying content type.
+
 
                     if (requestHandler is IStreamedRequestHandler)
                     {
@@ -324,7 +392,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                         string requestBody = reader.ReadToEnd();
 
                         reader.Close();
-                        requestStream.Close();
+                        //requestStream.Close();
 
                         Hashtable keysvals = new Hashtable();
                         Hashtable headervals = new Hashtable();
@@ -351,6 +419,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                         //                        }
 
                         keysvals.Add("requestbody", requestBody);
+                        keysvals.Add("headers",headervals);
                         if (keysvals.Contains("method"))
                         {
                             //m_log.Warn("[HTTP]: Contains Method");
@@ -375,6 +444,12 @@ namespace OpenSim.Framework.Servers.HttpServer
 
                     request.InputStream.Close();
                     
+                    // HTTP IN support. The script engine taes it from here
+                    // Nothing to worry about for us.
+                    //
+                    if (buffer == null)
+                        return;
+
                     if (!response.SendChunked)
                         response.ContentLength64 = buffer.LongLength;
 
@@ -391,11 +466,16 @@ namespace OpenSim.Framework.Servers.HttpServer
                     try
                     {
                         response.Send();
+                        //response.FreeContext();
                     }
                     catch (SocketException e)
                     {
                         // This has to be here to prevent a Linux/Mono crash
-                        m_log.WarnFormat("[BASE HTTP SERVER] XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
+                        m_log.WarnFormat("[BASE HTTP SERVER]: XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
+                    }
+                    catch (IOException e)
+                    {
+                        m_log.Warn("[BASE HTTP SERVER]: XmlRpcRequest issue: " + e.Message);
                     }
                     return;
                 }
@@ -404,7 +484,8 @@ namespace OpenSim.Framework.Servers.HttpServer
                 {
                     foreach (string strAccept in request.AcceptTypes)
                     {
-                        if (strAccept.Contains("application/llsd+xml"))
+                        if (strAccept.Contains("application/llsd+xml") ||
+                            strAccept.Contains("application/llsd+json"))
                         {
                             //m_log.Info("[Debug BASE HTTP SERVER]: Found an application/llsd+xml accept header");
                             HandleLLSDRequests(request, response);
@@ -423,12 +504,14 @@ namespace OpenSim.Framework.Servers.HttpServer
 
                     case "application/llsd+xml":
                     case "application/xml+llsd":
+                    case "application/llsd+json":
                         //m_log.Info("[Debug BASE HTTP SERVER]: found a application/llsd+xml content type");
                         HandleLLSDRequests(request, response);
                         return;
 
                     case "text/xml":
                     case "application/xml":
+                    case "application/json":
                     default:
                         //m_log.Info("[Debug BASE HTTP SERVER]: in default handler");
                         // Point of note..  the DoWeHaveA methods check for an EXACT path
@@ -469,9 +552,9 @@ namespace OpenSim.Framework.Servers.HttpServer
                 // with the minimum first
                 m_log.WarnFormat("[BASE HTTP SERVER]: HandleRequest threw {0}.\nNOTE: this may be spurious on Linux", e);
             }
-            catch (EndOfStreamException e)
+            catch (IOException e)
             {
-                m_log.ErrorFormat("[BASE HTTP SERVER]: HandleRequest() threw {0}", e);
+                m_log.ErrorFormat("[BASE HTTP SERVER]: HandleRequest() threw ", e);
             }
             catch (InvalidOperationException e)
             {
@@ -505,6 +588,36 @@ namespace OpenSim.Framework.Servers.HttpServer
                 else
                 {
                     streamHandler = m_streamHandlers[bestMatch];
+                    return true;
+                }
+            }
+        }
+
+        private bool TryGetPollServiceHTTPHandler(string handlerKey, out PollServiceEventArgs oServiceEventArgs)
+        {
+            string bestMatch = null;
+
+            lock (m_pollHandlers)
+            {
+                foreach (string pattern in m_pollHandlers.Keys)
+                {
+                    if (handlerKey.StartsWith(pattern))
+                    {
+                        if (String.IsNullOrEmpty(bestMatch) || pattern.Length > bestMatch.Length)
+                        {
+                            bestMatch = pattern;
+                        }
+                    }
+                }
+
+                if (String.IsNullOrEmpty(bestMatch))
+                {
+                    oServiceEventArgs = null;
+                    return false;
+                }
+                else
+                {
+                    oServiceEventArgs = m_pollHandlers[bestMatch];
                     return true;
                 }
             }
@@ -579,7 +692,8 @@ namespace OpenSim.Framework.Servers.HttpServer
             string requestBody = reader.ReadToEnd();
             reader.Close();
             requestStream.Close();
-
+            //m_log.Debug(requestBody);
+            requestBody = requestBody.Replace("<base64></base64>", "");
             string responseString = String.Empty;
             XmlRpcRequest xmlRprcRequest = null;
 
@@ -604,7 +718,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                     lock (m_rpcHandlers)
                     {
                         methodWasFound = m_rpcHandlers.TryGetValue(methodName, out method);
-                    }                            
+                    }
                     
                     if (methodWasFound)
                     {
@@ -612,24 +726,35 @@ namespace OpenSim.Framework.Servers.HttpServer
 
                         try
                         {
-                            xmlRpcResponse = method(xmlRprcRequest);
+                            xmlRpcResponse = method(xmlRprcRequest, request.RemoteIPEndPoint);
                         }
                         catch(Exception e)
                         {
+                            string errorMessage
+                                = String.Format(
+                                    "Requested method [{0}] from {1} threw exception: {2} {3}",
+                                    methodName, request.RemoteIPEndPoint.Address, e.Message, e.StackTrace);
+
+                            m_log.ErrorFormat("[BASE HTTP SERVER]: {0}", errorMessage);
+
                             // if the registered XmlRpc method threw an exception, we pass a fault-code along
                             xmlRpcResponse = new XmlRpcResponse();
+
                             // Code probably set in accordance with http://xmlrpc-epi.sourceforge.net/specs/rfc.fault_codes.php
-                            xmlRpcResponse.SetFault(-32603, String.Format("Requested method [{0}] threw exception: {1}",
-                                                                          methodName, e.Message));
+                            xmlRpcResponse.SetFault(-32603, errorMessage);
                         }
+
                         // if the method wasn't found, we can't determine KeepAlive state anyway, so lets do it only here
                         response.KeepAlive = m_rpcHandlersKeepAlive[methodName];
                     }
                     else
                     {
                         xmlRpcResponse = new XmlRpcResponse();
+                        
                         // Code set in accordance with http://xmlrpc-epi.sourceforge.net/specs/rfc.fault_codes.php
-                        xmlRpcResponse.SetFault(-32601, String.Format("Requested method [{0}] not found", methodName));
+                        xmlRpcResponse.SetFault(
+                            XmlRpcErrorCodes.SERVER_ERROR_METHOD, 
+                            String.Format("Requested method [{0}] not found", methodName));
                     }
 
                     responseString = XmlRpcResponseSerializer.Singleton.Serialize(xmlRpcResponse);
@@ -644,29 +769,35 @@ namespace OpenSim.Framework.Servers.HttpServer
                     byte[] buf = Encoding.UTF8.GetBytes("Not found");
                     response.KeepAlive = false;
 
-                    m_log.ErrorFormat("[BASE HTTP SERVER] Handler not found for http request {0}", request.RawUrl);
+                    m_log.ErrorFormat("[BASE HTTP SERVER]: Handler not found for http request {0}", request.RawUrl);
                     
                     response.SendChunked = false;
                     response.ContentLength64 = buf.Length;
                     response.ContentEncoding = Encoding.UTF8;
+                    
                     try
                     {
                         response.OutputStream.Write(buf, 0, buf.Length);
                     }
                     catch (Exception ex)
                     {
-                        m_log.Warn("[HTTPD]: Error - " + ex.Message);
+                        m_log.Warn("[BASE HTTP SERVER]: Error - " + ex.Message);
                     }
                     finally
                     {
                         try
                         {
                             response.Send();
+                            //response.FreeContext();
                         }
                         catch (SocketException e)
                         {
                             // This has to be here to prevent a Linux/Mono crash
-                            m_log.WarnFormat("[BASE HTTP SERVER] XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
+                            m_log.WarnFormat("[BASE HTTP SERVER]: XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
+                        }
+                        catch (IOException e)
+                        {
+                            m_log.Warn("[BASE HTTP SERVER]: XmlRpcRequest issue: " + e.Message);
                         }
                     }
                     return;
@@ -687,18 +818,23 @@ namespace OpenSim.Framework.Servers.HttpServer
             }
             catch (Exception ex)
             {
-                m_log.Warn("[HTTPD]: Error - " + ex.Message);
+                m_log.Warn("[BASE HTTP SERVER]: Error - " + ex.Message);
             }
             finally
             {
                 try
                 {
                     response.Send();
+                    //response.FreeContext();
                 }
                 catch (SocketException e)
                 {
                     // This has to be here to prevent a Linux/Mono crash
-                    m_log.WarnFormat("[BASE HTTP SERVER] XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
+                    m_log.WarnFormat("[BASE HTTP SERVER]: XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
+                }
+                catch (IOException e)
+                {
+                    m_log.Warn("[BASE HTTP SERVER]: XmlRpcRequest issue: " + e.Message);
                 }
             }
         }
@@ -730,11 +866,11 @@ namespace OpenSim.Framework.Servers.HttpServer
             }
             try
             {
-                llsdRequest = OSDParser.DeserializeLLSDXml(requestBody);
+                llsdRequest = OSDParser.Deserialize(requestBody);
             }
             catch (Exception ex)
             {
-                m_log.Warn("[HTTPD]: Error - " + ex.Message);
+                m_log.Warn("[BASE HTTP SERVER]: Error - " + ex.Message);
             }
 
             if (llsdRequest != null)// && m_defaultLlsdHandler != null)
@@ -755,7 +891,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                     if (m_defaultLlsdHandler != null)
                     {
                         // LibOMV path
-                        llsdResponse = m_defaultLlsdHandler(llsdRequest);
+                        llsdResponse = m_defaultLlsdHandler(llsdRequest, request.RemoteIPEndPoint);
                     }
                     else
                     {
@@ -780,10 +916,10 @@ namespace OpenSim.Framework.Servers.HttpServer
             }
             else
             {
-                response.ContentType = "application/llsd+xml";
-                //m_log.Info("[Debug BASE HTTP SERVER]: Response: " + llsdResponse.ToString());
-                buffer = OSDParser.SerializeLLSDXmlBytes(llsdResponse);
+                // Select an appropriate response format
+                buffer = BuildLLSDResponse(request, response, llsdResponse);
             }
+
             response.SendChunked = false;
             response.ContentLength64 = buffer.Length;
             response.ContentEncoding = Encoding.UTF8;
@@ -795,7 +931,7 @@ namespace OpenSim.Framework.Servers.HttpServer
             }
             catch (Exception ex)
             {
-                m_log.Warn("[HTTPD]: Error - " + ex.Message);
+                m_log.Warn("[BASE HTTP SERVER]: Error - " + ex.Message);
             }
             finally
             {
@@ -804,18 +940,62 @@ namespace OpenSim.Framework.Servers.HttpServer
                 {
                     response.Send();
                     response.OutputStream.Flush();
-                    response.OutputStream.Close();
+                    //response.FreeContext();
+                    //response.OutputStream.Close();
                 }
                 catch (IOException e)
                 {
-                    m_log.DebugFormat("[BASE HTTP SERVER] LLSD IOException {0}.", e);                    
+                    m_log.DebugFormat("[BASE HTTP SERVER]: LLSD IOException {0}.", e);
                 }
                 catch (SocketException e)
                 {
                     // This has to be here to prevent a Linux/Mono crash
-                    m_log.WarnFormat("[BASE HTTP SERVER] LLSD issue {0}.\nNOTE: this may be spurious on Linux.", e);
+                    m_log.WarnFormat("[BASE HTTP SERVER]: LLSD issue {0}.\nNOTE: this may be spurious on Linux.", e);
                 }
             }
+        }
+
+        private byte[] BuildLLSDResponse(OSHttpRequest request, OSHttpResponse response, OSD llsdResponse)
+        {
+            if (request.AcceptTypes != null && request.AcceptTypes.Length > 0)
+            {
+                foreach (string strAccept in request.AcceptTypes)
+                {
+                    switch (strAccept)
+                    {
+                        case "application/llsd+xml":
+                        case "application/xml":
+                        case "text/xml":
+                            response.ContentType = strAccept;
+                            return OSDParser.SerializeLLSDXmlBytes(llsdResponse);
+                        case "application/llsd+json":
+                        case "application/json":
+                            response.ContentType = strAccept;
+                            return Encoding.UTF8.GetBytes(OSDParser.SerializeJsonString(llsdResponse));
+                    }
+                }
+            }
+
+            if (!String.IsNullOrEmpty(request.ContentType))
+            {
+                switch (request.ContentType)
+                {
+                    case "application/llsd+xml":
+                    case "application/xml":
+                    case "text/xml":
+                        response.ContentType = request.ContentType;
+                        return OSDParser.SerializeLLSDXmlBytes(llsdResponse);
+                    case "application/llsd+json":
+                    case "application/json":
+                        response.ContentType = request.ContentType;
+                        return Encoding.UTF8.GetBytes(OSDParser.SerializeJsonString(llsdResponse));
+                }
+            }
+
+            // response.ContentType = "application/llsd+json";
+            // return Util.UTF8.GetBytes(OSDParser.SerializeJsonString(llsdResponse));
+            response.ContentType = "application/llsd+xml";
+            return OSDParser.SerializeLLSDXmlBytes(llsdResponse);
         }
 
         /// <summary>
@@ -1019,6 +1199,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                     try
                     {
                         response.Send();
+                        //response.FreeContext();
                     }
                     catch (SocketException f)
                     {
@@ -1201,7 +1382,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                                 bestMatch = pattern;
                         }
                     }
-                }           
+                }
 
                 if (String.IsNullOrEmpty(bestMatch))
                 {
@@ -1219,12 +1400,13 @@ namespace OpenSim.Framework.Servers.HttpServer
             }
         }
 
-        private static void DoHTTPGruntWork(Hashtable responsedata, OSHttpResponse response)
+        internal void DoHTTPGruntWork(Hashtable responsedata, OSHttpResponse response)
         {
             //m_log.Info("[BASE HTTP SERVER]: Doing HTTP Grunt work with response");
             int responsecode = (int)responsedata["int_response_code"];
             string responseString = (string)responsedata["str_response_string"];
             string contentType = (string)responsedata["content_type"];
+
 
             if (responsedata.ContainsKey("error_status_text"))
             {
@@ -1241,9 +1423,13 @@ namespace OpenSim.Framework.Servers.HttpServer
                 response.KeepAlive = keepalive;
 
             }
+
+            if (responsedata.ContainsKey("reusecontext"))
+                response.ReuseContext = (bool) responsedata["reusecontext"];
+
             //Even though only one other part of the entire code uses HTTPHandlers, we shouldn't expect this
             //and should check for NullReferenceExceptions
-
+            
             if (string.IsNullOrEmpty(contentType))
             {
                 contentType = "text/html";
@@ -1293,14 +1479,22 @@ namespace OpenSim.Framework.Servers.HttpServer
                 //response.OutputStream.Close();
                 try
                 {
+                    response.OutputStream.Flush();
                     response.Send();
+                    
+                    //if (!response.KeepAlive && response.ReuseContext)
+                    //    response.FreeContext();
                 }
                 catch (SocketException e)
                 {
                     // This has to be here to prevent a Linux/Mono crash
-                    m_log.WarnFormat("[BASE HTTP SERVER] XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
+                    m_log.WarnFormat("[BASE HTTP SERVER]: XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
                 }
-            }            
+                catch (IOException e)
+                {
+                    m_log.Warn("[BASE HTTP SERVER]: XmlRpcRequest issue: " + e.Message);
+                }
+            }
         }
 
         public void SendHTML404(OSHttpResponse response, string host)
@@ -1322,7 +1516,7 @@ namespace OpenSim.Framework.Servers.HttpServer
             }
             catch (Exception ex)
             {
-                m_log.Warn("[HTTPD]: Error - " + ex.Message);
+                m_log.Warn("[BASE HTTP SERVER]: Error - " + ex.Message);
             }
             finally
             {
@@ -1330,11 +1524,12 @@ namespace OpenSim.Framework.Servers.HttpServer
                 try
                 {
                     response.Send();
+                    //response.FreeContext();
                 }
                 catch (SocketException e)
                 {
                     // This has to be here to prevent a Linux/Mono crash
-                    m_log.WarnFormat("[BASE HTTP SERVER] XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
+                    m_log.WarnFormat("[BASE HTTP SERVER]: XmlRpcRequest issue {0}.\nNOTE: this may be spurious on Linux.", e);
                 }
             }
         }
@@ -1357,7 +1552,7 @@ namespace OpenSim.Framework.Servers.HttpServer
             }
             catch (Exception ex)
             {
-                m_log.Warn("[HTTPD]: Error - " + ex.Message);
+                m_log.Warn("[BASE HTTP SERVER]: Error - " + ex.Message);
             }
             finally
             {
@@ -1365,6 +1560,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                 try
                 {
                     response.Send();
+                    //response.FreeContext();
                 }
                 catch (SocketException e)
                 {
@@ -1376,13 +1572,6 @@ namespace OpenSim.Framework.Servers.HttpServer
 
         public void Start()
         {
-            m_log.Info("[HTTPD]: Starting up HTTP Server");
-
-            //m_workerThread = new Thread(new ThreadStart(StartHTTP));
-            //m_workerThread.Name = "HttpThread";
-            //m_workerThread.IsBackground = true;
-            //m_workerThread.Start();
-            //ThreadTracker.Add(m_workerThread);
             StartHTTP();
         }
 
@@ -1390,14 +1579,13 @@ namespace OpenSim.Framework.Servers.HttpServer
         {
             try
             {
-                m_log.Info("[HTTPD]: Spawned main thread OK");
                 //m_httpListener = new HttpListener();
                 NotSocketErrors = 0;
                 if (!m_ssl)
                 {
                     //m_httpListener.Prefixes.Add("http://+:" + m_port + "/");
                     //m_httpListener.Prefixes.Add("http://10.1.1.5:" + m_port + "/");
-                    m_httpListener2 = new CoolHTTPListener(IPAddress.Any, (int)m_port);
+                    m_httpListener2 = CoolHTTPListener.Create(m_listenIPAddress, (int)m_port);
                     m_httpListener2.ExceptionThrown += httpServerException;
                     m_httpListener2.LogWriter = httpserverlog;
                     
@@ -1405,7 +1593,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                     // if you want more detailed trace information from the HttpServer
                     //m_httpListener2.UseTraceLogs = true;
                     
-                    m_httpListener2.DisconnectHandler = httpServerDisconnectMonitor;                    
+                    //m_httpListener2.DisconnectHandler = httpServerDisconnectMonitor;
                 }
                 else
                 {
@@ -1413,22 +1601,25 @@ namespace OpenSim.Framework.Servers.HttpServer
                     //m_httpListener.Prefixes.Add("http://+:" + m_port + "/");
                 }
 
-                m_httpListener2.RequestHandler += OnHandleRequestIOThread;
+                m_httpListener2.RequestReceived += OnRequest;
                 //m_httpListener.Start();
                 m_httpListener2.Start(64);
+
+                // Long Poll Service Manager with 3 worker threads a 25 second timeout for no events
+                m_PollServiceManager = new PollServiceRequestManager(this, 3, 25000);
                 HTTPDRunning = true;
 
                 //HttpListenerContext context;
                 //while (true)
                 //{
                 //    context = m_httpListener.GetContext();
-                //    ThreadPool.QueueUserWorkItem(new WaitCallback(HandleRequest), context);
+                //    ThreadPool.UnsafeQueueUserWorkItem(new WaitCallback(HandleRequest), context);
                // }
             }
             catch (Exception e)
             {
-                m_log.Error("[HTTPD]: Error - " + e.Message);
-                m_log.Error("[HTTPD]: Tip: Do you have permission to listen on port " + m_port + ", " + m_sslport + "?");
+                m_log.Error("[BASE HTTP SERVER]: Error - " + e.Message);
+                m_log.Error("[BASE HTTP SERVER]: Tip: Do you have permission to listen on port " + m_port + ", " + m_sslport + "?");
                 
                 // We want this exception to halt the entire server since in current configurations we aren't too 
                 // useful without inbound HTTP.
@@ -1437,7 +1628,7 @@ namespace OpenSim.Framework.Servers.HttpServer
         }
 
         public void httpServerDisconnectMonitor(IHttpClientContext source, SocketError err)
-        {            
+        {
             switch (err)
             {
                 case SocketError.NotSocket:
@@ -1448,8 +1639,8 @@ namespace OpenSim.Framework.Servers.HttpServer
         }
 
         public void httpServerException(object source, Exception exception)
-        {            
-            m_log.ErrorFormat("[HTTPSERVER]: {0} had an exception {1}", source.ToString(), exception.ToString());
+        {
+            m_log.ErrorFormat("[BASE HTTP SERVER]: {0} had an exception {1}", source.ToString(), exception.ToString());
            /*
             if (HTTPDRunning)// && NotSocketErrors > 5)
             {
@@ -1464,13 +1655,20 @@ namespace OpenSim.Framework.Servers.HttpServer
         public void Stop()
         {
             HTTPDRunning = false;
-            m_httpListener2.ExceptionThrown -= httpServerException;
-            m_httpListener2.DisconnectHandler = null;
-            
-            m_httpListener2.LogWriter = null;
-            m_httpListener2.RequestHandler -= OnHandleRequestIOThread;
+            try
+            {
+                m_httpListener2.ExceptionThrown -= httpServerException;
+                //m_httpListener2.DisconnectHandler = null;
 
-            m_httpListener2.Stop();
+                m_httpListener2.LogWriter = null;
+                m_httpListener2.RequestReceived -= OnRequest;
+                m_httpListener2.Stop();
+            } 
+            catch (NullReferenceException)
+            {
+                m_log.Warn("[BASE HTTP SERVER]: Null Reference when stopping HttpServer.");
+            }
+            
         }
 
         public void RemoveStreamHandler(string httpMethod, string path)
@@ -1496,6 +1694,20 @@ namespace OpenSim.Framework.Servers.HttpServer
             }
         }
 
+        public void RemovePollServiceHTTPHandler(string httpMethod, string path)
+        {
+            lock (m_pollHandlers)
+            {
+                if (m_pollHandlers.ContainsKey(httpMethod))
+                {
+                    m_pollHandlers.Remove(httpMethod);
+                }
+            }
+
+            RemoveHTTPHandler(httpMethod, path);
+            
+        }
+
         public bool RemoveAgentHandler(string agent, IHttpAgentHandler handler)
         {
             try
@@ -1512,6 +1724,18 @@ namespace OpenSim.Framework.Servers.HttpServer
 
             return false;
         }
+
+        public void RemoveXmlRPCHandler(string method)
+        {
+            lock (m_rpcHandlers)
+            {
+                if (m_rpcHandlers.ContainsKey(method))
+                {
+                    m_rpcHandlers.Remove(method);
+                }
+            }
+        }
+
         
         public bool RemoveLLSDHandler(string path, LLSDMethod handler)
         {

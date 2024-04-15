@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -148,8 +148,7 @@ namespace OpenSim.Grid.MessagingServer.Modules
                 friendlistupdater.presence2 = receiver;
                 friendlistupdater.OnGetRegionData += m_regionModule.GetRegionInfo;
                 friendlistupdater.OnDone += PresenceUpdateDone;
-                WaitCallback cb = new WaitCallback(friendlistupdater.go);
-                ThreadPool.QueueUserWorkItem(cb);
+                Util.FireAndForget(friendlistupdater.go);
             }
             else
             {
@@ -322,46 +321,55 @@ namespace OpenSim.Grid.MessagingServer.Modules
         /// </summary>
         /// <param name="request">UserServer Data</param>
         /// <returns></returns>
-        public XmlRpcResponse UserLoggedOn(XmlRpcRequest request)
+        public XmlRpcResponse UserLoggedOn(XmlRpcRequest request, IPEndPoint remoteClient)
         {
-            Hashtable requestData = (Hashtable)request.Params[0];
-
-            AgentCircuitData agentData = new AgentCircuitData();
-            agentData.SessionID = new UUID((string)requestData["sessionid"]);
-            agentData.SecureSessionID = new UUID((string)requestData["secure_session_id"]);
-            agentData.firstname = (string)requestData["firstname"];
-            agentData.lastname = (string)requestData["lastname"];
-            agentData.AgentID = new UUID((string)requestData["agentid"]);
-            agentData.circuitcode = Convert.ToUInt32(requestData["circuit_code"]);
-            agentData.CapsPath = (string)requestData["caps_path"];
-
-            if (requestData.ContainsKey("child_agent") && requestData["child_agent"].Equals("1"))
+            try
             {
-                agentData.child = true;
+                Hashtable requestData = (Hashtable)request.Params[0];
+
+                AgentCircuitData agentData = new AgentCircuitData();
+                agentData.SessionID = new UUID((string)requestData["sessionid"]);
+                agentData.SecureSessionID = new UUID((string)requestData["secure_session_id"]);
+                agentData.firstname = (string)requestData["firstname"];
+                agentData.lastname = (string)requestData["lastname"];
+                agentData.AgentID = new UUID((string)requestData["agentid"]);
+                agentData.circuitcode = Convert.ToUInt32(requestData["circuit_code"]);
+                agentData.CapsPath = (string)requestData["caps_path"];
+
+                if (requestData.ContainsKey("child_agent") && requestData["child_agent"].Equals("1"))
+                {
+                    agentData.child = true;
+                }
+                else
+                {
+                    agentData.startpos =
+                         new Vector3(Convert.ToSingle(requestData["positionx"]),
+                                     Convert.ToSingle(requestData["positiony"]),
+                                     Convert.ToSingle(requestData["positionz"]));
+                    agentData.child = false;
+                }
+
+                ulong regionHandle = Convert.ToUInt64((string)requestData["regionhandle"]);
+
+                m_log.InfoFormat("[LOGON]: User {0} {1} logged into region {2} as {3} agent, building indexes for user",
+                                 agentData.firstname, agentData.lastname, regionHandle, agentData.child ? "child" : "root");
+
+                UserPresenceData up = new UserPresenceData();
+                up.agentData = agentData;
+                up.friendData = GetUserFriendList(agentData.AgentID);
+                up.regionData = m_regionModule.GetRegionInfo(regionHandle);
+                up.OnlineYN = true;
+                up.lookupUserRegionYN = false;
+                ProcessFriendListSubscriptions(up);
+
             }
-            else
+            catch (Exception e)
             {
-                agentData.startpos =
-                     new Vector3(Convert.ToSingle(requestData["positionx"]),
-                                 Convert.ToSingle(requestData["positiony"]),
-                                 Convert.ToSingle(requestData["positionz"]));
-                agentData.child = false;
+                m_log.WarnFormat("[LOGIN]: Exception on UserLoggedOn: {0}", e);
             }
-
-            ulong regionHandle = Convert.ToUInt64((string)requestData["regionhandle"]);
-
-            m_log.InfoFormat("[LOGON]: User {0} {1} logged into region {2} as {3} agent, building indexes for user",
-                             agentData.firstname, agentData.lastname, regionHandle, agentData.child ? "child" : "root");
-
-            UserPresenceData up = new UserPresenceData();
-            up.agentData = agentData;
-            up.friendData = GetUserFriendList(agentData.AgentID);
-            up.regionData = m_regionModule.GetRegionInfo(regionHandle);
-            up.OnlineYN = true;
-            up.lookupUserRegionYN = false;
-            ProcessFriendListSubscriptions(up);
 
             return new XmlRpcResponse();
+
         }
 
         /// <summary>
@@ -370,20 +378,27 @@ namespace OpenSim.Grid.MessagingServer.Modules
         /// </summary>
         /// <param name="request"></param>
         /// <returns></returns>
-        public XmlRpcResponse UserLoggedOff(XmlRpcRequest request)
+        public XmlRpcResponse UserLoggedOff(XmlRpcRequest request, IPEndPoint remoteClient)
         {
-            m_log.Info("[USERLOGOFF]: User logged off called");
-            Hashtable requestData = (Hashtable)request.Params[0];
+            try
+            {
+                m_log.Info("[USERLOGOFF]: User logged off called");
+                Hashtable requestData = (Hashtable)request.Params[0];
 
-            UUID AgentID = new UUID((string)requestData["agentid"]);
-            ProcessLogOff(AgentID);
+                UUID AgentID = new UUID((string)requestData["agentid"]);
+                ProcessLogOff(AgentID);
+            }
+            catch (Exception e)
+            {
+                m_log.WarnFormat("[USERLOGOFF]: Exception on UserLoggedOff: {0}", e);
+            }
 
             return new XmlRpcResponse();
         }
 
         #endregion
 
-        public XmlRpcResponse GetPresenceInfoBulk(XmlRpcRequest request)
+        public XmlRpcResponse GetPresenceInfoBulk(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable paramHash = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();
@@ -426,7 +441,7 @@ namespace OpenSim.Grid.MessagingServer.Modules
             }
         }
 
-        public XmlRpcResponse AgentLocation(XmlRpcRequest request)
+        public XmlRpcResponse AgentLocation(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();
@@ -441,7 +456,7 @@ namespace OpenSim.Grid.MessagingServer.Modules
             return response;
         }
 
-        public XmlRpcResponse AgentLeaving(XmlRpcRequest request)
+        public XmlRpcResponse AgentLeaving(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();
@@ -455,7 +470,7 @@ namespace OpenSim.Grid.MessagingServer.Modules
             return response;
         }
 
-        public XmlRpcResponse ProcessRegionShutdown(XmlRpcRequest request)
+        public XmlRpcResponse ProcessRegionShutdown(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             Hashtable requestData = (Hashtable)request.Params[0];
             Hashtable result = new Hashtable();

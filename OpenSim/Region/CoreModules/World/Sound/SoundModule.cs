@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,9 +33,9 @@ using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 
 namespace OpenSim.Region.CoreModules.World.Sound
-{        
+{
     public class SoundModule : IRegionModule, ISoundModule
-    {        
+    {
         //private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         
         protected Scene m_scene;
@@ -60,7 +60,7 @@ namespace OpenSim.Region.CoreModules.World.Sound
         }
         
         public virtual void PlayAttachedSound(
-            UUID soundID, UUID ownerID, UUID objectID, double gain, Vector3 position, byte flags)
+            UUID soundID, UUID ownerID, UUID objectID, double gain, Vector3 position, byte flags, float radius)
         {
             foreach (ScenePresence p in m_scene.GetAvatars())
             {
@@ -68,15 +68,18 @@ namespace OpenSim.Region.CoreModules.World.Sound
                 if (dis > 100.0) // Max audio distance
                     continue;
                 
-                // Scale by distance          
-                gain = (float)((double)gain*((100.0 - dis) / 100.0));
+                // Scale by distance
+                if (radius == 0)
+                    gain = (float)((double)gain * ((100.0 - dis) / 100.0));
+                else
+                    gain = (float)((double)gain * ((radius - dis) / radius));
                 
                 p.ControllingClient.SendPlayAttachedSound(soundID, objectID, ownerID, (float)gain, flags);
-            }                
+            }
         }
         
         public virtual void TriggerSound(
-            UUID soundId, UUID ownerID, UUID objectID, UUID parentID, double gain, Vector3 position, UInt64 handle)
+            UUID soundId, UUID ownerID, UUID objectID, UUID parentID, double gain, Vector3 position, UInt64 handle, float radius)
         {
             foreach (ScenePresence p in m_scene.GetAvatars())
             {
@@ -84,12 +87,15 @@ namespace OpenSim.Region.CoreModules.World.Sound
                 if (dis > 100.0) // Max audio distance
                     continue;
                 
-                // Scale by distance          
-                gain = (float)((double)gain*((100.0 - dis) / 100.0));
+                // Scale by distance
+                if (radius == 0)
+                    gain = (float)((double)gain * ((100.0 - dis) / 100.0));
+                else
+                    gain = (float)((double)gain * ((radius - dis) / radius));
                 
                 p.ControllingClient.SendTriggeredSound(
                     soundId, ownerID, objectID, parentID, handle, position, (float)gain);
-            }            
-        }  
+            }
+        }
     }
 }

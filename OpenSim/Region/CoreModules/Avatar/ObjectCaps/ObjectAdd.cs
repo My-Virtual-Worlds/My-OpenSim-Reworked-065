@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -37,7 +37,7 @@ using OpenSim.Framework.Servers;
 using OpenSim.Framework.Servers.HttpServer;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
-using Caps=OpenSim.Framework.Communications.Capabilities.Caps;
+using Caps=OpenSim.Framework.Capabilities.Caps;
 
 namespace OpenSim.Region.CoreModules.Avatar.ObjectCaps
 {
@@ -303,7 +303,7 @@ namespace OpenSim.Region.CoreModules.Avatar.ObjectCaps
             if (m_scene.Permissions.CanRezObject(1, avatar.UUID, pos))
             {
                 // rez ON the ground, not IN the ground
-                pos.Z += 0.25F;
+               // pos.Z += 0.25F;
 
                 obj = m_scene.AddNewPrim(avatar.UUID, group_id, pos, rotation, pbs);
             }

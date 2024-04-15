@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -137,12 +137,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             if (cmdHandlerThread == null)
             {
                 // Start the thread that will be doing the work
-                cmdHandlerThread = new Thread(CmdHandlerThreadLoop);
-                cmdHandlerThread.Name = "AsyncLSLCmdHandlerThread";
-                cmdHandlerThread.Priority = ThreadPriority.BelowNormal;
-                cmdHandlerThread.IsBackground = true;
-                cmdHandlerThread.Start();
-                ThreadTracker.Add(cmdHandlerThread);
+                cmdHandlerThread = Watchdog.StartThread(CmdHandlerThreadLoop, "AsyncLSLCmdHandlerThread", ThreadPriority.Normal, true);
             }
         }
 
@@ -186,6 +181,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         Thread.Sleep(cmdHandlerThreadCycleSleepms);
 
                         DoOneCmdHandlerPass();
+
+                        Watchdog.UpdateThread();
                     }
                 }
                 catch
@@ -239,7 +236,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             iHttpReq.StopHttpRequest(localID, itemID);
 
             IWorldComm comms = engine.World.RequestModuleInterface<IWorldComm>();
-            comms.DeleteListener(itemID);
+            if (comms != null)
+                comms.DeleteListener(itemID);
 
             IXMLRPC xmlrpc = engine.World.RequestModuleInterface<IXMLRPC>();
             xmlrpc.DeleteChannels(itemID);

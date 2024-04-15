@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -124,10 +124,19 @@ namespace OpenSim.Framework.Communications.Clients
             ArrayList SendParams = new ArrayList();
             SendParams.Add(requestData);
             XmlRpcRequest UserReq = new XmlRpcRequest("check_auth_session", SendParams);
-            XmlRpcResponse UserResp = UserReq.Send(authurl, 3000);
+            XmlRpcResponse UserResp = null;
+            try
+            {
+                UserResp = UserReq.Send(authurl, 3000);
+            }
+            catch (Exception e)
+            {
+                System.Console.WriteLine("[Session Auth]: VerifySession XmlRpc: " + e.Message); 
+                return false;
+            }
 
             Hashtable responseData = (Hashtable)UserResp.Value;
-            if (responseData.ContainsKey("auth_session") && responseData["auth_session"].ToString() == "TRUE")
+            if (responseData != null && responseData.ContainsKey("auth_session") && responseData["auth_session"] != null && responseData["auth_session"].ToString() == "TRUE")
             {
                 //System.Console.WriteLine("[Authorization]: userserver reported authorized session for user " + userID);
                 return true;

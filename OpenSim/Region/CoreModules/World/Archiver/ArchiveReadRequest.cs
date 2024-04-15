@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -32,6 +32,7 @@ using System.IO.Compression;
 using System.Net;
 using System.Reflection;
 using System.Text;
+using System.Xml;
 using log4net;
 using OpenMetaverse;
 using OpenSim.Framework;
@@ -50,8 +51,15 @@ namespace OpenSim.Region.CoreModules.World.Archiver
     public class ArchiveReadRequest
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        
+        /// <summary>
+        /// The maximum major version of OAR that we can read.  Minor versions shouldn't need a number since version
+        /// bumps here should be compatible.
+        /// </summary>
+        public static int MAX_MAJOR_VERSION = 0;
 
         private static ASCIIEncoding m_asciiEncoding = new ASCIIEncoding();
+        private static UTF8Encoding m_utf8Encoding = new UTF8Encoding();
 
         private Scene m_scene;
         private Stream m_loadStream;
@@ -71,7 +79,19 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         public ArchiveReadRequest(Scene scene, string loadPath, bool merge, Guid requestId)
         {
             m_scene = scene;
-            m_loadStream = new GZipStream(GetStream(loadPath), CompressionMode.Decompress);
+
+            try
+            {
+                m_loadStream = new GZipStream(GetStream(loadPath), CompressionMode.Decompress);
+            }
+            catch (EntryPointNotFoundException e)
+            {
+                m_log.ErrorFormat(
+                    "[ARCHIVER]: Mismatch between Mono and zlib1g library version when trying to create compression stream."
+                        + "If you've manually installed Mono, have you appropriately updated zlib1g as well?");
+                m_log.Error(e);
+            }
+        
             m_errorMessage = String.Empty;
             m_merge = merge;
             m_requestId = requestId;
@@ -99,26 +119,26 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             int successfulAssetRestores = 0;
             int failedAssetRestores = 0;
             List<string> serialisedSceneObjects = new List<string>();
+            List<string> serialisedParcels = new List<string>();
             string filePath = "NONE";
+
+            TarArchiveReader archive = new TarArchiveReader(m_loadStream);
+            byte[] data;
+            TarArchiveReader.TarEntryType entryType;
             
             try
             {
-                TarArchiveReader archive = new TarArchiveReader(m_loadStream);
-               
-                byte[] data;
-                TarArchiveReader.TarEntryType entryType;
-
                 while ((data = archive.ReadEntry(out filePath, out entryType)) != null)
-                {                    
+                {
                     //m_log.DebugFormat(
                     //    "[ARCHIVER]: Successfully read {0} ({1} bytes)", filePath, data.Length);
                     
                     if (TarArchiveReader.TarEntryType.TYPE_DIRECTORY == entryType)
-                        continue;                    
+                        continue;
 
                     if (filePath.StartsWith(ArchiveConstants.OBJECTS_PATH))
                     {
-                        serialisedSceneObjects.Add(m_asciiEncoding.GetString(data));
+                        serialisedSceneObjects.Add(m_utf8Encoding.GetString(data));
                     }
                     else if (filePath.StartsWith(ArchiveConstants.ASSETS_PATH))
                     {
@@ -126,6 +146,9 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                             successfulAssetRestores++;
                         else
                             failedAssetRestores++;
+
+                        if ((successfulAssetRestores + failedAssetRestores) % 250 == 0)
+                            m_log.Debug("[ARCHIVER]: Loaded " + successfulAssetRestores + " assets and failed to load " + failedAssetRestores + " assets...");
                     }
                     else if (!m_merge && filePath.StartsWith(ArchiveConstants.TERRAINS_PATH))
                     {
@@ -134,12 +157,18 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                     else if (!m_merge && filePath.StartsWith(ArchiveConstants.SETTINGS_PATH))
                     {
                         LoadRegionSettings(filePath, data);
+                    } 
+                    else if (!m_merge && filePath.StartsWith(ArchiveConstants.LANDDATA_PATH))
+                    {
+                        serialisedParcels.Add(m_utf8Encoding.GetString(data));
+                    } 
+                    else if (filePath == ArchiveConstants.CONTROL_FILE_PATH)
+                    {
+                        LoadControlFile(filePath, data);
                     }
                 }
 
                 //m_log.Debug("[ARCHIVER]: Reached end of archive");
-
-                archive.Close();
             }
             catch (Exception e)
             {
@@ -148,6 +177,10 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 m_errorMessage += e.ToString();
                 m_scene.EventManager.TriggerOarFileLoaded(m_requestId, m_errorMessage);
                 return;
+            }
+            finally
+            {
+                archive.Close();
             }
 
             m_log.InfoFormat("[ARCHIVER]: Restored {0} assets", successfulAssetRestores);
@@ -164,11 +197,31 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 m_scene.DeleteAllSceneObjects();
             }
 
+            // Try to retain the original creator/owner/lastowner if their uuid is present on this grid
+            // otherwise, use the master avatar uuid instead
+            UUID masterAvatarId = m_scene.RegionInfo.MasterAvatarAssignedUUID;
+
+            if (m_scene.RegionInfo.EstateSettings.EstateOwner != UUID.Zero)
+                masterAvatarId = m_scene.RegionInfo.EstateSettings.EstateOwner;
+
+            // Reload serialized parcels
+            m_log.InfoFormat("[ARCHIVER]: Loading {0} parcels.  Please wait.", serialisedParcels.Count);
+            List<LandData> landData = new List<LandData>();
+            foreach (string serialisedParcel in serialisedParcels)
+            {
+                LandData parcel = LandDataSerializer.Deserialize(serialisedParcel);
+                if (!ResolveUserUuid(parcel.OwnerID))
+                    parcel.OwnerID = masterAvatarId;
+                landData.Add(parcel);
+            }
+            m_scene.EventManager.TriggerIncomingLandDataFromStorage(landData);
+            m_log.InfoFormat("[ARCHIVER]: Restored {0} parcels.", landData.Count);
+
             // Reload serialized prims
             m_log.InfoFormat("[ARCHIVER]: Loading {0} scene objects.  Please wait.", serialisedSceneObjects.Count);
 
             IRegionSerialiserModule serialiser = m_scene.RequestModuleInterface<IRegionSerialiserModule>();
-            int sceneObjectsLoadedCount = 0;            
+            int sceneObjectsLoadedCount = 0;
 
             foreach (string serialisedSceneObject in serialisedSceneObjects)
             {
@@ -193,12 +246,6 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 // to the same scene (when this is possible).
                 sceneObject.ResetIDs();
 
-                // Try to retain the original creator/owner/lastowner if their uuid is present on this grid
-                // otherwise, use the master avatar uuid instead
-                UUID masterAvatarId = m_scene.RegionInfo.MasterAvatarAssignedUUID;
-
-                if (m_scene.RegionInfo.EstateSettings.EstateOwner != UUID.Zero)
-                    masterAvatarId = m_scene.RegionInfo.EstateSettings.EstateOwner;
 
                 foreach (SceneObjectPart part in sceneObject.Children.Values)
                 {
@@ -235,10 +282,10 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                     }
                 }
 
-                if (m_scene.AddRestoredSceneObject(sceneObject, true, false))
+                if (!m_scene.AddRestoredSceneObject(sceneObject, true, false))
                 {
                     sceneObjectsLoadedCount++;
-                    sceneObject.CreateScriptInstances(0, true, m_scene.DefaultScriptEngine, 0);
+                    sceneObject.CreateScriptInstances(0, false, m_scene.DefaultScriptEngine, 0);
                 }
             }
 
@@ -304,13 +351,17 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             {
                 sbyte assetType = ArchiveConstants.EXTENSION_TO_ASSET_TYPE[extension];
 
+                if (assetType == (sbyte)AssetType.Unknown)
+                    m_log.WarnFormat("[ARCHIVER]: Importing {0} byte asset {1} with unknown type", data.Length, uuid);
+
                 //m_log.DebugFormat("[ARCHIVER]: Importing asset {0}, type {1}", uuid, assetType);
 
-                AssetBase asset = new AssetBase(new UUID(uuid), String.Empty);
-                asset.Type = assetType;
+                AssetBase asset = new AssetBase(new UUID(uuid), String.Empty, assetType);
                 asset.Data = data;
 
-                m_scene.CommsManager.AssetCache.AddAsset(asset);
+                // We're relying on the asset service to do the sensible thing and not store the asset if it already
+                // exists.
+                m_scene.AssetService.Store(asset);
 
                 /**
                  * Create layers on decode for image assets.  This is likely to significantly increase the time to load archives so
@@ -391,8 +442,12 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             currentRegionSettings.UseEstateSun = loadedRegionSettings.UseEstateSun;
             currentRegionSettings.WaterHeight = loadedRegionSettings.WaterHeight;
 
+            currentRegionSettings.Save();
+            
             IEstateModule estateModule = m_scene.RequestModuleInterface<IEstateModule>();
-            estateModule.sendRegionHandshakeToAll();
+
+            if (estateModule != null)
+                estateModule.sendRegionHandshakeToAll();
 
             return true;
         }
@@ -421,17 +476,19 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         /// <summary>
         /// Resolve path to a working FileStream
         /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
         private Stream GetStream(string path)
         {
-            try
+            if (File.Exists(path))
             {
-                if (File.Exists(path))
+                return new FileStream(path, FileMode.Open, FileAccess.Read);
+            }
+            else
+            {
+                try
                 {
-                    return new FileStream(path, FileMode.Open, FileAccess.Read);
-                }
-                else
-                {
-                    Uri uri = new Uri(path); // throw exception if not valid URI
+                    Uri uri = new Uri(path);
                     if (uri.Scheme == "file")
                     {
                         return new FileStream(uri.AbsolutePath, FileMode.Open, FileAccess.Read);
@@ -446,32 +503,96 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                         return URIFetch(uri);
                     }
                 }
-            }
-            catch (Exception e)
-            {
-                throw new Exception(String.Format("Unable to create file input stream for {0}: {1}", path, e));
+                catch (UriFormatException)
+                {
+                    // In many cases the user will put in a plain old filename that cannot be found so assume that
+                    // this is the problem rather than confusing the issue with a UriFormatException
+                    throw new Exception(String.Format("Cannot find file {0}", path));
+                }
             }
         }
 
         private static Stream URIFetch(Uri uri)
         {
-            HttpWebRequest request  = (HttpWebRequest)  WebRequest.Create(uri);
+            HttpWebRequest request  = (HttpWebRequest)WebRequest.Create(uri);
 
             // request.Credentials = credentials;
 
             request.ContentLength = 0;
+            request.KeepAlive     = false;
 
             WebResponse response = request.GetResponse();
             Stream file = response.GetResponseStream();
 
-            if (response.ContentType != "application/x-oar")
-                throw new Exception(String.Format("{0} does not identify an OAR file", uri.ToString()));
+            // justincc: gonna ignore the content type for now and just try anything
+            //if (response.ContentType != "application/x-oar")
+            //    throw new Exception(String.Format("{0} does not identify an OAR file", uri.ToString()));
 
             if (response.ContentLength == 0)
                 throw new Exception(String.Format("{0} returned an empty file", uri.ToString()));
 
             // return new BufferedStream(file, (int) response.ContentLength);
             return new BufferedStream(file, 1000000);
+        }
+
+        /// <summary>
+        /// Load oar control file
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="data"></param>
+        private void LoadControlFile(string path, byte[] data)
+        {
+            //Create the XmlNamespaceManager.
+            NameTable nt = new NameTable();
+            XmlNamespaceManager nsmgr = new XmlNamespaceManager(nt);
+
+            // Create the XmlParserContext.
+            XmlParserContext context = new XmlParserContext(null, nsmgr, null, XmlSpace.None);
+
+            XmlTextReader xtr 
+                = new XmlTextReader(m_asciiEncoding.GetString(data), XmlNodeType.Document, context);
+
+            RegionSettings currentRegionSettings = m_scene.RegionInfo.RegionSettings;
+
+            // Loaded metadata will empty if no information exists in the archive
+            currentRegionSettings.LoadedCreationDateTime = 0;
+            currentRegionSettings.LoadedCreationID = "";
+
+            while (xtr.Read()) 
+            {
+                if (xtr.NodeType == XmlNodeType.Element) 
+                {
+                    if (xtr.Name.ToString() == "archive")
+                    {
+                        int majorVersion = int.Parse(xtr["major_version"]);
+                        int minorVersion = int.Parse(xtr["minor_version"]);
+                        string version = string.Format("{0}.{1}", majorVersion, minorVersion);
+                        
+                        if (majorVersion > MAX_MAJOR_VERSION)
+                        {
+                            throw new Exception(
+                                string.Format(
+                                    "The OAR you are trying to load has major version number of {0} but this version of OpenSim can only load OARs with major version number {1} and below",
+                                    majorVersion, MAX_MAJOR_VERSION));
+                        }
+                        
+                        m_log.InfoFormat("[ARCHIVER]: Loading OAR with version {0}", version);
+                    }
+                    if (xtr.Name.ToString() == "datetime") 
+                    {
+                        int value;
+                        if (Int32.TryParse(xtr.ReadElementContentAsString(), out value))
+                            currentRegionSettings.LoadedCreationDateTime = value;
+                    } 
+                    else if (xtr.Name.ToString() == "id") 
+                    {
+                        currentRegionSettings.LoadedCreationID = xtr.ReadElementContentAsString();
+                    }
+                }
+
+            }
+            
+            currentRegionSettings.Save();
         }
     }
 }

@@ -108,14 +108,6 @@ namespace OpenSim.Framework
             set { m_standaloneInventoryPlugin = value; }
         }
 
-        private string m_standaloneAssetPlugin;
-
-        public string StandaloneAssetPlugin
-        {
-            get { return m_standaloneAssetPlugin; }
-            set { m_standaloneAssetPlugin = value; }
-        }
-
         private string m_standaloneUserPlugin;
 
         public string StandaloneUserPlugin
@@ -132,36 +124,12 @@ namespace OpenSim.Framework
             set { m_standaloneInventorySource = value; }
         }
 
-        private string m_standaloneAssetSource;
-
-        public string StandaloneAssetSource
-        {
-            get { return m_standaloneAssetSource; }
-            set { m_standaloneAssetSource = value; }
-        }
-
         private string m_standaloneUserSource;
 
         public string StandaloneUserSource
         {
             get { return m_standaloneUserSource; }
             set { m_standaloneUserSource = value; }
-        }
-
-        private string m_assetStorage = "local";
-
-        public string AssetStorage
-        {
-            get { return m_assetStorage; }
-            set { m_assetStorage = value; }
-        }
-
-        private string m_assetCache;
-
-        public string AssetCache
-        {
-            get { return m_assetCache; }
-            set { m_assetCache = value; }
         }
 
         protected string m_storageConnectionString;
@@ -180,14 +148,6 @@ namespace OpenSim.Framework
             set { m_estateConnectionString = value; }
         }
 
-        protected bool m_dumpAssetsToFile;
-
-        public bool DumpAssetsToFile
-        {
-            get { return m_dumpAssetsToFile; }
-            set { m_dumpAssetsToFile = value; }
-        }
-
         protected string m_librariesXMLFile;
         public string LibrariesXMLFile
         {
@@ -200,18 +160,6 @@ namespace OpenSim.Framework
                 m_librariesXMLFile = value;
             }
         }
-        protected string m_assetSetsXMLFile;
-        public string AssetSetsXMLFile
-        {
-            get
-            {
-                return m_assetSetsXMLFile;
-            }
-            set
-            {
-                m_assetSetsXMLFile = value;
-            }
-        }
 
         public const uint DefaultAssetServerHttpPort = 8003;
         public const uint DefaultRegionHttpPort = 9000;
@@ -220,7 +168,7 @@ namespace OpenSim.Framework
         public const bool DefaultUserServerHttpSSL = false;
         public const uint DefaultMessageServerHttpPort = 8006;
         public const bool DefaultMessageServerHttpSSL = false;
-        public const uint DefaultGridServerHttpPort = 8001;
-        public const uint DefaultInventoryServerHttpPort = 8004;
+        public const uint DefaultGridServerHttpPort = 8003;
+        public const uint DefaultInventoryServerHttpPort = 8003;
     }
 }

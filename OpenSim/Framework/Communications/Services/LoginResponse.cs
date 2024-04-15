@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -78,6 +78,7 @@ namespace OpenSim.Framework.Communications.Services
         private uint simHttpPort;
         private string simAddress;
         private string agentAccess;
+        private string agentAccessMax;
         private Int32 circuitCode;
         private uint regionX;
         private uint regionY;
@@ -144,6 +145,7 @@ namespace OpenSim.Framework.Communications.Services
             firstname = "Test";
             lastname = "User";
             agentAccess = "M";
+            agentAccessMax = "A";
             startLocation = "last";
             allowFirstLife = "Y";
 
@@ -342,6 +344,7 @@ namespace OpenSim.Framework.Communications.Services
                 responseData["first_name"] = Firstname;
                 responseData["last_name"] = Lastname;
                 responseData["agent_access"] = agentAccess;
+                responseData["agent_access_max"] = agentAccessMax;
 
                 globalTexturesHash = new Hashtable();
                 globalTexturesHash["sun_texture_id"] = SunTexture;
@@ -416,6 +419,7 @@ namespace OpenSim.Framework.Communications.Services
                 map["first_name"] = OSD.FromString(Firstname);
                 map["last_name"] = OSD.FromString(Lastname);
                 map["agent_access"] = OSD.FromString(agentAccess);
+                map["agent_access_max"] = OSD.FromString(agentAccessMax);
 
                 map["sim_port"] = OSD.FromInteger(SimPort);
                 map["sim_ip"] = OSD.FromString(SimAddress);
@@ -664,6 +668,12 @@ namespace OpenSim.Framework.Communications.Services
         {
             get { return agentAccess; }
             set { agentAccess = value; }
+        }
+
+        public string AgentAccessMax
+        {
+            get { return agentAccessMax; }
+            set { agentAccessMax = value; }
         }
 
         public string StartLocation

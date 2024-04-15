@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -31,6 +31,7 @@ using System.Threading;
 using System.Reflection;
 using System.Collections;
 using System.Collections.Generic;
+using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.ScriptEngine.Interfaces;
 using OpenSim.Region.ScriptEngine.Shared.Api.Interfaces;
@@ -93,8 +94,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         {
             return m_OSSL_Functions.osWindActiveModelPluginName();
         }
-       
-// Not yet plugged in as available OSSL functions, so commented out        
+
+// Not yet plugged in as available OSSL functions, so commented out
 //        void osWindParamSet(string plugin, string param, float value)
 //        {
 //            m_OSSL_Functions.osWindParamSet(plugin, param, value);
@@ -134,6 +135,20 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             return m_OSSL_Functions.osSetDynamicTextureDataBlend(dynamicID, contentType, data, extraParams, timer, alpha);
         }
 
+        public string osSetDynamicTextureURLBlendFace(string dynamicID, string contentType, string url, string extraParams,
+                                           bool blend, int disp, int timer, int alpha, int face)
+        {
+            return m_OSSL_Functions.osSetDynamicTextureURLBlendFace(dynamicID, contentType, url, extraParams,
+                                             blend, disp, timer, alpha, face);
+        }
+
+        public string osSetDynamicTextureDataBlendFace(string dynamicID, string contentType, string data, string extraParams,
+                                             bool blend, int disp, int timer, int alpha, int face)
+        {
+            return m_OSSL_Functions.osSetDynamicTextureDataBlendFace(dynamicID, contentType, data, extraParams,
+                                             blend, disp, timer, alpha, face);
+        }
+
         public LSL_Float osTerrainGetHeight(int x, int y)
         {
             return m_OSSL_Functions.osTerrainGetHeight(x, y);
@@ -169,6 +184,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             m_OSSL_Functions.osSetParcelMediaURL(url);
         }
 
+        public void osSetParcelSIPAddress(string SIPAddress)
+        {
+            m_OSSL_Functions.osSetParcelSIPAddress(SIPAddress);
+        }
+
         public void osSetPrimFloatOnWater(int floatYN)
         {
             m_OSSL_Functions.osSetPrimFloatOnWater(floatYN);
@@ -181,9 +201,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             m_OSSL_Functions.osTeleportAgent(agent, regionName, position, lookat);
         }
 
-        public void osTeleportAgent(string agent, long regionX, long regionY, vector position, vector lookat)
+        public void osTeleportAgent(string agent, int regionX, int regionY, vector position, vector lookat)
         {
-            m_OSSL_Functions.osTeleportAgent(agent, (uint) regionX, (uint) regionY, position, lookat);
+            m_OSSL_Functions.osTeleportAgent(agent, regionX, regionY, position, lookat);
         }
 
         public void osTeleportAgent(string agent, vector position, vector lookat)
@@ -191,7 +211,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             m_OSSL_Functions.osTeleportAgent(agent, position, lookat);
         }
 
-        // Avatar info functions 
+        // Avatar info functions
         public string osGetAgentIP(string agent)
         {
             return m_OSSL_Functions.osGetAgentIP(agent);
@@ -252,14 +272,34 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             return m_OSSL_Functions.osDrawFilledRectangle(drawList, width, height);
         }
 
+        public string osDrawPolygon(string drawList, LSL_List x, LSL_List y)
+        {
+            return m_OSSL_Functions.osDrawPolygon(drawList, x, y);
+        }
+
+        public string osDrawFilledPolygon(string drawList, LSL_List x, LSL_List y)
+        {
+            return m_OSSL_Functions.osDrawFilledPolygon(drawList, x, y);
+        }
+
         public string osSetFontSize(string drawList, int fontSize)
         {
             return m_OSSL_Functions.osSetFontSize(drawList, fontSize);
         }
 
+        public string osSetFontName(string drawList, string fontName)
+        {
+            return m_OSSL_Functions.osSetFontName(drawList, fontName);
+        }
+
         public string osSetPenSize(string drawList, int penSize)
         {
             return m_OSSL_Functions.osSetPenSize(drawList, penSize);
+        }
+
+        public string osSetPenCap(string drawList, string direction, string type)
+        {
+            return m_OSSL_Functions.osSetPenCap(drawList, direction, type);
         }
 
         public string osSetPenColour(string drawList, string colour)
@@ -286,17 +326,17 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         {
             return m_OSSL_Functions.osGetScriptEngineName();
         }
-        
+
         public string osGetSimulatorVersion()
         {
-           return m_OSSL_Functions.osGetSimulatorVersion();    
+           return m_OSSL_Functions.osGetSimulatorVersion();
         }
-        
+
         public Hashtable osParseJSON(string JSON)
         {
             return m_OSSL_Functions.osParseJSON(JSON);
         }
-    
+
         public void osMessageObject(key objectUUID,string message)
         {
             m_OSSL_Functions.osMessageObject(objectUUID,message);
@@ -357,6 +397,47 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             return m_OSSL_Functions.osMatchString(src, pattern, start);
         }
 
+        // Information about data loaded into the region
+        public string osLoadedCreationDate()
+        {
+            return m_OSSL_Functions.osLoadedCreationDate();
+        }
+
+        public string osLoadedCreationTime()
+        {
+            return m_OSSL_Functions.osLoadedCreationTime();
+        }
+
+        public string osLoadedCreationID()
+        {
+            return m_OSSL_Functions.osLoadedCreationID();
+        }
+
+        public LSL_List osGetLinkPrimitiveParams(int linknumber, LSL_List rules)
+        {
+            return m_OSSL_Functions.osGetLinkPrimitiveParams(linknumber, rules);
+        }
+
+        public key osNpcCreate(string user, string name, vector position, key cloneFrom)
+        {
+            return m_OSSL_Functions.osNpcCreate(user, name, position, cloneFrom);
+        }
+
+        public void osNpcMoveTo(key npc, vector position)
+        {
+            m_OSSL_Functions.osNpcMoveTo(npc, position);
+        }
+
+        public void osNpcSay(key npc, string message)
+        {
+            m_OSSL_Functions.osNpcSay(npc, message);
+        }
+
+        public void osNpcRemove(key npc)
+        {
+            m_OSSL_Functions.osNpcRemove(npc);
+        }
+
         public OSSLPrim Prim;
 
         [Serializable]
@@ -407,12 +488,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             }
             private void Save()
             {
-                if (Position.x > 255)
-                    Position.x = 255;
+                if (Position.x > ((int)Constants.RegionSize - 1))
+                    Position.x = ((int)Constants.RegionSize - 1);
                 if (Position.x < 0)
                     Position.x = 0;
-                if (Position.y > 255)
-                    Position.y = 255;
+                if (Position.y > ((int)Constants.RegionSize - 1))
+                    Position.y = ((int)Constants.RegionSize - 1);
                 if (Position.y < 0)
                     Position.y = 0;
                 if (Position.z > 768)
@@ -540,6 +621,47 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
                     Save();
                 }
             }
+        }
+
+        public key osGetMapTexture()
+        {
+            return m_OSSL_Functions.osGetMapTexture();
+        }
+
+        public key osGetRegionMapTexture(string regionName)
+        {
+            return m_OSSL_Functions.osGetRegionMapTexture(regionName);
+        }
+        
+        public LSL_List osGetRegionStats()
+        {
+            return m_OSSL_Functions.osGetRegionStats();
+        }
+
+        /// <summary>
+        /// Returns the amount of memory in use by the Simulator Daemon.
+        /// Amount in bytes - if >= 4GB, returns 4GB. (LSL is not 64-bit aware)
+        /// </summary>
+        /// <returns></returns>
+        public LSL_Integer osGetSimulatorMemory()
+        {
+            return m_OSSL_Functions.osGetSimulatorMemory();
+        }
+        public void osKickAvatar(string FirstName,string SurName,string alert)
+        {
+            m_OSSL_Functions.osKickAvatar(FirstName, SurName, alert);
+        }
+        public void osSetSpeed(string UUID, float SpeedModifier)
+        {
+            m_OSSL_Functions.osSetSpeed(UUID, SpeedModifier);
+        }
+        public void osCauseDamage(string avatar, double damage)
+        {
+            m_OSSL_Functions.osCauseDamage(avatar, damage);
+        }
+        public void osCauseHealing(string avatar, double healing)
+        {
+            m_OSSL_Functions.osCauseHealing(avatar, healing);
         }
     }
 }

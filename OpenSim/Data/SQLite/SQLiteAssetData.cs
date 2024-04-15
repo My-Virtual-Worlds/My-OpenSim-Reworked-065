@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -30,7 +30,7 @@ using System.Data;
 using System.Reflection;
 using System.Collections.Generic;
 using log4net;
-using Mono.Data.SqliteClient;
+using Mono.Data.Sqlite;
 using OpenMetaverse;
 using OpenSim.Framework;
 
@@ -41,7 +41,7 @@ namespace OpenSim.Data.SQLite
     /// </summary>
     public class SQLiteAssetData : AssetDataBase
     {
-        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+//        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private const string SelectAssetSQL = "select * from assets where UUID=:UUID";
         private const string SelectAssetMetadataSQL = "select Name, Description, Type, Temporary, UUID from assets limit :start, :count";
@@ -73,7 +73,7 @@ namespace OpenSim.Data.SQLite
         {
             if (dbconnect == string.Empty)
             {
-                dbconnect = "URI=file:AssetStorage.db,version=3";
+                dbconnect = "URI=file:Asset.db,version=3";
             }
             m_conn = new SqliteConnection(dbconnect);
             m_conn.Open();
@@ -90,7 +90,7 @@ namespace OpenSim.Data.SQLite
         /// </summary>
         /// <param name="uuid">UUID of ... ?</param>
         /// <returns>Asset base</returns>
-        override protected AssetBase FetchStoredAsset(UUID uuid)
+        override public AssetBase GetAsset(UUID uuid)
         {
             lock (this)
             {
@@ -119,12 +119,28 @@ namespace OpenSim.Data.SQLite
         /// Create an asset
         /// </summary>
         /// <param name="asset">Asset Base</param>
-        override public void CreateAsset(AssetBase asset)
+        override public void StoreAsset(AssetBase asset)
         {
             //m_log.Info("[ASSET DB]: Creating Asset " + asset.FullID.ToString());
             if (ExistsAsset(asset.FullID))
             {
-                //m_log.Info("[ASSET DB]: Asset exists already, ignoring.");
+                //LogAssetLoad(asset);
+
+                lock (this)
+                {
+                    using (SqliteCommand cmd = new SqliteCommand(UpdateAssetSQL, m_conn))
+                    {
+                        cmd.Parameters.Add(new SqliteParameter(":UUID", asset.FullID.ToString()));
+                        cmd.Parameters.Add(new SqliteParameter(":Name", asset.Name));
+                        cmd.Parameters.Add(new SqliteParameter(":Description", asset.Description));
+                        cmd.Parameters.Add(new SqliteParameter(":Type", asset.Type));
+                        cmd.Parameters.Add(new SqliteParameter(":Local", asset.Local));
+                        cmd.Parameters.Add(new SqliteParameter(":Temporary", asset.Temporary));
+                        cmd.Parameters.Add(new SqliteParameter(":Data", asset.Data));
+
+                        cmd.ExecuteNonQuery();
+                    }
+                }
             }
             else
             {
@@ -146,47 +162,22 @@ namespace OpenSim.Data.SQLite
             }
         }
 
-        /// <summary>
-        /// Update an asset
-        /// </summary>
-        /// <param name="asset"></param>
-        override public void UpdateAsset(AssetBase asset)
-        {
-            LogAssetLoad(asset);
-
-            lock (this)
-            {
-                using (SqliteCommand cmd = new SqliteCommand(UpdateAssetSQL, m_conn))
-                {
-                    cmd.Parameters.Add(new SqliteParameter(":UUID", asset.FullID.ToString()));
-                    cmd.Parameters.Add(new SqliteParameter(":Name", asset.Name));
-                    cmd.Parameters.Add(new SqliteParameter(":Description", asset.Description));
-                    cmd.Parameters.Add(new SqliteParameter(":Type", asset.Type));
-                    cmd.Parameters.Add(new SqliteParameter(":Local", asset.Local));
-                    cmd.Parameters.Add(new SqliteParameter(":Temporary", asset.Temporary));
-                    cmd.Parameters.Add(new SqliteParameter(":Data", asset.Data));
-
-                    cmd.ExecuteNonQuery();
-                }
-            }
-        }
-
-        /// <summary>
-        /// Some... logging functionnality
-        /// </summary>
-        /// <param name="asset"></param>
-        private static void LogAssetLoad(AssetBase asset)
-        {
-            string temporary = asset.Temporary ? "Temporary" : "Stored";
-            string local = asset.Local ? "Local" : "Remote";
-
-            int assetLength = (asset.Data != null) ? asset.Data.Length : 0;
-
-            m_log.Info("[ASSET DB]: " +
-                                     string.Format("Loaded {6} {5} Asset: [{0}][{3}] \"{1}\":{2} ({7} bytes)",
-                                                   asset.FullID, asset.Name, asset.Description, asset.Type,
-                                                   temporary, local, assetLength));
-        }
+//        /// <summary>
+//        /// Some... logging functionnality
+//        /// </summary>
+//        /// <param name="asset"></param>
+//        private static void LogAssetLoad(AssetBase asset)
+//        {
+//            string temporary = asset.Temporary ? "Temporary" : "Stored";
+//            string local = asset.Local ? "Local" : "Remote";
+//
+//            int assetLength = (asset.Data != null) ? asset.Data.Length : 0;
+//
+//            m_log.Debug("[ASSET DB]: " +
+//                                     string.Format("Loaded {5} {4} Asset: [{0}][{3}] \"{1}\":{2} ({6} bytes)",
+//                                                   asset.FullID, asset.Name, asset.Description, asset.Type,
+//                                                   temporary, local, assetLength));
+//        }
 
         /// <summary>
         /// Check if an asset exist in database
@@ -240,12 +231,13 @@ namespace OpenSim.Data.SQLite
             // TODO: this doesn't work yet because something more
             // interesting has to be done to actually get these values
             // back out.  Not enough time to figure it out yet.
-            AssetBase asset = new AssetBase();
+            AssetBase asset = new AssetBase(
+                new UUID((String)row["UUID"]),
+                (String)row["Name"],
+                Convert.ToSByte(row["Type"])
+            );
 
-            asset.FullID = new UUID((String) row["UUID"]);
-            asset.Name = (String) row["Name"];
             asset.Description = (String) row["Description"];
-            asset.Type = Convert.ToSByte(row["Type"]);
             asset.Local = Convert.ToBoolean(row["Local"]);
             asset.Temporary = Convert.ToBoolean(row["Temporary"]);
             asset.Data = (byte[]) row["Data"];
@@ -334,7 +326,7 @@ namespace OpenSim.Data.SQLite
         /// </summary>
         override public void Initialise()
         {
-            Initialise("URI=file:AssetStorage.db,version=3");
+            Initialise("URI=file:Asset.db,version=3");
         }
 
         /// <summary>

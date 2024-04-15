@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -48,7 +48,7 @@ namespace OpenSim.Framework.Console
         /// </summary>
         public string DefaultPrompt
         {
-            set { m_defaultPrompt = value + "# "; }
+            set { m_defaultPrompt = value; }
             get { return m_defaultPrompt; }
         }
         protected string m_defaultPrompt;
@@ -58,160 +58,17 @@ namespace OpenSim.Framework.Console
             DefaultPrompt = defaultPrompt;
         }
 
-        /// <summary>
-        /// derive an ansi color from a string, ignoring the darker colors.
-        /// This is used to help automatically bin component tags with colors
-        /// in various print functions.
-        /// </summary>
-        /// <param name="input">arbitrary string for input</param>
-        /// <returns>an ansii color</returns>
-        protected virtual ConsoleColor DeriveColor(string input)
-        {
-            return ConsoleColor.White;
-        }
-
-        /// <summary>
-        /// Sends a warning to the current console output
-        /// </summary>
-        /// <param name="format">The message to send</param>
-        /// <param name="args">WriteLine-style message arguments</param>
-        public void Warn(string format, params object[] args)
-        {
-            WriteNewLine(ConsoleColor.Yellow, format, args);
-        }
-
-        /// <summary>
-        /// Sends a warning to the current console output
-        /// </summary>
-        /// <param name="sender">The module that sent this message</param>
-        /// <param name="format">The message to send</param>
-        /// <param name="args">WriteLine-style message arguments</param>
-        public void Warn(string sender, string format, params object[] args)
-        {
-            WriteNewLine(DeriveColor(sender), sender, ConsoleColor.Yellow, format, args);
-        }
-
-        /// <summary>
-        /// Sends a notice to the current console output
-        /// </summary>
-        /// <param name="format">The message to send</param>
-        /// <param name="args">WriteLine-style message arguments</param>
-        public void Notice(string format, params object[] args)
-        {
-            WriteNewLine(ConsoleColor.White, format, args);
-        }
-
-        /// <summary>
-        /// Sends a notice to the current console output
-        /// </summary>
-        /// <param name="sender">The module that sent this message</param>
-        /// <param name="format">The message to send</param>
-        /// <param name="args">WriteLine-style message arguments</param>
-        public void Notice(string sender, string format, params object[] args)
-        {
-            WriteNewLine(DeriveColor(sender), sender, ConsoleColor.White, format, args);
-        }
-        /// <summary>
-        /// Sends an error to the current console output
-        /// </summary>
-        /// <param name="format">The message to send</param>
-        /// <param name="args">WriteLine-style message arguments</param>
-        public void Error(string format, params object[] args)
-        {
-            WriteNewLine(ConsoleColor.Red, format, args);
-        }
-
-        /// <summary>
-        /// Sends an error to the current console output
-        /// </summary>
-        /// <param name="sender">The module that sent this message</param>
-        /// <param name="format">The message to send</param>
-        /// <param name="args">WriteLine-style message arguments</param>
-        public void Error(string sender, string format, params object[] args)
-        {
-            WriteNewLine(DeriveColor(sender), sender, ConsoleColor.Red, format, args);
-        }
-
-        /// <summary>
-        /// Sends a status message to the current console output
-        /// </summary>
-        /// <param name="format">The message to send</param>
-        /// <param name="args">WriteLine-style message arguments</param>
-        public void Status(string format, params object[] args)
-        {
-            WriteNewLine(ConsoleColor.Blue, format, args);
-        }
-
-        /// <summary>
-        /// Sends a status message to the current console output
-        /// </summary>
-        /// <param name="sender">The module that sent this message</param>
-        /// <param name="format">The message to send</param>
-        /// <param name="args">WriteLine-style message arguments</param>
-        public void Status(string sender, string format, params object[] args)
-        {
-            WriteNewLine(DeriveColor(sender), sender, ConsoleColor.Blue, format, args);
-        }
-
-        [Conditional("DEBUG")]
-        public void Debug(string format, params object[] args)
-        {
-            WriteNewLine(ConsoleColor.Gray, format, args);
-        }
-
-        [Conditional("DEBUG")]
-        public void Debug(string sender, string format, params object[] args)
-        {
-            WriteNewLine(DeriveColor(sender), sender, ConsoleColor.Gray, format, args);
-        }
-
-        protected virtual void WriteNewLine(ConsoleColor senderColor, string sender, ConsoleColor color, string format, params object[] args)
-        {
-            WritePrefixLine(senderColor, sender);
-            WriteConsoleLine(color, format, args);
-        }
-
-        protected virtual void WriteNewLine(ConsoleColor color, string format, params object[] args)
-        {
-            WriteConsoleLine(color, format, args);
-        }
-
-        protected virtual void WriteConsoleLine(ConsoleColor color, string format, params object[] args)
-        {
-            try
-            {
-                System.Console.WriteLine(format, args);
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-        }
-
-        protected virtual void WritePrefixLine(ConsoleColor color, string sender)
-        {
-            try
-            {
-                sender = sender.ToUpper();
-
-                System.Console.WriteLine("[" + sender + "] ");
-
-                System.Console.Write("[");
-
-                System.Console.Write(sender);
-
-                System.Console.Write("] \t");
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-        }
-
         public virtual void LockOutput()
         {
         }
 
         public virtual void UnlockOutput()
         {
+        }
+
+        public virtual void Output(string text, string level)
+        {
+            Output(text);
         }
 
         public virtual void Output(string text)
@@ -266,7 +123,7 @@ namespace OpenSim.Framework.Console
 
         public virtual string ReadLine(string p, bool isCommand, bool e)
         {
-            System.Console.Write("{0}", prompt);
+            System.Console.Write("{0}", p);
             string cmdinput = System.Console.ReadLine();
 
             return cmdinput;

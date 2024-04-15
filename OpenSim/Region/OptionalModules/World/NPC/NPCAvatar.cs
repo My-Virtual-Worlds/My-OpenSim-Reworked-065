@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -200,7 +200,7 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         public event GodKickUser OnGodKickUser;
         public event ObjectDuplicate OnObjectDuplicate;
         public event GrabObject OnGrabObject;
-        public event ObjectSelect OnDeGrabObject;
+        public event DeGrabObject OnDeGrabObject;
         public event MoveObject OnGrabUpdate;
         public event SpinStart OnSpinStart;
         public event SpinObject OnSpinUpdate;
@@ -213,6 +213,7 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         public event UpdateShape OnUpdatePrimShape;
         public event ObjectExtraParams OnUpdateExtraParams;
         public event RequestObjectPropertiesFamily OnRequestObjectPropertiesFamily;
+        public event ObjectRequest OnObjectRequest;
         public event ObjectSelect OnObjectSelect;
         public event GenericCall7 OnObjectDescription;
         public event GenericCall7 OnObjectName;
@@ -223,6 +224,7 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         public event UpdateVector OnUpdatePrimGroupPosition;
         public event UpdateVector OnUpdatePrimSinglePosition;
         public event UpdatePrimRotation OnUpdatePrimGroupRotation;
+        public event UpdatePrimSingleRotationPosition OnUpdatePrimSingleRotationPosition;
         public event UpdatePrimSingleRotation OnUpdatePrimSingleRotation;
         public event UpdatePrimGroupRotation OnUpdatePrimGroupMouseRotation;
         public event UpdateVector OnUpdatePrimScale;
@@ -281,6 +283,7 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         public event FriendActionDelegate OnApproveFriendRequest;
         public event FriendActionDelegate OnDenyFriendRequest;
         public event FriendshipTermination OnTerminateFriendship;
+        public event GrantUserFriendRights OnGrantUserRights;
 
         public event EconomyDataRequest OnEconomyDataRequest;
         public event MoneyBalanceRequest OnMoneyBalanceRequest;
@@ -295,6 +298,8 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         public event ObjectBuy OnObjectBuy;
         public event BuyObjectInventory OnBuyObjectInventory;
         public event AgentSit OnUndo;
+        public event AgentSit OnRedo;
+        public event LandUndo OnLandUndo;
 
         public event ForceReleaseControls OnForceReleaseControls;
         public event GodLandStatRequest OnLandStatRequest;
@@ -376,6 +381,26 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         public event AvatarInterestUpdate OnAvatarInterestUpdate;
 
         public event PlacesQuery OnPlacesQuery;
+        
+        public event FindAgentUpdate OnFindAgent;
+        public event TrackAgentUpdate OnTrackAgent;
+        public event NewUserReport OnUserReport;
+        public event SaveStateHandler OnSaveState;
+        public event GroupAccountSummaryRequest OnGroupAccountSummaryRequest;
+        public event GroupAccountDetailsRequest OnGroupAccountDetailsRequest;
+        public event GroupAccountTransactionsRequest OnGroupAccountTransactionsRequest;
+        public event FreezeUserUpdate OnParcelFreezeUser;
+        public event EjectUserUpdate OnParcelEjectUser;
+        public event ParcelBuyPass OnParcelBuyPass;
+        public event ParcelGodMark OnParcelGodMark;
+        public event GroupActiveProposalsRequest OnGroupActiveProposalsRequest;
+        public event GroupVoteHistoryRequest OnGroupVoteHistoryRequest;
+        public event SimWideDeletesDelegate OnSimWideDeletes;
+        public event SendPostcard OnSendPostcard;
+        public event MuteListEntryUpdate OnUpdateMuteListEntry;
+        public event MuteListEntryRemove OnRemoveMuteListEntry;
+        public event GodlikeMessage onGodlikeMessage;
+        public event GodUpdateRegionInfoUpdate OnGodUpdateRegionInfoUpdate;
 
 #pragma warning restore 67
 
@@ -586,13 +611,11 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         {
         }
 
-        public virtual void SendAvatarData(ulong regionHandle, string firstName, string lastName, string grouptitle, UUID avatarID,
-                                           uint avatarLocalID, Vector3 Pos, byte[] textureEntry, uint parentID, Quaternion rotation)
+        public virtual void SendAvatarData(SendAvatarData data)
         {
         }
 
-        public virtual void SendAvatarTerseUpdate(ulong regionHandle, ushort timeDilation, uint localID,
-                                                  Vector3 position, Vector3 velocity, Quaternion rotation, UUID agentId)
+        public virtual void SendAvatarTerseUpdate(SendAvatarTerseData data)
         {
         }
 
@@ -604,30 +627,19 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         {
         }
 
-        public virtual void SendDialog(string objectname, UUID objectID, UUID ownerID, string msg, UUID textureID, int ch, string[] buttonlabels)
+        public virtual void SendDialog(string objectname, UUID objectID, string ownerFirstName, string ownerLastName, string msg, UUID textureID, int ch, string[] buttonlabels)
         {
         }
 
-        public virtual void SendPrimitiveToClient(ulong regionHandle, ushort timeDilation, uint localID,
-                                                  PrimitiveBaseShape primShape, Vector3 pos, Vector3 vel,
-                                                  Vector3 acc, Quaternion rotation, Vector3 rvel, uint flags,
-                                                  UUID objectID, UUID ownerID, string text, byte[] color,
-                                                  uint parentID,
-                                                  byte[] particleSystem, byte clickAction, byte material)
+        public virtual void SendPrimitiveToClient(SendPrimitiveData data)
         {
         }
-        public virtual void SendPrimitiveToClient(ulong regionHandle, ushort timeDilation, uint localID,
-                                                  PrimitiveBaseShape primShape, Vector3 pos, Vector3 vel,
-                                                  Vector3 acc, Quaternion rotation, Vector3 rvel, uint flags,
-                                                  UUID objectID, UUID ownerID, string text, byte[] color,
-                                                  uint parentID,
-                                                  byte[] particleSystem, byte clickAction, byte material, byte[] textureanimation,
-                                                  bool attachment, uint AttachmentPoint, UUID AssetId, UUID SoundId, double SoundVolume, byte SoundFlags, double SoundRadius)
+
+        public virtual void SendPrimTerseUpdate(SendPrimitiveTerseData data)
         {
         }
-        public virtual void SendPrimTerseUpdate(ulong regionHandle, ushort timeDilation, uint localID,
-                                                Vector3 position, Quaternion rotation, Vector3 velocity,
-                                                Vector3 rotationalvelocity, byte state, UUID AssetId, UUID ownerID, int attachPoint)
+
+        public virtual void ReprioritizeUpdates(StateUpdateTypes type, UpdatePriorityHandler handler)
         {
         }
 
@@ -638,6 +650,7 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         public virtual void SendInventoryFolderDetails(UUID ownerID, UUID folderID,
                                                        List<InventoryItemBase> items,
                                                        List<InventoryFolderBase> folders,
+                                                       int version,
                                                        bool fetchFolders,
                                                        bool fetchItems)
         {
@@ -823,7 +836,7 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         {
         }
 
-        public void Close(bool ShutdownCircuit)
+        public void Close()
         {
         }
 
@@ -836,11 +849,21 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         }
 
         private uint m_circuitCode;
+        private IPEndPoint m_remoteEndPoint;
 
         public uint CircuitCode
         {
             get { return m_circuitCode; }
-            set { m_circuitCode = value; }
+            set
+            {
+                m_circuitCode = value;
+                m_remoteEndPoint = new IPEndPoint(IPAddress.Loopback, (ushort)m_circuitCode);
+            }
+        }
+
+        public IPEndPoint RemoteEndPoint
+        {
+            get { return m_remoteEndPoint; }
         }
 
         public void SendBlueBoxMessage(UUID FromAvatarID, String FromAvatarName, String Message)
@@ -853,6 +876,11 @@ namespace OpenSim.Region.OptionalModules.World.NPC
 
         public void Terminate()
         {
+        }
+
+        public EndPoint GetClientEP()
+        {
+            return null;
         }
 
         public ClientInfo GetClientInfo()
@@ -871,7 +899,7 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         {
         }
 
-        public void SendEstateManagersList(UUID invoice, UUID[] EstateManagers, uint estateID)
+        public void SendEstateList(UUID invoice, int code, UUID[] Data, uint estateID)
         {
         }
 
@@ -896,6 +924,9 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         {
         }
         public void SendForceClientSelectObjects(List<uint> objectIDs)
+        {
+        }
+        public void SendCameraConstraint(Vector4 ConstraintPlane)
         {
         }
         public void SendLandObjectOwners(LandData land, List<UUID> groups, Dictionary<UUID, int> ownersAndCount)
@@ -1035,7 +1066,8 @@ namespace OpenSim.Region.OptionalModules.World.NPC
 
         public bool AddGenericPacketHandler(string MethodName, GenericMessage handler)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
+            return false;
         }
 
         public void SendAvatarClassifiedReply(UUID targetID, UUID[] classifiedID, string[] name)
@@ -1090,5 +1122,33 @@ namespace OpenSim.Region.OptionalModules.World.NPC
         {
         }
         #endregion
+        
+        public void SendRebakeAvatarTextures(UUID textureID)
+        {
+        }
+
+        public void SendAvatarInterestsReply(UUID avatarID, uint wantMask, string wantText, uint skillsMask, string skillsText, string languages)
+        {
+        }
+        
+        public void SendGroupAccountingDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID, int amt)
+        {
+        }
+        
+        public void SendGroupAccountingSummary(IClientAPI sender,UUID groupID, uint moneyAmt, int totalTier, int usedTier)
+        {
+        }
+        
+        public void SendGroupTransactionsSummaryDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID,int amt)
+        {
+        }
+
+        public void SendGroupVoteHistory(UUID groupID, UUID transactionID, GroupVoteHistory[] Votes)
+        {
+        }
+
+        public void SendGroupActiveProposals(UUID groupID, UUID transactionID, GroupActiveProposals[] Proposals)
+        {
+        }
     }
 }

@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -30,7 +30,7 @@ using OpenMetaverse;
 namespace OpenSim.Framework
 {
     /// <summary>
-    /// A Class for folders which contain users inventory
+    /// User inventory folder
     /// </summary>
     public class InventoryFolderBase : InventoryNodeBase
     {
@@ -67,6 +67,39 @@ namespace OpenSim.Framework
         {
             get { return _version; }
             set { _version = value; }
+        }
+
+        public InventoryFolderBase()
+        {
+        }
+
+        public InventoryFolderBase(UUID id)
+        {
+            ID = id;
+        }
+
+        public InventoryFolderBase(UUID id, UUID owner)
+        {
+            ID = id;
+            Owner = owner;
+        }
+
+        public InventoryFolderBase(UUID id, string name, UUID owner, UUID parent)
+        {
+            ID = id;
+            Name = name;
+            Owner = owner;
+            ParentID = parent;
+        }
+
+        public InventoryFolderBase(UUID id, string name, UUID owner, short type, UUID parent, ushort version)
+        {
+            ID = id;
+            Name = name;
+            Owner = owner;
+            Type = type;
+            ParentID = parent;
+            Version = version;
         }
     }
 }

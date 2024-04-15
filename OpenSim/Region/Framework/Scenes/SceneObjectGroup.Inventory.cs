@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -74,13 +74,17 @@ namespace OpenSim.Region.Framework.Scenes
         /// <summary>
         /// Stop the scripts contained in all the prims in this group
         /// </summary>
-        public void RemoveScriptInstances()
+        /// <param name="sceneObjectBeingDeleted">
+        /// Should be true if these scripts are being removed because the scene
+        /// object is being deleted.  This will prevent spurious updates to the client.
+        /// </param>
+        public void RemoveScriptInstances(bool sceneObjectBeingDeleted)
         {
             lock (m_parts)
             {
                 foreach (SceneObjectPart part in m_parts.Values)
                 {
-                    part.Inventory.RemoveScriptInstances();
+                    part.Inventory.RemoveScriptInstances(sceneObjectBeingDeleted);
                 }
             }
         }
@@ -169,7 +173,9 @@ namespace OpenSim.Region.Framework.Scenes
                             item.NextPermissions;
                     taskItem.NextPermissions = item.NextPermissions;
                     taskItem.CurrentPermissions |= 8;
-                } else {
+                } 
+                else 
+                {
                     taskItem.BasePermissions = item.BasePermissions;
                     taskItem.CurrentPermissions = item.CurrentPermissions;
                     taskItem.CurrentPermissions |= 8;
@@ -309,26 +315,15 @@ namespace OpenSim.Region.Framework.Scenes
 
         public string GetStateSnapshot()
         {
-            //m_log.Debug(" >>> GetStateSnapshot <<<");
-
-            List<string> assemblies = new List<string>();
             Dictionary<UUID, string> states = new Dictionary<UUID, string>();
 
             foreach (SceneObjectPart part in m_parts.Values)
             {
-                foreach (string a in part.Inventory.GetScriptAssemblies())
-                {
-                    if (a != "" && !assemblies.Contains(a))
-                        assemblies.Add(a);
-                }
-
                 foreach (KeyValuePair<UUID, string> s in part.Inventory.GetScriptStates())
-                {
                     states[s.Key] = s.Value;
-                }
             }
 
-            if (states.Count < 1 || assemblies.Count < 1)
+            if (states.Count < 1)
                 return "";
 
             XmlDocument xmldoc = new XmlDocument();
@@ -342,102 +337,47 @@ namespace OpenSim.Region.Framework.Scenes
             
             xmldoc.AppendChild(rootElement);
 
-            XmlElement wrapper = xmldoc.CreateElement("", "Assemblies",
-                    "");
             
-            rootElement.AppendChild(wrapper);
-
-            foreach (string assembly in assemblies)
-            {
-                string fn = Path.GetFileName(assembly);
-                if (fn == String.Empty)
-                    continue;
-
-                String filedata = String.Empty;
-
-                if (File.Exists(assembly+".text"))
-                {
-                    FileInfo tfi = new FileInfo(assembly+".text");
-
-                    if (tfi == null)
-                        continue;
-
-                    Byte[] tdata = new Byte[tfi.Length];
-
-                    try
-                    {
-                        FileStream tfs = File.Open(assembly+".text", FileMode.Open, FileAccess.Read);
-                        tfs.Read(tdata, 0, tdata.Length);
-                        tfs.Close();
-                    }
-                    catch (Exception e)
-                    {
-                        m_log.DebugFormat("[SOG]: Unable to open script textfile {0}, reason: {1}", assembly+".text", e.Message);
-                    }
-
-                    filedata = new System.Text.ASCIIEncoding().GetString(tdata);
-                }
-                else
-                {
-                    FileInfo fi = new FileInfo(assembly);
-
-                    if (fi == null)
-                        continue;
-
-                    Byte[] data = new Byte[fi.Length];
-
-                    try
-                    {
-                        FileStream fs = File.Open(assembly, FileMode.Open, FileAccess.Read);
-                        fs.Read(data, 0, data.Length);
-                        fs.Close();
-                    }
-                    catch (Exception e)
-                    {
-                        m_log.DebugFormat("[SOG]: Unable to open script assembly {0}, reason: {1}", assembly, e.Message);
-                    }
-
-                    filedata = System.Convert.ToBase64String(data);
-                }
-                XmlElement assemblyData = xmldoc.CreateElement("", "Assembly", "");
-                XmlAttribute assemblyName = xmldoc.CreateAttribute("", "Filename", "");
-                assemblyName.Value = fn;
-                assemblyData.Attributes.Append(assemblyName);
-
-                assemblyData.InnerText = filedata;
-
-                wrapper.AppendChild(assemblyData);
-            }
-
-            wrapper = xmldoc.CreateElement("", "ScriptStates",
+            XmlElement wrapper = xmldoc.CreateElement("", "ScriptStates",
                     "");
             
             rootElement.AppendChild(wrapper);
 
             foreach (KeyValuePair<UUID, string> state in states)
             {
-                XmlElement stateData = xmldoc.CreateElement("", "State", "");
-
-                XmlAttribute stateID = xmldoc.CreateAttribute("", "UUID", "");
-                stateID.Value = state.Key.ToString();
-                stateData.Attributes.Append(stateID);
-
                 XmlDocument sdoc = new XmlDocument();
                 sdoc.LoadXml(state.Value);
-                XmlNodeList rootL = sdoc.GetElementsByTagName("ScriptState");
+                XmlNodeList rootL = sdoc.GetElementsByTagName("State");
                 XmlNode rootNode = rootL[0];
 
                 XmlNode newNode = xmldoc.ImportNode(rootNode, true);
-                stateData.AppendChild(newNode);
-                wrapper.AppendChild(stateData);
+                wrapper.AppendChild(newNode);
             }
 
             return xmldoc.InnerXml;
         }
 
-        public void SetState(string objXMLData, UUID RegionID)
+        public void SetState(string objXMLData, IScene ins)
         {
+            if (!(ins is Scene))
+                return;
+
+            Scene s = (Scene)ins;
+
             if (objXMLData == String.Empty)
+                return;
+
+            IScriptModule scriptModule = null;
+            
+            foreach (IScriptModule sm in s.RequestModuleInterfaces<IScriptModule>())
+            {
+                if (sm.ScriptEngineName == s.DefaultScriptEngine)
+                    scriptModule = sm;
+                else if (scriptModule == null)
+                    scriptModule = sm;
+            }
+
+            if (scriptModule == null)
                 return;
 
             XmlDocument doc = new XmlDocument();
@@ -457,69 +397,23 @@ namespace OpenSim.Region.Framework.Scenes
             }
 
             XmlNodeList rootL = doc.GetElementsByTagName("ScriptData");
-            if (rootL.Count == 1)
+            if (rootL.Count != 1)
+                return;
+
+            XmlElement rootE = (XmlElement)rootL[0];
+
+            XmlNodeList dataL = rootE.GetElementsByTagName("ScriptStates");
+            if (dataL.Count != 1)
+                return;
+
+            XmlElement dataE = (XmlElement)dataL[0];
+            
+            foreach (XmlNode n in dataE.ChildNodes)
             {
-                XmlNode rootNode = rootL[0];
-                if (rootNode != null)
-                {
-                    XmlNodeList partL = rootNode.ChildNodes;
+                XmlElement stateE = (XmlElement)n;
+                UUID itemID = new UUID(stateE.GetAttribute("UUID"));
 
-                    foreach (XmlNode part in partL)
-                    {
-                        XmlNodeList nodeL = part.ChildNodes;
-
-                        switch (part.Name)
-                        {
-                            case "Assemblies":
-                                foreach (XmlNode asm in nodeL)
-                                {
-                                    string fn = asm.Attributes.GetNamedItem("Filename").Value;
-
-                                    Byte[] filedata = Convert.FromBase64String(asm.InnerText);
-                                    string path = Path.Combine("ScriptEngines", RegionID.ToString());
-                                    path = Path.Combine(path, fn);
-
-                                    if (!File.Exists(path))
-                                    {
-                                        FileStream fs = File.Create(path);
-                                        fs.Write(filedata, 0, filedata.Length);
-                                        fs.Close();
-
-                                        Byte[] textbytes = new System.Text.ASCIIEncoding().GetBytes(asm.InnerText);
-                                        fs = File.Create(path+".text");
-                                        fs.Write(textbytes, 0, textbytes.Length);
-                                        fs.Close();
-                                    }
-                                }
-                                break;
-                            case "ScriptStates":
-                                foreach (XmlNode st in nodeL)
-                                {
-                                    string id = st.Attributes.GetNamedItem("UUID").Value;
-                                    UUID uuid = new UUID(id);
-                                    XmlNode state = st.ChildNodes[0];
-
-                                    XmlDocument sdoc = new XmlDocument();
-                                    XmlNode sxmlnode = sdoc.CreateNode(
-                                            XmlNodeType.XmlDeclaration,
-                                            "", "");
-                                    sdoc.AppendChild(sxmlnode);
-
-                                    XmlNode newnode = sdoc.ImportNode(state, true);
-                                    sdoc.AppendChild(newnode);
-
-                                    string spath = Path.Combine("ScriptEngines", RegionID.ToString());
-                                    spath = Path.Combine(spath, uuid.ToString());
-                                    FileStream sfs = File.Create(spath + ".state");
-                                    System.Text.ASCIIEncoding enc = new System.Text.ASCIIEncoding();
-                                    Byte[] buf = enc.GetBytes(sdoc.InnerXml);
-                                    sfs.Write(buf, 0, buf.Length);
-                                    sfs.Close();
-                                }
-                                break;
-                        }
-                    }
-                }
+                scriptModule.SetXMLState(itemID, n.OuterXml);
             }
         }
     }

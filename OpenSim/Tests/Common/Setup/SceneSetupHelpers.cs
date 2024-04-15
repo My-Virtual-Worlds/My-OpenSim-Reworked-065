@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,13 +33,19 @@ using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Communications.Cache;
+using OpenSim.Framework.Console;
 using OpenSim.Framework.Servers;
+using OpenSim.Framework.Servers.HttpServer;
 using OpenSim.Region.Physics.Manager;
 using OpenSim.Region.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Region.CoreModules.Agent.Capabilities;
 using OpenSim.Region.CoreModules.Avatar.Gods;
+using OpenSim.Region.CoreModules.ServiceConnectorsOut.Asset;
+using OpenSim.Region.CoreModules.ServiceConnectorsOut.Inventory;
+using OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid;
+using OpenSim.Services.Interfaces;
 using OpenSim.Tests.Common.Mock;
 
 namespace OpenSim.Tests.Common.Setup
@@ -49,6 +55,13 @@ namespace OpenSim.Tests.Common.Setup
     /// </summary>
     public class SceneSetupHelpers
     {
+        // These static variables in order to allow regions to be linked by shared modules and same
+        // CommunicationsManager. 
+        private static ISharedRegionModule m_assetService = null;
+        private static ISharedRegionModule m_inventoryService = null;
+        private static ISharedRegionModule m_gridService = null;
+        private static TestCommunicationsManager commsManager = null;
+
         /// <summary>
         /// Set up a test scene
         /// </summary>
@@ -58,21 +71,33 @@ namespace OpenSim.Tests.Common.Setup
         /// <returns></returns>
         public static TestScene SetupScene()
         {
-            return SetupScene(true);
+            return SetupScene("");
         }
         
         /// <summary>
         /// Set up a test scene
         /// </summary>
         /// 
-        /// <param name="startServices">Start associated service threads for the scene</param>
+        /// <param name="realServices">Starts real inventory and asset services, as opposed to mock ones, if true</param>
         /// <returns></returns>
-        public static TestScene SetupScene(bool startServices)
+        public static TestScene SetupScene(String realServices)
         {
             return SetupScene(
-                "Unit test region", UUID.Random(), 1000, 1000, new TestCommunicationsManager(), startServices);
+                "Unit test region", UUID.Random(), 1000, 1000, new TestCommunicationsManager(), realServices);
         }
-        
+
+        /// <summary>
+        /// Set up a test scene
+        /// </summary>
+        /// 
+        /// <param name="realServices">Starts real inventory and asset services, as opposed to mock ones, if true</param>
+        /// <param name="cm">This should be the same if simulating two scenes within a standalone</param>
+        /// <returns></returns>
+        public static TestScene SetupScene(TestCommunicationsManager cm, String realServices)
+        {
+            return SetupScene(
+                "Unit test region", UUID.Random(), 1000, 1000, cm, "");
+        }
         /// <summary>
         /// Set up a test scene
         /// </summary>
@@ -84,24 +109,41 @@ namespace OpenSim.Tests.Common.Setup
         /// <returns></returns>
         public static TestScene SetupScene(string name, UUID id, uint x, uint y, TestCommunicationsManager cm)
         {
-            return SetupScene(name, id, x, y, cm, true);
+            return SetupScene(name, id, x, y, cm, "");
         }
 
+
         /// <summary>
-        /// Set up a test scene
+        /// Set up a scene. If it's more then one scene, use the same CommunicationsManager to link regions
+        /// or a different, to get a brand new scene with new shared region modules.
         /// </summary>
         /// <param name="name">Name of the region</param>
         /// <param name="id">ID of the region</param>
         /// <param name="x">X co-ordinate of the region</param>
         /// <param name="y">Y co-ordinate of the region</param>
         /// <param name="cm">This should be the same if simulating two scenes within a standalone</param>
-        /// <param name="startServices">Start associated threads for the services used by the scene</param>
+        /// <param name="realServices">Starts real inventory and asset services, as opposed to mock ones, if true</param>
         /// <returns></returns>
         public static TestScene SetupScene(
-            string name, UUID id, uint x, uint y, TestCommunicationsManager cm, bool startServices)
+            string name, UUID id, uint x, uint y, TestCommunicationsManager cm, String realServices)
         {
+            bool newScene = false;
+
             Console.WriteLine("Setting up test scene {0}", name);
             
+            // If cm is the same as our last commsManager used, this means the tester wants to link
+            // regions. In this case, don't use the sameshared region modules and dont initialize them again.
+            // Also, no need to start another MainServer and MainConsole instance.
+            if (cm == null || cm != commsManager)
+            {
+                System.Console.WriteLine("Starting a brand new scene");
+                newScene = true;
+                MainConsole.Instance = new LocalConsole("TEST PROMPT");
+                MainServer.Instance = new BaseHttpServer(980);
+                commsManager = cm;
+            }
+
+            // We must set up a console otherwise setup of some modules may fail
             RegionInfo regInfo = new RegionInfo(x, y, new IPEndPoint(IPAddress.Loopback, 9000), "127.0.0.1");
             regInfo.RegionName = name;
             regInfo.RegionID = id;
@@ -115,29 +157,118 @@ namespace OpenSim.Tests.Common.Setup
             TestScene testScene = new TestScene(
                 regInfo, acm, cm, scs, sm, null, false, false, false, configSource, null);
 
-            IRegionModule capsModule = new CapabilitiesModule();            
-            capsModule.Initialise(testScene, new IniConfigSource());
-            testScene.AddModule(capsModule.Name, capsModule);
+            INonSharedRegionModule capsModule = new CapabilitiesModule();
+            capsModule.Initialise(new IniConfigSource());
+            testScene.AddRegionModule(capsModule.Name, capsModule);
+            capsModule.AddRegion(testScene);
             
             IRegionModule godsModule = new GodsModule();
             godsModule.Initialise(testScene, new IniConfigSource());
             testScene.AddModule(godsModule.Name, godsModule);
+            realServices = realServices.ToLower();
+            // IConfigSource config = new IniConfigSource();
             
+            // If we have a brand new scene, need to initialize shared region modules
+            if ((m_assetService == null && m_inventoryService == null) || newScene)
+            {
+                if (realServices.Contains("asset"))
+                    StartAssetService(testScene, true);
+                else
+                    StartAssetService(testScene, false);
+                if (realServices.Contains("inventory"))
+                    StartInventoryService(testScene, true);
+                else
+                    StartInventoryService(testScene, false);
+                if (realServices.Contains("grid"))
+                    StartGridService(testScene, true);
+
+            }
+            // If not, make sure the shared module gets references to this new scene
+            else
+            {
+                m_assetService.AddRegion(testScene);
+                m_assetService.RegionLoaded(testScene);
+                m_inventoryService.AddRegion(testScene);
+                m_inventoryService.RegionLoaded(testScene);
+            }
+            m_inventoryService.PostInitialise();
+            m_assetService.PostInitialise();
+
+            testScene.CommsManager.UserService.SetInventoryService(testScene.InventoryService);
+
             testScene.SetModuleInterfaces();
 
-            testScene.LandChannel = new TestLandChannel();
+            testScene.LandChannel = new TestLandChannel(testScene);
             testScene.LoadWorldMap();
 
             PhysicsPluginManager physicsPluginManager = new PhysicsPluginManager();
             physicsPluginManager.LoadPluginsFromAssembly("Physics/OpenSim.Region.Physics.BasicPhysicsPlugin.dll");
             testScene.PhysicsScene
-                = physicsPluginManager.GetPhysicsScene("basicphysics", "ZeroMesher", configSource, "test");
-
-            if (startServices)
-                cm.StartServices();
+                = physicsPluginManager.GetPhysicsScene("basicphysics", "ZeroMesher",   new IniConfigSource(), "test");
             
             return testScene;
         }
+
+        private static void StartAssetService(Scene testScene, bool real)
+        {
+            ISharedRegionModule assetService = new LocalAssetServicesConnector();
+            IConfigSource config = new IniConfigSource();
+            config.AddConfig("Modules");
+            config.AddConfig("AssetService");
+            config.Configs["Modules"].Set("AssetServices", "LocalAssetServicesConnector");
+            if (real)
+                config.Configs["AssetService"].Set("LocalServiceModule", "OpenSim.Services.AssetService.dll:AssetService");
+            else
+                config.Configs["AssetService"].Set("LocalServiceModule", "OpenSim.Tests.Common.dll:MockAssetService");
+            config.Configs["AssetService"].Set("StorageProvider", "OpenSim.Tests.Common.dll");
+            assetService.Initialise(config);
+            assetService.AddRegion(testScene);
+            assetService.RegionLoaded(testScene);
+            testScene.AddRegionModule(assetService.Name, assetService);
+            m_assetService = assetService;
+        }
+
+        private static void StartInventoryService(Scene testScene, bool real)
+        {
+            ISharedRegionModule inventoryService = new LocalInventoryServicesConnector();
+            IConfigSource config = new IniConfigSource();
+            config.AddConfig("Modules");
+            config.AddConfig("InventoryService");
+            config.Configs["Modules"].Set("InventoryServices", "LocalInventoryServicesConnector");
+            if (real)
+                config.Configs["InventoryService"].Set("LocalServiceModule", "OpenSim.Services.InventoryService.dll:InventoryService");
+            else
+                config.Configs["InventoryService"].Set("LocalServiceModule", "OpenSim.Tests.Common.dll:MockInventoryService");
+            config.Configs["InventoryService"].Set("StorageProvider", "OpenSim.Tests.Common.dll");
+            inventoryService.Initialise(config);
+            inventoryService.AddRegion(testScene);
+            inventoryService.RegionLoaded(testScene);
+            testScene.AddRegionModule(inventoryService.Name, inventoryService);
+            m_inventoryService = inventoryService;
+        }
+
+        private static void StartGridService(Scene testScene, bool real)
+        {
+            IConfigSource config = new IniConfigSource();
+            config.AddConfig("Modules");
+            config.AddConfig("GridService");
+            config.Configs["Modules"].Set("GridServices", "LocalGridServicesConnector");
+            config.Configs["GridService"].Set("StorageProvider", "OpenSim.Data.Null.dll:NullRegionData");
+            if (real)
+                config.Configs["GridService"].Set("LocalServiceModule", "OpenSim.Services.GridService.dll:GridService");
+            if (m_gridService == null)
+            {
+                ISharedRegionModule gridService = new LocalGridServicesConnector();
+                gridService.Initialise(config);
+                m_gridService = gridService;
+            }
+            //else
+            //    config.Configs["GridService"].Set("LocalServiceModule", "OpenSim.Tests.Common.dll:TestGridService");
+            m_gridService.AddRegion(testScene);
+            m_gridService.RegionLoaded(testScene);
+            //testScene.AddRegionModule(m_gridService.Name, m_gridService);
+        }
+
 
         /// <summary>
         /// Setup modules for a scene using their default settings.
@@ -146,7 +277,7 @@ namespace OpenSim.Tests.Common.Setup
         /// <param name="modules"></param>
         public static void SetupSceneModules(Scene scene, params object[] modules)
         {
-            SetupSceneModules(scene, null, modules);
+            SetupSceneModules(scene, new IniConfigSource(), modules);
         }
 
         /// <summary>
@@ -165,6 +296,7 @@ namespace OpenSim.Tests.Common.Setup
                     IRegionModule m = (IRegionModule)module;
                     m.Initialise(scene, config);
                     scene.AddModule(m.Name, m);
+                    m.PostInitialise();
                 }
                 else if (module is IRegionModuleBase)
                 {
@@ -184,6 +316,7 @@ namespace OpenSim.Tests.Common.Setup
             foreach (IRegionModuleBase module in newModules)
             {
                 module.AddRegion(scene);
+                module.RegionLoaded(scene);
                 scene.AddRegionModule(module.Name, module);
             }
 
@@ -249,7 +382,7 @@ namespace OpenSim.Tests.Common.Setup
 
             // We emulate the proper login sequence here by doing things in three stages
             // Stage 1: simulate login by telling the scene to expect a new user connection
-            scene.NewUserConnection(agentData, out reason);
+            scene.NewUserConnection(agentData, (uint)TeleportFlags.ViaLogin, out reason);
 
             // Stage 2: add the new client as a child agent to the scene
             TestClient client = new TestClient(agentData, scene);
@@ -314,4 +447,5 @@ namespace OpenSim.Tests.Common.Setup
             sogd.InventoryDeQueueAndDelete();
         }
     }
+    
 }

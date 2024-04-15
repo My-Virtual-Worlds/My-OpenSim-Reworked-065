@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -260,21 +260,17 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
             // Note that inventory retrieval is an asynchronous event, we use the rdata
             // class instance as the basis for our synchronization.
             //
-            // TODO
-            // If something went wrong in inventory processing the thread could stall here
-            // indefinitely. There should be a watchdog timer to fail the request if the
-            // response is not received in a timely fashion.
 
             rdata.uuid = rdata.userProfile.ID;
 
             if (Rest.InventoryServices.HasInventoryForUser(rdata.uuid))
             {
-                rdata.root = Rest.InventoryServices.RequestRootFolder(rdata.uuid);
+                rdata.root = Rest.InventoryServices.GetRootFolder(rdata.uuid);
 
                 Rest.Log.DebugFormat("{0} Inventory Root retrieved for {1} {2}",
                                      MsgId, rdata.userProfile.FirstName, rdata.userProfile.SurName);
 
-                Rest.InventoryServices.RequestInventoryForUser(rdata.uuid, rdata.GetUserInventory);
+                Rest.InventoryServices.GetUserInventory(rdata.uuid, rdata.GetUserInventory);
 
                 Rest.Log.DebugFormat("{0} Inventory catalog requested for {1} {2}",
                                      MsgId, rdata.userProfile.FirstName, rdata.userProfile.SurName);
@@ -476,7 +472,7 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
                     {
                         Rest.Log.DebugFormat("{0} Rest asset: {1} {2} {3}",
                                              MsgId, asset.ID, asset.Type, asset.Name);
-                        Rest.AssetServices.AddAsset(asset);
+                        Rest.AssetServices.Store(asset);
 
                         created = true;
                         rdata.appendStatus(String.Format("<p> Created asset {0}, UUID {1} <p>",
@@ -682,7 +678,7 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
 
                     // The asset was validated during the collection process
 
-                    Rest.AssetServices.AddAsset(asset);
+                    Rest.AssetServices.Store(asset);
 
                     created = true;
                     rdata.appendStatus(String.Format("<p> Created asset {0}, UUID {1} <p>", asset.Name, asset.ID));
@@ -744,7 +740,7 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
 
                 // Scan the set of folders in the entity collection for an
                 // entry that matches the context folder. It is assumed that
-                // the only reliable indicator of this is a zero UUID ( using
+                // the only reliable indicator of this is a zero UUID (using
                 // implicit context), or the parent's UUID matches that of the
                 // URI designated node (explicit context). We don't allow
                 // ambiguity in this case because this is POST and we are
@@ -855,7 +851,9 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
 
                 // Delete the old item
 
-                Rest.InventoryServices.DeleteItem(uri);
+                List<UUID> uuids = new List<UUID>();
+                uuids.Add(uri.ID);
+                Rest.InventoryServices.DeleteItems(uri.Owner, uuids);
 
                 // Add the new item to the inventory
 
@@ -931,7 +929,9 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
                 InventoryItemBase item = (InventoryItemBase) InventoryNode;
                 Rest.Log.DebugFormat("{0} {1}: Item {2} will be deleted",
                                      MsgId, rdata.method, rdata.path);
-                Rest.InventoryServices.DeleteItem(item);
+                List<UUID> uuids = new List<UUID>();
+                uuids.Add(item.ID);
+                Rest.InventoryServices.DeleteItems(item.Owner, uuids);
                 rdata.appendStatus(String.Format("<p>Deleted item {0} UUID {1} <p>", item.Name, item.ID));
             }
 
@@ -1625,7 +1625,7 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
 
                 foreach (InventoryFolderBase parent in ic.rdata.folders)
                 {
-                    if ( parent.ID == result.ParentID )
+                    if (parent.ID == result.ParentID)
                     {
                         found = true;
                         break;
@@ -1869,10 +1869,9 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
 
                 // Create AssetBase entity to hold the inlined asset
 
-                asset = new AssetBase(uuid, name);
+                asset = new AssetBase(uuid, name, type);
 
                 asset.Description = desc;
-                asset.Type        = type; // type == 0 == texture
                 asset.Local       = local;
                 asset.Temporary   = temp;
 
@@ -2006,7 +2005,7 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
 
                 foreach (InventoryFolderBase parent in ic.rdata.folders)
                 {
-                    if ( parent.ID == ic.Item.Folder )
+                    if (parent.ID == ic.Item.Folder)
                     {
                         found = true;
                         break;
@@ -2177,13 +2176,16 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
                 watchDog.Interval  = interval;
                 watchDog.AutoReset = false;
                 watchDog.Enabled   = true;
-                watchDog.Start();
+                lock (watchDog)
+                    watchDog.Start();
+                
             }
 
             internal void stopWD()
             {
                 Rest.Log.DebugFormat("{0} Reset watchdog", MsgId);
-                watchDog.Stop();
+                lock (watchDog)
+                    watchDog.Stop();
             }
 
             /// <summary>

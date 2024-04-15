@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -31,6 +31,7 @@ using log4net;
 using Nini.Config;
 using OpenMetaverse;
 using OpenSim.Framework;
+using OpenSim.Framework.Communications.Cache;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 
@@ -51,7 +52,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Dialog
                 this, "alert", "alert <first> <last> <message>", "Send an alert to a user", HandleAlertConsoleCommand);
 
             m_scene.AddCommand(
-                this, "alert general", "alert general <message>", "Send an alert to everyone", HandleAlertConsoleCommand);            
+                this, "alert general", "alert general <message>", "Send an alert to everyone", HandleAlertConsoleCommand);
         }
         
         public void PostInitialise() {}
@@ -62,7 +63,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Dialog
         public void SendAlertToUser(IClientAPI client, string message)
         {
             SendAlertToUser(client, message, false);
-        }          
+        }
         
         public void SendAlertToUser(IClientAPI client, string message, bool modal)
         {
@@ -72,59 +73,75 @@ namespace OpenSim.Region.CoreModules.Avatar.Dialog
         public void SendAlertToUser(UUID agentID, string message)
         {
             SendAlertToUser(agentID, message, false);
-        }          
+        }
         
         public void SendAlertToUser(UUID agentID, string message, bool modal)
         {
             ScenePresence sp = m_scene.GetScenePresence(agentID);
             
-            if (sp != null)
+            if (sp != null && !sp.IsChildAgent)
                 sp.ControllingClient.SendAgentAlertMessage(message, modal);
-        }           
+        }
         
         public void SendAlertToUser(string firstName, string lastName, string message, bool modal)
         {
-            List<ScenePresence> presenceList = m_scene.GetScenePresences();
+            ScenePresence[] presenceList = m_scene.GetScenePresences();
 
-            foreach (ScenePresence presence in presenceList)
+            for (int i = 0; i < presenceList.Length; i++)
             {
-                if (presence.Firstname == firstName && presence.Lastname == lastName)
+                ScenePresence presence = presenceList[i];
+
+                if (!presence.IsChildAgent && presence.Firstname == firstName && presence.Lastname == lastName)
                 {
                     presence.ControllingClient.SendAgentAlertMessage(message, modal);
                     break;
                 }
             }
-        }     
+        }
         
         public void SendGeneralAlert(string message)
         {
-            List<ScenePresence> presenceList = m_scene.GetScenePresences();
+            ScenePresence[] presenceList = m_scene.GetScenePresences();
 
-            foreach (ScenePresence presence in presenceList)
+            for (int i = 0; i < presenceList.Length; i++)
             {
+                ScenePresence presence = presenceList[i];
+
                 if (!presence.IsChildAgent)
                     presence.ControllingClient.SendAlertMessage(message);
             }
-        }    
-        
+        }
+
         public void SendDialogToUser(
-            UUID avatarID, string objectName, UUID objectID, UUID ownerID, 
+            UUID avatarID, string objectName, UUID objectID, UUID ownerID,
             string message, UUID textureID, int ch, string[] buttonlabels)
         {
+            CachedUserInfo info = m_scene.CommsManager.UserProfileCacheService.GetUserDetails(ownerID);
+            string ownerFirstName, ownerLastName;
+            if (info != null)
+            {
+                ownerFirstName = info.UserProfile.FirstName;
+                ownerLastName = info.UserProfile.SurName;
+            }
+            else
+            {
+                ownerFirstName = "(unknown";
+                ownerLastName = "user)";
+            }
+
             ScenePresence sp = m_scene.GetScenePresence(avatarID);
-            
-            if (sp != null)
-                sp.ControllingClient.SendDialog(objectName, objectID, ownerID, message, textureID, ch, buttonlabels);
-        }        
+            if (sp != null && !sp.IsChildAgent)
+                sp.ControllingClient.SendDialog(objectName, objectID, ownerFirstName, ownerLastName, message, textureID, ch, buttonlabels);
+        }
 
         public void SendUrlToUser(
             UUID avatarID, string objectName, UUID objectID, UUID ownerID, bool groupOwned, string message, string url)
         {
             ScenePresence sp = m_scene.GetScenePresence(avatarID);
             
-            if (sp != null)            
+            if (sp != null && !sp.IsChildAgent)
                 sp.ControllingClient.SendLoadURL(objectName, objectID, ownerID, groupOwned, message, url);
-        }        
+        }
         
         public void SendNotificationToUsersInEstate(
             UUID fromAvatarID, string fromAvatarName, string message)
@@ -132,15 +149,16 @@ namespace OpenSim.Region.CoreModules.Avatar.Dialog
             // TODO: This does not yet do what it says on the tin - it only sends the message to users in the same
             // region as the sending avatar.
             SendNotificationToUsersInRegion(fromAvatarID, fromAvatarName, message);
-        }        
+        }
         
         public void SendNotificationToUsersInRegion(
             UUID fromAvatarID, string fromAvatarName, string message)
-        {        
-            List<ScenePresence> presenceList = m_scene.GetScenePresences();
+        {
+            ScenePresence[] presences = m_scene.GetScenePresences();
 
-            foreach (ScenePresence presence in presenceList)
+            for (int i = 0; i < presences.Length; i++)
             {
+                ScenePresence presence = presences[i];
                 if (!presence.IsChildAgent)
                     presence.ControllingClient.SendBlueBoxMessage(fromAvatarID, fromAvatarName, message);
             }
@@ -172,7 +190,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Dialog
                 
                 m_log.InfoFormat(
                     "[DIALOG]: Sending alert in region {0} to {1} {2} with message {3}", 
-                    m_scene.RegionInfo.RegionName, firstName, lastName, message);  
+                    m_scene.RegionInfo.RegionName, firstName, lastName, message);
                 SendAlertToUser(firstName, lastName, message, false);
             }
         }
@@ -186,6 +204,6 @@ namespace OpenSim.Region.CoreModules.Avatar.Dialog
             }
             
             return result;
-        }        
+        }
     }
 }

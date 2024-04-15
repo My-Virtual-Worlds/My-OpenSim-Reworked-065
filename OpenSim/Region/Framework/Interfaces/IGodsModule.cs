@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -29,7 +29,7 @@ using OpenMetaverse;
 using OpenSim.Framework;
 
 namespace OpenSim.Region.Framework.Interfaces
-{      
+{
     /// <summary>
     /// This interface provides god related methods
     /// </summary>
@@ -53,6 +53,6 @@ namespace OpenSim.Region.Framework.Interfaces
         /// <param name="agentID">the person that is being kicked</param>
         /// <param name="kickflags">This isn't used apparently</param>
         /// <param name="reason">The message to send to the user after it's been turned into a field</param>
-        void KickUser(UUID godID, UUID sessionID, UUID agentID, uint kickflags, byte[] reason);     
+        void KickUser(UUID godID, UUID sessionID, UUID agentID, uint kickflags, byte[] reason);
     }
 }

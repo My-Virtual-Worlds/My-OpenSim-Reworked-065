@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -63,7 +63,11 @@ namespace OpenSim.Framework.Serialization
         /// <summary>
         /// Used to trim off null chars
         /// </summary>
-        protected char[] m_nullCharArray = new char[] { '\0' };
+        protected static char[] m_nullCharArray = new char[] { '\0' };
+        /// <summary>
+        /// Used to trim off space chars
+        /// </summary>
+        protected static char[] m_spaceCharArray = new char[] { ' ' };
 
         /// <summary>
         /// Generate a tar reader which reads from the given stream.
@@ -100,6 +104,10 @@ namespace OpenSim.Framework.Serialization
         protected TarHeader ReadHeader()
         {
             byte[] header = m_br.ReadBytes(512);
+
+            // If there are no more bytes in the stream, return null header
+            if (header.Length == 0)
+                return null;
 
             // If we've reached the end of the archive we'll be in null block territory, which means
             // the next byte will be 0
@@ -195,7 +203,9 @@ namespace OpenSim.Framework.Serialization
         /// <returns></returns>
         public static int ConvertOctalBytesToDecimal(byte[] bytes, int startIndex, int count)
         {
-            string oString = m_asciiEncoding.GetString(bytes, startIndex, count);
+            // Trim leading white space: ancient tars do that instead
+            // of leading 0s :-( don't ask. really.
+            string oString = m_asciiEncoding.GetString(bytes, startIndex, count).TrimStart(m_spaceCharArray);
 
             int d = 0;
 

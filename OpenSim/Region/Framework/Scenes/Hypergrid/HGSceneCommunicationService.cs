@@ -9,7 +9,7 @@
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the OpenSim Project nor the
+ *     * Neither the name of the OpenSimulator Project nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
  *
@@ -33,10 +33,13 @@ using System.Threading;
 using log4net;
 using OpenMetaverse;
 using OpenSim.Framework;
+using OpenSim.Framework.Client;
 using OpenSim.Framework.Communications;
 using OpenSim.Framework.Communications.Cache;
-using OpenSim.Framework.Communications.Capabilities;
+using OpenSim.Framework.Capabilities;
 using OpenSim.Region.Framework.Interfaces;
+using OpenSim.Services.Interfaces;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 namespace OpenSim.Region.Framework.Scenes.Hypergrid
 {
@@ -44,11 +47,19 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public readonly IHyperlink m_hg;
-
-        public HGSceneCommunicationService(CommunicationsManager commsMan, IHyperlink hg) : base(commsMan)
+        private IHyperlinkService m_hg;
+        IHyperlinkService HyperlinkService
         {
-            m_hg = hg;
+            get
+            {
+                if (m_hg == null)
+                    m_hg = m_scene.RequestModuleInterface<IHyperlinkService>();
+                return m_hg;
+            }
+        }
+
+        public HGSceneCommunicationService(CommunicationsManager commsMan) : base(commsMan)
+        {
         }
 
 
@@ -71,12 +82,12 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
             IEventQueue eq = avatar.Scene.RequestModuleInterface<IEventQueue>();
 
             // Reset animations; the viewer does that in teleports.
-            avatar.ResetAnimations();
+            avatar.Animator.ResetAnimations();
 
             if (regionHandle == m_regionInfo.RegionHandle)
             {
                 // Teleport within the same region
-                if (position.X < 0 || position.X > Constants.RegionSize || position.Y < 0 || position.Y > Constants.RegionSize || position.Z < 0)
+                if (IsOutsideRegion(avatar.Scene, position) || position.Z < 0)
                 {
                     Vector3 emergencyPos = new Vector3(128, 128, 128);
 
@@ -88,7 +99,13 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
                 // TODO: Get proper AVG Height
                 float localAVHeight = 1.56f;
                 
-                float posZLimit = (float)avatar.Scene.Heightmap[(int)position.X, (int)position.Y];
+                float posZLimit = 22;
+
+                if (position.X > 0 && position.X <= (int)Constants.RegionSize && position.Y > 0 && position.Y <= (int)Constants.RegionSize)
+                {
+                    posZLimit = (float) avatar.Scene.Heightmap[(int) position.X, (int) position.Y];
+                }
+
                 float newPosZ = posZLimit + localAVHeight;
                 if (posZLimit >= (position.Z - (localAVHeight / 2)) && !(Single.IsInfinity(newPosZ) || Single.IsNaN(newPosZ)))
                 {
@@ -105,7 +122,10 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
             }
             else
             {
-                RegionInfo reg = RequestNeighbouringRegionInfo(regionHandle);
+                uint x = 0, y = 0;
+                Utils.LongToUInts(regionHandle, out x, out y);
+                GridRegion reg = m_scene.GridService.GetRegionByPosition(m_scene.RegionInfo.ScopeID, (int)x, (int)y); 
+
                 if (reg != null)
                 {
 
@@ -118,13 +138,13 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
                     /// Hypergrid mod start
                     /// 
                     ///
-                    bool isHyperLink = m_hg.IsHyperlinkRegion(reg.RegionHandle);
+                    bool isHyperLink = (HyperlinkService.GetHyperlinkRegion(reg.RegionHandle) != null);
                     bool isHomeUser = true;
                     ulong realHandle = regionHandle;
                     CachedUserInfo uinfo = m_commsProvider.UserProfileCacheService.GetUserDetails(avatar.UUID);
                     if (uinfo != null)
                     {
-                        isHomeUser = HGNetworkServersInfo.Singleton.IsLocalUser(uinfo.UserProfile);
+                        isHomeUser = HyperlinkService.IsLocalUser(uinfo.UserProfile.ID);
                         realHandle = m_hg.FindRegionHandle(regionHandle);
                         m_log.Debug("XXX ---- home user? " + isHomeUser + " --- hyperlink? " + isHyperLink + " --- real handle: " + realHandle.ToString());
                     }
@@ -183,7 +203,7 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
                         string reason = String.Empty;
 
                         //if (!m_commsProvider.InterRegion.InformRegionOfChildAgent(reg.RegionHandle, agentCircuit))
-                        if (!m_interregionCommsOut.SendCreateChildAgent(reg.RegionHandle, agentCircuit, out reason))
+                        if (!m_interregionCommsOut.SendCreateChildAgent(reg.RegionHandle, agentCircuit, teleportFlags, out reason))
                         {
                             avatar.ControllingClient.SendTeleportFailed(String.Format("Destination is not accepting teleports: {0}",
                                                                                       reason));
@@ -211,6 +231,14 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
 
                             if (eq != null)
                             {
+                                #region IP Translation for NAT
+                                IClientIPEndpoint ipepClient;
+                                if (avatar.ClientView.TryGet(out ipepClient))
+                                {
+                                    endPoint.Address = NetworkUtil.GetIPFor(ipepClient.EndPoint, endPoint.Address);
+                                }
+                                #endregion
+
                                 eq.EnableSimulator(realHandle, endPoint, avatar.UUID);
 
                                 // ES makes the client send a UseCircuitCode message to the destination, 
@@ -329,7 +357,7 @@ namespace OpenSim.Region.Framework.Scenes.Hypergrid
                             m_commsProvider.UserProfileCacheService.RemoveUser(avatar.UUID);
                             m_log.DebugFormat(
                                 "[HGSceneCommService]: User {0} is going to another region, profile cache removed",
-                                avatar.UUID);                            
+                                avatar.UUID);
                         }
                     }
                     else
