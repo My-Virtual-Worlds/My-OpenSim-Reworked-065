@@ -26,9 +26,10 @@
  */
 
 using System;
-using OpenSim.Framework;
 using OpenMetaverse;
 using OpenMetaverse.Packets;
+using OpenSim.Framework;
+using OpenSim.Framework.Interfaces;
 
 namespace OpenSim.Region.ClientStack.LindenUDP
 {
@@ -38,9 +39,14 @@ namespace OpenSim.Region.ClientStack.LindenUDP
     /// </summary>
     public sealed class IncomingPacket
     {
-        /// <summary>Client this packet came from</summary>
+        /// <summary>
+        /// Client this packet came from
+        /// </summary>
         public LLUDPClient Client;
-        /// <summary>Packet data that has been received</summary>
+
+        /// <summary>
+        /// Packet data that has been received
+        /// </summary>
         public Packet Packet;
 
         /// <summary>

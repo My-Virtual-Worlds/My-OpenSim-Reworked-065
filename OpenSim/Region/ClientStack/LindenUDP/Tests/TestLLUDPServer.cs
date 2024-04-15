@@ -30,6 +30,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using OpenMetaverse.Packets;
+using OpenSim.Framework.Interfaces;
 
 namespace OpenSim.Region.ClientStack.LindenUDP.Tests
 {
@@ -43,7 +44,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
         /// The chunks of data to pass to the LLUDPServer when it calls EndReceive
         /// </summary>
         protected Queue<ChunkSenderTuple> m_chunksToLoad = new Queue<ChunkSenderTuple>();
-        
+
         protected override void BeginReceive()
         {
             if (m_chunksToLoad.Count > 0 && m_chunksToLoad.Peek().BeginReceiveException)
@@ -53,29 +54,29 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
                 throw new SocketException();
             }
         }
-        
+
         protected override bool EndReceive(out int numBytes, IAsyncResult result, ref EndPoint epSender)
         {
             numBytes = 0;
 
-            //m_log.Debug("Queue size " + m_chunksToLoad.Count);
-            
             if (m_chunksToLoad.Count <= 0)
+            {
                 return false;
-            
+            }
+
             ChunkSenderTuple tuple = m_chunksToLoad.Dequeue();
             RecvBuffer = tuple.Data;
             numBytes   = tuple.Data.Length;
             epSender   = tuple.Sender;
-            
+
             return true;
         }
-        
+
         public override void SendPacketTo(byte[] buffer, int size, SocketFlags flags, uint circuitcode) 
         {
             // Don't do anything just yet
         }
-        
+
         /// <summary>
         /// Signal that this chunk should throw an exception on Socket.BeginReceive()
         /// </summary>
@@ -86,7 +87,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
             tuple.BeginReceiveException = true;
             m_chunksToLoad.Enqueue(tuple);
         }
-        
+
         /// <summary>
         /// Load some data to be received by the LLUDPServer on the next receive call
         /// </summary>
@@ -96,7 +97,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
         {
             m_chunksToLoad.Enqueue(new ChunkSenderTuple(data, epSender));
         }
-        
+
         /// <summary>
         /// Load a packet to be received by the LLUDPServer on the next receive call
         /// </summary>
@@ -105,7 +106,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
         {
             LoadReceive(packet.ToBytes(), epSender);
         }
-        
+
         /// <summary>
         /// Calls the protected asynchronous result method.  This fires out all data chunks currently queued for send
         /// </summary>
@@ -113,9 +114,11 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
         public void ReceiveData(IAsyncResult result)
         {
             while (m_chunksToLoad.Count > 0)
+            {
                 OnReceivedData(result);
+            }
         }
-        
+
         /// <summary>
         /// Has a circuit with the given code been established?
         /// </summary>
@@ -129,7 +132,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
             }
         }
     }
-    
+
     /// <summary>
     /// Record the data and sender tuple
     /// </summary>
@@ -138,13 +141,13 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
         public byte[] Data;
         public EndPoint Sender;
         public bool BeginReceiveException;
-        
+
         public ChunkSenderTuple(byte[] data, EndPoint sender)
         {
             Data = data;
             Sender = sender;
         }
-        
+
         public ChunkSenderTuple(EndPoint sender)
         {
             Sender = sender;

@@ -27,6 +27,7 @@
 
 using System;
 using System.Collections.Generic;
+using OpenSim.Framework.Interfaces;
 
 namespace OpenSim.Region.ClientStack.LindenUDP
 {
@@ -57,6 +58,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 {
                     m_items[m_next] = ack;
                     m_next = (m_next + 1) % m_capacity;
+
                     if (m_next == m_first)
                     {
                         m_hashSet.Remove(m_items[m_first]);

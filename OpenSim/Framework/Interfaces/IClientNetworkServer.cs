@@ -30,7 +30,7 @@ using System.Net.Sockets;
 using Nini.Config;
 using OpenSim.Framework;
 
-namespace OpenSim.Region.ClientStack
+namespace OpenSim.Framework.Interfaces
 {
     public interface IClientNetworkServer
     {

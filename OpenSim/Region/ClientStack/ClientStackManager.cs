@@ -31,6 +31,7 @@ using System.Reflection;
 using log4net;
 using Nini.Config;
 using OpenSim.Framework;
+using OpenSim.Framework.Interfaces;
 
 namespace OpenSim.Region.ClientStack
 {
@@ -64,12 +65,14 @@ namespace OpenSim.Region.ClientStack
                         }
                     }
                 }
-            } catch (ReflectionTypeLoadException e)
+            }
+            catch (ReflectionTypeLoadException e)
             {
                 foreach (Exception e2 in e.LoaderExceptions)
                 {
                     m_log.Error(e2.ToString());
                 }
+
                 throw e;
             }
         }

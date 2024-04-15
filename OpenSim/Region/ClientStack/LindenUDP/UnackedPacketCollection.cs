@@ -42,13 +42,21 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         /// </summary>
         private struct PendingAck
         {
-            /// <summary>Sequence number of the packet to remove</summary>
+            /// <summary>
+            /// Sequence number of the packet to remove
+            /// </summary>
             public uint SequenceNumber;
-            /// <summary>Environment.TickCount value when the remove was queued.
-            /// This is used to update round-trip times for packets</summary>
+
+            /// <summary>
+            /// Environment.TickCount value when the remove was queued.
+            /// This is used to update round-trip times for packets
+            /// </summary>
             public int RemoveTime;
-            /// <summary>Whether or not this acknowledgement was attached to a
-            /// resent packet. If so, round-trip time will not be calculated</summary>
+
+            /// <summary>
+            /// Whether or not this acknowledgement was attached to a
+            /// resent packet. If so, round-trip time will not be calculated
+            /// </summary>
             public bool FromResend;
 
             public PendingAck(uint sequenceNumber, int currentTime, bool fromResend)
@@ -59,11 +67,19 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             }
         }
 
-        /// <summary>Holds the actual unacked packet data, sorted by sequence number</summary>
+        /// <summary>
+        /// Holds the actual unacked packet data, sorted by sequence number
+        /// </summary>
         private Dictionary<uint, OutgoingPacket> m_packets = new Dictionary<uint, OutgoingPacket>();
-        /// <summary>Holds packets that need to be added to the unacknowledged list</summary>
+
+        /// <summary>
+        /// Holds packets that need to be added to the unacknowledged list
+        /// </summary>
         private LocklessQueue<OutgoingPacket> m_pendingAdds = new LocklessQueue<OutgoingPacket>();
-        /// <summary>Holds information about pending acknowledgements</summary>
+
+        /// <summary>
+        /// Holds information about pending acknowledgements
+        /// </summary>
         private LocklessQueue<PendingAck> m_pendingRemoves = new LocklessQueue<PendingAck>();
 
         /// <summary>
@@ -122,7 +138,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     if (now - packet.TickCount >= timeoutMS)
                     {
                         if (expiredPackets == null)
+                        {
                             expiredPackets = new List<OutgoingPacket>();
+                        }
 
                         // The TickCount will be set to the current time when the packet
                         // is actually sent out again
@@ -140,12 +158,16 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         {
             // Process all the pending adds
             OutgoingPacket pendingAdd;
+
             while (m_pendingAdds.Dequeue(out pendingAdd))
+            {
                 m_packets[pendingAdd.SequenceNumber] = pendingAdd;
+            }
 
             // Process all the pending removes, including updating statistics and round-trip times
             PendingAck pendingRemove;
             OutgoingPacket ackedPacket;
+
             while (m_pendingRemoves.Dequeue(out pendingRemove))
             {
                 if (m_packets.TryGetValue(pendingRemove.SequenceNumber, out ackedPacket))
@@ -159,8 +181,11 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     {
                         // Calculate the round-trip time for this packet and its ACK
                         int rtt = pendingRemove.RemoveTime - ackedPacket.TickCount;
+
                         if (rtt > 0)
+                        {
                             ackedPacket.Client.UpdateRoundTrip(rtt);
+                        }
                     }
                 }
             }

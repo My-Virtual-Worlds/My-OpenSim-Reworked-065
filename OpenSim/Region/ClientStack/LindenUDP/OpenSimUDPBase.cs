@@ -46,23 +46,38 @@ namespace OpenMetaverse
         /// <param name="buffer">Incoming packet buffer</param>
         protected abstract void PacketReceived(UDPPacketBuffer buffer);
 
-        /// <summary>UDP port to bind to in server mode</summary>
+        /// <summary>
+        /// UDP port to bind to in server mode
+        /// </summary>
         protected int m_udpPort;
 
-        /// <summary>Local IP address to bind to in server mode</summary>
+        /// <summary>
+        /// Local IP address to bind to in server mode
+        /// </summary>
         protected IPAddress m_localBindAddress;
 
-        /// <summary>UDP socket, used in either client or server mode</summary>
+        /// <summary>
+        /// UDP socket, used in either client or server mode
+        /// </summary>
         private Socket m_udpSocket;
 
-        /// <summary>Flag to process packets asynchronously or synchronously</summary>
+        /// <summary>
+        /// Flag to process packets asynchronously or synchronously
+        /// </summary>
         private bool m_asyncPacketHandling;
 
-        /// <summary>The all important shutdown flag</summary>
+        /// <summary>
+        /// The all important shutdown flag
+        /// </summary>
         private volatile bool m_shutdownFlag = true;
 
-        /// <summary>Returns true if the server is currently listening, otherwise false</summary>
-        public bool IsRunning { get { return !m_shutdownFlag; } }
+        /// <summary>
+        /// Returns true if the server is currently listening, otherwise false
+        /// </summary>
+        public bool IsRunning
+        {
+            get { return !m_shutdownFlag; }
+        }
 
         /// <summary>
         /// Default constructor
@@ -101,10 +116,7 @@ namespace OpenMetaverse
 
                 IPEndPoint ipep = new IPEndPoint(m_localBindAddress, m_udpPort);
 
-                m_udpSocket = new Socket(
-                    AddressFamily.InterNetwork,
-                    SocketType.Dgram,
-                    ProtocolType.Udp);
+                m_udpSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
 
                 try
                 {
@@ -119,7 +131,9 @@ namespace OpenMetaverse
                 }
 
                 if (recvBufferSize != 0)
+                {
                     m_udpSocket.ReceiveBufferSize = recvBufferSize;
+                }
 
                 m_udpSocket.Bind(ipep);
 
@@ -152,7 +166,6 @@ namespace OpenMetaverse
         private void AsyncBeginReceive()
         {
             // allocate a packet buffer
-            //WrappedObject<UDPPacketBuffer> wrappedBuffer = Pool.CheckOut();
             UDPPacketBuffer buf = new UDPPacketBuffer();
 
             if (!m_shutdownFlag)
@@ -161,14 +174,12 @@ namespace OpenMetaverse
                 {
                     // kick off an async read
                     m_udpSocket.BeginReceiveFrom(
-                        //wrappedBuffer.Instance.Data,
                         buf.Data,
                         0,
                         UDPPacketBuffer.BUFFER_SIZE,
                         SocketFlags.None,
                         ref buf.RemoteEndPoint,
                         AsyncEndReceive,
-                        //wrappedBuffer);
                         buf);
                 }
                 catch (SocketException e)
@@ -177,24 +188,26 @@ namespace OpenMetaverse
                     {
                         m_log.Warn("[UDPBASE]: SIO_UDP_CONNRESET was ignored, attempting to salvage the UDP listener on port " + m_udpPort);
                         bool salvaged = false;
+
                         while (!salvaged)
                         {
                             try
                             {
                                 m_udpSocket.BeginReceiveFrom(
-                                    //wrappedBuffer.Instance.Data,
                                     buf.Data,
                                     0,
                                     UDPPacketBuffer.BUFFER_SIZE,
                                     SocketFlags.None,
                                     ref buf.RemoteEndPoint,
                                     AsyncEndReceive,
-                                    //wrappedBuffer);
                                     buf);
                                 salvaged = true;
                             }
                             catch (SocketException) { }
-                            catch (ObjectDisposedException) { return; }
+                            catch (ObjectDisposedException)
+                            {
+                                return;
+                            }
                         }
 
                         m_log.Warn("[UDPBASE]: Salvaged the UDP listener on port " + m_udpPort);
@@ -213,12 +226,12 @@ namespace OpenMetaverse
                 // Asynchronous mode will start another receive before the
                 // callback for this packet is even fired. Very parallel :-)
                 if (m_asyncPacketHandling)
+                {
                     AsyncBeginReceive();
+                }
 
                 // get the buffer that was created in AsyncBeginReceive
                 // this is the received data
-                //WrappedObject<UDPPacketBuffer> wrappedBuffer = (WrappedObject<UDPPacketBuffer>)iar.AsyncState;
-                //UDPPacketBuffer buffer = wrappedBuffer.Instance;
                 UDPPacketBuffer buffer = (UDPPacketBuffer)iar.AsyncState;
 
                 try
@@ -235,14 +248,13 @@ namespace OpenMetaverse
                 catch (ObjectDisposedException) { }
                 finally
                 {
-                    //wrappedBuffer.Dispose();
-
                     // Synchronous mode waits until the packet callback completes
                     // before starting the receive to fetch another packet
                     if (!m_asyncPacketHandling)
+                    {
                         AsyncBeginReceive();
+                    }
                 }
-
             }
         }
 
@@ -270,7 +282,6 @@ namespace OpenMetaverse
         {
             try
             {
-//                UDPPacketBuffer buf = (UDPPacketBuffer)result.AsyncState;
                 m_udpSocket.EndSendTo(result);
             }
             catch (SocketException) { }

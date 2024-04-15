@@ -27,6 +27,7 @@
 
 using OpenMetaverse;
 using OpenSim.Framework;
+using OpenSim.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
@@ -41,26 +42,27 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
         {
             get { return m_objectNameCallsReceived; }
         }
+
         protected int m_objectNameCallsReceived;
-        
+
         public MockScene()
         {
             m_regInfo = new RegionInfo(1000, 1000, null, null);
             m_regStatus = RegionStatus.Up;
         }
-        
+
         public override void Update() {}
         public override void LoadWorldMap() {}
-        
+
         public override void AddNewClient(IClientAPI client) 
         {
             client.OnObjectName += RecordObjectNameCall;
         }
-        
+
         public override void RemoveClient(UUID agentID) {}
         public override void CloseAllAgents(uint circuitcode) {}
         public override void OtherRegionUp(GridRegion otherRegion) {  }
-            
+
         /// <summary>
         /// Doesn't really matter what the call is - we're using this to test that a packet has actually been received
         /// </summary>

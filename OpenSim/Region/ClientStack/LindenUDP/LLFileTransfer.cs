@@ -29,6 +29,7 @@ using System;
 using System.Collections.Generic;
 using OpenMetaverse;
 using OpenSim.Framework;
+using OpenSim.Framework.Interfaces;
 
 namespace OpenSim.Region.ClientStack.LindenUDP
 {
@@ -40,11 +41,10 @@ namespace OpenSim.Region.ClientStack.LindenUDP
     {
         protected IClientAPI m_clientAPI;
 
-        /// Dictionary of handlers for uploading files from client
-        /// TODO: Need to add cleanup code to remove handlers that have completed their upload
+        // Dictionary of handlers for uploading files from client
+        // TODO: Need to add cleanup code to remove handlers that have completed their upload
         protected Dictionary<ulong, XferUploadHandler> m_uploadHandlers;
         protected object m_uploadHandlersLock = new object();
-
 
         /// <summary>
         /// Dictionary of files ready to be sent to clients
@@ -55,7 +55,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         /// Dictionary of Download Transfers in progess
         /// </summary>
         protected Dictionary<ulong, XferDownloadHandler> m_downloadHandlers = new Dictionary<ulong, XferDownloadHandler>();
-
 
         public LLFileTransfer(IClientAPI clientAPI)
         {
@@ -125,10 +124,12 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     // something went wrong with the xferID allocation
                     uploader.UploadDone -= uploadCompleteCallback;
                     uploader.UploadDone -= RemoveXferUploadHandler;
+
                     if (abortCallback != null)
                     {
                         uploader.UploadAborted -= abortCallback;
                     }
+
                     return false;
                 }
             }
@@ -161,8 +162,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         {
 
         }
-        #endregion
 
+        #endregion
     }
 
     public class XferUploadHandler
@@ -251,7 +252,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 if ((packetID & 0x80000000) != 0)
                 {
                     SendCompleteMessage(remoteClient);
-
                 }
             }
         }
@@ -260,6 +260,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         {
             m_complete = true;
             handlerUploadDone = UploadDone;
+
             if (handlerUploadDone != null)
             {
                 handlerUploadDone(m_asset.Name, m_asset.FullID, mXferID, m_asset.Data, remoteClient);
@@ -269,6 +270,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         public void AbortUpload(IClientAPI remoteClient)
         {
             handlerAbort = UploadAborted;
+
             if (handlerAbort != null)
             {
                 handlerAbort(m_asset.Name, m_asset.FullID, mXferID, remoteClient);
@@ -302,7 +304,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         /// <summary>
         /// Start a transfer
         /// </summary>
-        /// <returns>True if the transfer is complete, false if not</returns>
+        /// <returns>
+        /// True if the transfer is complete, false if not
+        /// </returns>
         public bool StartSend()
         {
             if (Data.Length < 1000)
@@ -361,5 +365,4 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             return complete;
         }
     }
-
 }

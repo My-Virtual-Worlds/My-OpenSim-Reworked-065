@@ -26,8 +26,9 @@
  */
 
 using System;
-using OpenSim.Framework;
 using OpenMetaverse;
+using OpenSim.Framework;
+using OpenSim.Framework.Interfaces;
 
 namespace OpenSim.Region.ClientStack.LindenUDP
 {
@@ -40,17 +41,34 @@ namespace OpenSim.Region.ClientStack.LindenUDP
     /// </summary>
     public sealed class OutgoingPacket
     {
-        /// <summary>Client this packet is destined for</summary>
+        /// <summary>
+        /// Client this packet is destined for
+        /// </summary>
         public LLUDPClient Client;
-        /// <summary>Packet data to send</summary>
+
+        /// <summary>
+        /// Packet data to send
+        /// </summary>
         public UDPPacketBuffer Buffer;
-        /// <summary>Sequence number of the wrapped packet</summary>
+
+        /// <summary>
+        /// Sequence number of the wrapped packet
+        /// </summary>
         public uint SequenceNumber;
-        /// <summary>Number of times this packet has been resent</summary>
+
+        /// <summary>
+        /// Number of times this packet has been resent
+        /// </summary>
         public int ResendCount;
-        /// <summary>Environment.TickCount when this packet was last sent over the wire</summary>
+
+        /// <summary>
+        /// Environment.TickCount when this packet was last sent over the wire
+        /// </summary>
         public int TickCount;
-        /// <summary>Category this packet belongs to</summary>
+
+        /// <summary>
+        /// Category this packet belongs to
+        /// </summary>
         public ThrottleOutPacketType Category;
 
         /// <summary>

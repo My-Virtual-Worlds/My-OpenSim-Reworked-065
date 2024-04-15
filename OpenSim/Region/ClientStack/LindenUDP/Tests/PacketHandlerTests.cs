@@ -31,8 +31,9 @@ using NUnit.Framework.SyntaxHelpers;
 using OpenMetaverse;
 using OpenMetaverse.Packets;
 using OpenSim.Framework;
-using OpenSim.Tests.Common.Mock;
+using OpenSim.Framework.Interfaces;
 using OpenSim.Tests.Common;
+using OpenSim.Tests.Common.Mock;
 
 namespace OpenSim.Region.ClientStack.LindenUDP.Tests
 {
@@ -61,26 +62,26 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
             agent.InventoryFolder = UUID.Zero;
             agent.startpos = Vector3.Zero;
             agent.CapsPath = "http://wibble.com";
-            
+
             TestLLUDPServer testLLUDPServer;
             TestLLPacketServer testLLPacketServer;
             AgentCircuitManager acm;
             IScene scene = new MockScene();
             SetupStack(scene, out testLLUDPServer, out testLLPacketServer, out acm);
-            
+
             TestClient testClient = new TestClient(agent, scene);
-            
+
             LLPacketHandler packetHandler 
                 = new LLPacketHandler(testClient, testLLPacketServer, new ClientStackUserSettings());
-            
+
             packetHandler.InPacket(new AgentAnimationPacket());
             LLQueItem receivedPacket = packetHandler.PacketQueue.Dequeue();
-            
+
             Assert.That(receivedPacket, Is.Not.Null);
             Assert.That(receivedPacket.Incoming, Is.True);
             Assert.That(receivedPacket.Packet, Is.TypeOf(typeof(AgentAnimationPacket)));
         }
-        
+
         /// <summary>
         /// Add a client for testing
         /// </summary>
@@ -96,7 +97,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
             ClientStackUserSettings userSettings = new ClientStackUserSettings();
             testLLUDPServer = new TestLLUDPServer();
             acm = new AgentCircuitManager();
-                                    
+
             uint port = 666;
             testLLUDPServer.Initialise(null, ref port, 0, false, configSource, acm);
             testPacketServer = new TestLLPacketServer(testLLUDPServer, userSettings);

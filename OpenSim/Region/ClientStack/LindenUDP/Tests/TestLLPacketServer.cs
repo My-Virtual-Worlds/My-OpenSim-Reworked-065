@@ -27,6 +27,7 @@
 
 using System.Collections.Generic;
 using OpenMetaverse.Packets;
+using OpenSim.Framework.Interfaces;
 
 namespace OpenSim.Region.ClientStack.LindenUDP.Tests
 { 
@@ -36,37 +37,47 @@ namespace OpenSim.Region.ClientStack.LindenUDP.Tests
         /// Record counts of packets received
         /// </summary>
         protected Dictionary<PacketType, int> m_packetsReceived = new Dictionary<PacketType, int>();
-        
+
         public TestLLPacketServer(LLUDPServer networkHandler, ClientStackUserSettings userSettings)
             : base(networkHandler, userSettings)
         {}
-        
+
         public override void InPacket(uint circuitCode, Packet packet)
         {
             base.InPacket(circuitCode, packet);
-            
+
             if (m_packetsReceived.ContainsKey(packet.Type))
+            {
                 m_packetsReceived[packet.Type]++;
+            }
             else
+            {
                 m_packetsReceived[packet.Type] = 1;
+            }
         }
         
         public int GetTotalPacketsReceived()
         {
             int totalCount = 0;
-            
+
             foreach (int count in m_packetsReceived.Values)
+            {
                 totalCount += count;
-            
+            }
+
             return totalCount;
         }
-        
+
         public int GetPacketsReceivedFor(PacketType packetType)
         {
             if (m_packetsReceived.ContainsKey(packetType))
+            {
                 return m_packetsReceived[packetType];
+            }
             else
+            {
                 return 0;
+            }
         }
     }
 }

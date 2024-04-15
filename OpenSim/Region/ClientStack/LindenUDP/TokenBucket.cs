@@ -35,18 +35,32 @@ namespace OpenSim.Region.ClientStack.LindenUDP
     /// </summary>
     public class TokenBucket
     {
-        /// <summary>Parent bucket to this bucket, or null if this is a root
-        /// bucket</summary>
+        /// <summary>
+        /// Parent bucket to this bucket, or null if this is a root
+        /// bucket
+        /// </summary>
         TokenBucket parent;
-        /// <summary>Size of the bucket in bytes. If zero, the bucket has 
-        /// infinite capacity</summary>
+
+        /// <summary>
+        /// Size of the bucket in bytes. If zero, the bucket has 
+        /// infinite capacity
+        /// </summary>
         int maxBurst;
-        /// <summary>Rate that the bucket fills, in bytes per millisecond. If
-        /// zero, the bucket always remains full</summary>
+
+        /// <summary>
+        /// Rate that the bucket fills, in bytes per millisecond. If
+        /// zero, the bucket always remains full
+        /// </summary>
         int tokensPerMS;
-        /// <summary>Number of tokens currently in the bucket</summary>
+
+        /// <summary>
+        /// Number of tokens currently in the bucket
+        /// </summary>
         int content;
-        /// <summary>Time of the last drip, in system ticks</summary>
+
+        /// <summary>
+        /// Time of the last drip, in system ticks
+        /// </summary>
         int lastDrip;
 
         #region Properties
@@ -84,15 +98,21 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             set
             {
                 if (value == 0)
+                {
                     tokensPerMS = 0;
+                }
                 else
                 {
                     int bpms = (int)((float)value / 1000.0f);
 
                     if (bpms <= 0)
+                    {
                         tokensPerMS = 1; // 1 byte/ms is the minimum granularity
+                    }
                     else
+                    {
                         tokensPerMS = bpms;
+                    }
                 }
             }
         }
@@ -169,7 +189,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             if (content - amount >= 0)
             {
                 if (parent != null && !parent.RemoveTokens(amount))
+                {
                     return false;
+                }
 
                 content -= amount;
                 return true;
@@ -201,7 +223,10 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 if (deltaMS <= 0)
                 {
                     if (deltaMS < 0)
+                    {
                         lastDrip = now;
+                    }
+
                     return false;
                 }
 
