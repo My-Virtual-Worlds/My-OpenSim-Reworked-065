@@ -70,9 +70,9 @@ namespace OpenSim
 
         protected bool m_autoCreateClientStack = true;
 
-        /// <value>
+        /// <summary>
         /// The file used to load and save prim backup xml if no filename has been specified
-        /// </value>
+        /// </summary>
         protected const string DEFAULT_PRIM_BACKUP_FILENAME = "prim-backup.xml";
 
         public ConfigSettings ConfigurationSettings
@@ -148,6 +148,7 @@ namespace OpenSim
         protected virtual void ReadExtraConfigSettings()
         {
             IConfig networkConfig = m_config.Source.Configs["Network"];
+
             if (networkConfig != null)
             {
                 proxyUrl = networkConfig.GetString("proxy_url", "");
@@ -168,25 +169,33 @@ namespace OpenSim
         {
             List<string> topics = base.GetHelpTopics();
             Scene s = SceneManager.CurrentOrFirstScene;
+
             if (s != null && s.GetCommanders() != null)
+            {
                 topics.AddRange(s.GetCommanders().Keys);
+            }
 
             return topics;
         }
 
         /// <summary>
-        /// Performs startup specific to the region server, including initialization of the scene 
+        /// Performs startup specific to the region server, 
+        /// including initialization of the scene 
         /// such as loading configuration from disk.
         /// </summary>
         protected override void StartupSpecific()
         {
             IConfig startupConfig = m_config.Source.Configs["Startup"];
+
             if (startupConfig != null)
             {
                 string pidFile = startupConfig.GetString("PIDFile", String.Empty);
+
                 if (pidFile != String.Empty)
+                {
                     CreatePIDFile(pidFile);
-                
+                }
+
                 userStatsURI = startupConfig.GetString("Stats_URI", String.Empty);
             }
 
@@ -198,6 +207,7 @@ namespace OpenSim
             m_moduleLoader = new ModuleLoader(m_config.Source);
 
             LoadPlugins();
+
             foreach (IApplicationPlugin plugin in m_plugins)
             {
                 plugin.PostInitialise();
@@ -232,7 +242,9 @@ namespace OpenSim
                     if (s != null && s.GetCommanders() != null)
                     {
                         if (s.GetCommanders().ContainsKey(topic))
+                        {
                             commander = s.GetCommanders()[topic];
+                        }
                     }
 
                     if (commander == null)
@@ -258,22 +270,24 @@ namespace OpenSim
         {
             // Only safe for the interactive console, since it won't
             // let us come here unless both scene and commander exist
-            //
             ICommander moduleCommander = SceneManager.CurrentOrFirstScene.GetCommander(cmd[1]);
+
             if (moduleCommander != null)
+            {
                 m_console.Output(moduleCommander.Help);
+            }
         }
 
         protected override void Initialize()
         {
             // Called from base.StartUp()
-
             m_httpServerPort = m_networkServersInfo.HttpListenerPort;
             m_sceneManager.OnRestartSim += handleRestartRegion;
         }
 
         /// <summary>
-        /// Execute the region creation process.  This includes setting up scene infrastructure.
+        /// Execute the region creation process.  
+        /// This includes setting up scene infrastructure.
         /// </summary>
         /// <param name="regionInfo"></param>
         /// <param name="portadd_flag"></param>
@@ -284,7 +298,8 @@ namespace OpenSim
         }
 
         /// <summary>
-        /// Execute the region creation process.  This includes setting up scene infrastructure.
+        /// Execute the region creation process.  
+        /// This includes setting up scene infrastructure.
         /// </summary>
         /// <param name="regionInfo"></param>
         /// <returns></returns>
@@ -294,7 +309,8 @@ namespace OpenSim
         }
 
         /// <summary>
-        /// Execute the region creation process.  This includes setting up scene infrastructure.
+        /// Execute the region creation process.  
+        /// This includes setting up scene infrastructure.
         /// </summary>
         /// <param name="regionInfo"></param>
         /// <param name="portadd_flag"></param>
@@ -303,13 +319,6 @@ namespace OpenSim
         public IClientNetworkServer CreateRegion(RegionInfo regionInfo, bool portadd_flag, bool do_post_init, out IScene mscene)
         {
             int port = regionInfo.InternalEndPoint.Port;
-
-            // set initial RegionID to originRegionID in RegionInfo. (it needs for loding prims)
-            // Commented this out because otherwise regions can't register with
-            // the grid as there is already another region with the same UUID
-            // at those coordinates. This is required for the load balancer to work.
-            // --Mike, 2009.02.25
-            //regionInfo.originRegionID = regionInfo.RegionID;
 
             // set initial ServerURI
             regionInfo.ServerURI = "http://" + regionInfo.ExternalHostName + ":" + regionInfo.InternalEndPoint.Port;
@@ -339,11 +348,15 @@ namespace OpenSim
             // Use this in the future, the line above will be deprecated soon
             m_log.Info("[MODULES]: Loading Region's modules (new style)");
             IRegionModulesController controller;
+
             if (ApplicationRegistry.TryGet(out controller))
             {
                 controller.AddRegionToModules(scene);
             }
-            else m_log.Error("[MODULES]: The new RegionModulesController is missing...");
+            else
+            {
+                m_log.Error("[MODULES]: The new RegionModulesController is missing...");
+            }
 
             scene.SetModuleInterfaces();
 
@@ -392,6 +405,7 @@ namespace OpenSim
                     module.PostInitialise();
                 }
             }
+
             scene.EventManager.OnShutdown += delegate() { ShutdownRegion(scene); };
 
             mscene = scene;
@@ -405,6 +419,7 @@ namespace OpenSim
         {
             m_log.DebugFormat("[SHUTDOWN]: Shutting down region {0}", scene.RegionInfo.RegionName);
             IRegionModulesController controller;
+
             if (ApplicationRegistry.TryGet<IRegionModulesController>(out controller))
             {
                 controller.RemoveRegionFromModules(scene);
@@ -424,9 +439,11 @@ namespace OpenSim
             scene.DeleteAllSceneObjects();
             m_sceneManager.CloseScene(scene);
             ShutdownClientServer(scene.RegionInfo);
-            
+
             if (!cleanup)
+            {
                 return;
+            }
 
             if (!String.IsNullOrEmpty(scene.RegionInfo.RegionFile))
             {
@@ -435,11 +452,13 @@ namespace OpenSim
                     File.Delete(scene.RegionInfo.RegionFile);
                     m_log.InfoFormat("[OPENSIM]: deleting region file \"{0}\"", scene.RegionInfo.RegionFile);
                 }
+
                 if (scene.RegionInfo.RegionFile.ToLower().EndsWith(".ini"))
                 {
                     try
                     {
                         IniConfigSource source = new IniConfigSource(scene.RegionInfo.RegionFile);
+
                         if (source.Configs[scene.RegionInfo.RegionName] != null)
                         {
                             source.Configs.Remove(scene.RegionInfo.RegionName);
@@ -464,8 +483,11 @@ namespace OpenSim
         public void RemoveRegion(string name, bool cleanUp)
         {
             Scene target;
+
             if (m_sceneManager.TryGetScene(name, out target))
+            {
                 RemoveRegion(target, cleanUp);
+            }
         }
 
         /// <summary>
@@ -486,7 +508,7 @@ namespace OpenSim
             m_sceneManager.CloseScene(scene);
             ShutdownClientServer(scene.RegionInfo);
         }
-        
+
         /// <summary>
         /// Remove a region from the simulator without deleting it permanently.
         /// </summary>
@@ -495,8 +517,11 @@ namespace OpenSim
         public void CloseRegion(string name)
         {
             Scene target;
+
             if (m_sceneManager.TryGetScene(name, out target))
+            {
                 CloseRegion(target);
+            }
         }
         
         /// <summary>
@@ -523,8 +548,6 @@ namespace OpenSim
         {
             AgentCircuitManager circuitManager = new AgentCircuitManager();
             IPAddress listenIP = regionInfo.InternalEndPoint.Address;
-            //if (!IPAddress.TryParse(regionInfo.InternalEndPoint, out listenIP))
-            //    listenIP = IPAddress.Parse("0.0.0.0");
 
             uint port = (uint) regionInfo.InternalEndPoint.Port;
 
@@ -580,7 +603,7 @@ namespace OpenSim
             else
             {
                 m_log.InfoFormat("[PARCEL]: Found master avatar {0} {1} [" + masterAvatar.ID.ToString() + "]",
-                                 scene.RegionInfo.MasterAvatarFirstName, scene.RegionInfo.MasterAvatarLastName);
+                    scene.RegionInfo.MasterAvatarFirstName, scene.RegionInfo.MasterAvatarLastName);
                 scene.RegionInfo.MasterAvatarAssignedUUID = masterAvatar.ID;
             }
 
@@ -604,12 +627,15 @@ namespace OpenSim
         }
 
         protected override Scene CreateScene(RegionInfo regionInfo, StorageManager storageManager,
-                                             AgentCircuitManager circuitManager)
+            AgentCircuitManager circuitManager)
         {
             bool hgrid = ConfigSource.Source.Configs["Startup"].GetBoolean("hypergrid", false);
+
             if (hgrid)
-                return HGCommands.CreateScene(regionInfo, circuitManager, m_commsManager, 
+            {
+                return HGCommands.CreateScene(regionInfo, circuitManager, m_commsManager,
                 storageManager, m_moduleLoader, m_configSettings, m_config, m_version);
+            }
 
             SceneCommunicationService sceneGridService = new SceneCommunicationService(m_commsManager);
 
@@ -662,12 +688,14 @@ namespace OpenSim
 
         /// <summary>
         /// Handler to supply the current status of this sim
+        /// 
+        /// Currently this is always OK if the simulator is 
+        /// still listening for connections on its HTTP service
         /// </summary>
-        /// Currently this is always OK if the simulator is still listening for connections on its HTTP service
         public class SimStatusHandler : IStreamedRequestHandler
         {
             public byte[] Handle(string path, Stream request,
-                                 OSHttpRequest httpRequest, OSHttpResponse httpResponse)
+                OSHttpRequest httpRequest, OSHttpResponse httpResponse)
             {
                 return Util.UTF8.GetBytes("OK");
             }
@@ -704,7 +732,7 @@ namespace OpenSim
             }
             
             public byte[] Handle(string path, Stream request,
-                                 OSHttpRequest httpRequest, OSHttpResponse httpResponse)
+                OSHttpRequest httpRequest, OSHttpResponse httpResponse)
             {
                 return Util.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
             }
@@ -741,11 +769,10 @@ namespace OpenSim
             {
                 m_opensim = sim;
                 osUXStatsURI = sim.userStatsURI;
-                
             }
             
             public byte[] Handle(string path, Stream request,
-                                 OSHttpRequest httpRequest, OSHttpResponse httpResponse)
+                OSHttpRequest httpRequest, OSHttpResponse httpResponse)
             {
                 return Util.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
             }
@@ -782,6 +809,7 @@ namespace OpenSim
             m_log.Info("[SHUTDOWN]: Closing all threads");
             m_log.Info("[SHUTDOWN]: Killing listener thread");
             m_log.Info("[SHUTDOWN]: Killing clients");
+
             // TODO: implement this
             m_log.Info("[SHUTDOWN]: Closing console and terminating");
 
@@ -825,7 +853,6 @@ namespace OpenSim
         }
     }
 
-    
     public class OpenSimConfigSource
     {
         public IConfigSource Source;

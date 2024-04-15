@@ -46,7 +46,6 @@ namespace OpenSim
         void PostInitialise();
     }
 
-
     public class ApplicationPluginInitialiser : PluginInitialiserBase
     {
         private OpenSimBase server;

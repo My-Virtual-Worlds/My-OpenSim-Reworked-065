@@ -42,8 +42,6 @@ namespace OpenSim
 {
     public class HGCommands
     {
-//        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-
         public static Scene CreateScene(RegionInfo regionInfo, AgentCircuitManager circuitManager, CommunicationsManager m_commsManager,
             StorageManager storageManager, ModuleLoader m_moduleLoader, ConfigSettings m_configSettings, OpenSimConfigSource m_config, string m_version)
         {
@@ -55,6 +53,5 @@ namespace OpenSim
                     m_moduleLoader, false, m_configSettings.PhysicalPrim,
                     m_configSettings.See_into_region_from_neighbor, m_config.Source, m_version);
         }
-
     }
 }
